@@ -1,5 +1,6 @@
 #pragma once
 #include <lvgl.h>
+#include <string>
 
 class UIManager {
 public:
@@ -20,6 +21,8 @@ public:
     void loadLoRaConfig();
     void loadFLRCConfig();
     void loadGatewayConfig();
+    void loadMusicPlayer();
+    void loadImageViewer(const std::string& imagePath, const std::string& imageName);
 
     void resetInactivityTimer() {}
     static void showToast(const char* message);

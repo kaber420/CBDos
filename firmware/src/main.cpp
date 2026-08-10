@@ -76,15 +76,18 @@ static bool g_hasGateway = false;
 
 static volatile int g_currentRssi = -999;
 
+#include "Core/SystemStateAPI.h"
+
 #ifdef ARDUINO
 static void networkTask(void* param) {
     while (1) {
         if (WiFi.status() == WL_CONNECTED) {
             static uint32_t lastRssiCheck = 0;
             uint32_t now = millis();
-            if (now - lastRssiCheck >= 2000) {
+            if (now - lastRssiCheck >= 5000) {
                 lastRssiCheck = now;
                 g_currentRssi = WiFi.RSSI();
+                SystemStateAPI::updateWifi(true, g_currentRssi);
             }
             if (g_hasGateway) {
                 MQTTService::getInstance().update();
@@ -92,6 +95,7 @@ static void networkTask(void* param) {
             AssetManager::getInstance().processQueue();
         } else {
             g_currentRssi = -999;
+            SystemStateAPI::updateWifi(false, -999);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -323,10 +327,11 @@ void loop() {
     uint32_t time_till_next = lv_timer_handler();
     UIManager::getInstance().update();
 
-    static int lastAppliedRssi = -9999;
-    int rssi = g_currentRssi;
-    if (rssi != lastAppliedRssi) {
-        lastAppliedRssi = rssi;
+    static uint32_t lastBadgeCheck = 0;
+    uint32_t now = millis();
+    if (now - lastBadgeCheck >= 5000) {
+        lastBadgeCheck = now;
+        int rssi = SystemStateAPI::isWifiConnected() ? SystemStateAPI::getWifiRSSI() : -999;
         HeaderBar::updateActiveSignal(rssi);
     }
     if (g_isConfigured) {

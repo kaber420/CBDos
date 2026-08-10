@@ -83,6 +83,20 @@ void UIManager::loadWavBrowser() {
 #include "Views/LoRaConfigView.h"
 #include "Views/FLRCConfigView.h"
 #include "Views/GatewayConfigView.h"
+#include "Views/MusicView.h"
+#include "Views/GalleryView.h"
+
+void UIManager::loadMusicPlayer() {
+    destroyTransient();
+    currentTransientScreen = MusicView::create();
+    lv_screen_load(currentTransientScreen);
+}
+
+void UIManager::loadImageViewer(const std::string& imagePath, const std::string& imageName) {
+    destroyTransient();
+    currentTransientScreen = GalleryView::create(imagePath, imageName);
+    lv_screen_load(currentTransientScreen);
+}
 
 void UIManager::loadConfigView() {
     destroyTransient();

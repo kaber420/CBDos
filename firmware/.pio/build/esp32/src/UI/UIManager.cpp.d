@@ -623,4 +623,5 @@
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src/Preferences.h \
  src/UI/Views/LoRaConfigView.h src/UI/Views/FLRCConfigView.h \
- src/UI/Views/GatewayConfigView.h
+ src/UI/Views/GatewayConfigView.h src/UI/Views/MusicView.h \
+ src/UI/Views/GalleryView.h

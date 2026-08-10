@@ -3,6 +3,7 @@
 #include "../UIManager.h"
 #include "../Modals/DiagnosticsModal.h"
 #include "../../Core/SystemDiagnostics.h"
+#include "../../Core/SystemStateAPI.h"
 #include <cstring>
 #include <cstdio>
 
@@ -119,14 +120,11 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackB
         lv_obj_set_style_text_color(hb->timeLabel, DefaultTheme::getTextColor(), 0);
         lv_obj_set_style_text_font(hb->timeLabel, &lv_font_montserrat_16, 0);
         lv_obj_add_flag(hb->timeLabel, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(hb->timeLabel, status_tap_cb, LV_EVENT_CLICKED, nullptr);
-
         // Cargar los últimos valores guardados
         hb->updateTime(lastTimeStr);
         hb->updateSignal(lastSignalStrength);
+        setActiveHeader(hb);
     }
-
-    setActiveHeader(hb);
     return hb;
 }
 
@@ -141,7 +139,8 @@ void HeaderBar::setActiveHeader(HeaderBar* header) {
     if (activeHeader && activeHeader->container && lv_obj_is_valid(activeHeader->container)) {
         activeHeader->updateTime(lastTimeStr);
         activeHeader->updateBattery(lastBatteryPercentage);
-        activeHeader->updateSignal(lastSignalStrength);
+        int currentRssi = SystemStateAPI::isWifiConnected() ? SystemStateAPI::getWifiRSSI() : -999;
+        activeHeader->updateSignal(currentRssi);
         if (activeHeader->cartButton) {
             activeHeader->updateCart(0);
         }

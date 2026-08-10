@@ -17,9 +17,9 @@ void DashboardView::btn_event_cb(lv_event_t * e) {
         if(id == 1) {
             UIManager::getInstance().loadMeshChat();
         } else if(id == 2) {
-            UIManager::getInstance().loadMediaGallery();
+            UIManager::getInstance().loadMediaGallery(); // Galería de fotos (MenuView)
         } else if(id == 3) {
-            UIManager::getInstance().loadWavBrowser();
+            UIManager::getInstance().loadMusicPlayer(); // Reproductor de Música (MusicView)
         } else if(id == 4) {
             UIManager::getInstance().loadConfigView();
         }
@@ -40,6 +40,7 @@ lv_obj_t* DashboardView::create() {
 
     // --- Header Bar ---
     headerBar = HeaderBar::create(screen, "ESP32OS", false, true);
+    HeaderBar::setActiveHeader(headerBar);
 
     // --- Dashboard Grid ---
     lv_obj_t * grid = lv_obj_create(screen);
@@ -58,8 +59,8 @@ lv_obj_t* DashboardView::create() {
     lv_obj_set_style_pad_column(grid, 12, 0);
     lv_obj_set_style_pad_row(grid, 12, 0);
 
-    const char* titles[] = {"Mesh Chat", "Media Viewer", "WAV Browser", "Configuracion"};
-    const char* icons[] = {LV_SYMBOL_VOLUME_MAX, LV_SYMBOL_IMAGE, LV_SYMBOL_DIRECTORY, LV_SYMBOL_SETTINGS};
+    const char* titles[] = {"Mesh Chat", "Galeria", "Musica", "Configuracion"};
+    const char* icons[] = {LV_SYMBOL_VOLUME_MAX, LV_SYMBOL_IMAGE, LV_SYMBOL_AUDIO, LV_SYMBOL_SETTINGS};
     lv_color_t iconColors[] = {
         DefaultTheme::getPrimaryAccent(),
         lv_color_hex(0xFF2E93),

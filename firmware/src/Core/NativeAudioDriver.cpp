@@ -22,35 +22,46 @@
 
 static HMP3Decoder hMP3Decoder = nullptr;
 
-// ─────────────────────────────────────────────────────────────────────
-// Helper: abrir archivo y avanzar el puntero de bytes hasta el primer
-// sync word de MP3 válido, retornando la sample rate del primer frame.
-// Devuelve 0 si no se puede determinar.
-// ─────────────────────────────────────────────────────────────────────
-static int probeMP3SampleRate(File& f, HMP3Decoder dec) {
-    // Leer un bloque inicial para detectar la sample rate
+// Helper: Calcular el tamaño total de la cabecera ID3v2 (incluyendo carátulas grandes)
+// y avanzar el puntero del archivo FÍSICAMENTE con f.seek() hasta el primer frame de audio MP3 real.
+static uint32_t getID3v2Size(File& f) {
+    lv_fs_spi_lock();
+    f.seek(0);
+    uint8_t header[10];
+    int readBytes = f.read(header, 10);
+    lv_fs_spi_unlock();
+
+    if (readBytes < 10) return 0;
+
+    if (header[0] == 'I' && header[1] == 'D' && header[2] == '3') {
+        uint32_t id3Size = ((header[6] & 0x7F) << 21) |
+                           ((header[7] & 0x7F) << 14) |
+                           ((header[8] & 0x7F) << 7)  |
+                            (header[9] & 0x7F);
+        return id3Size + 10; // +10 bytes del header ID3v2
+    }
+    return 0;
+}
+
+static int probeMP3SampleRate(File& f, HMP3Decoder dec, uint32_t id3Offset) {
     const int PROBE_SIZE = 4096;
     uint8_t* probeBuf = (uint8_t*)malloc(PROBE_SIZE);
-    if (!probeBuf) { f.seek(0); return 44100; }
+    if (!probeBuf) {
+        lv_fs_spi_lock(); f.seek(id3Offset); lv_fs_spi_unlock();
+        return 44100;
+    }
 
     lv_fs_spi_lock();
+    f.seek(id3Offset);
     int bytesRead = f.read(probeBuf, PROBE_SIZE);
-    // SIEMPRE volver al inicio — el loop principal leerá desde 0
-    f.seek(0);
+    // Volver al offset de inicio de audio MP3
+    f.seek(id3Offset);
     lv_fs_spi_unlock();
 
     if (bytesRead <= 0) { free(probeBuf); return 44100; }
 
     uint8_t* ptr = probeBuf;
     int left = bytesRead;
-
-    // Saltar tag ID3v2 si existe (primeros 3 bytes = 'ID3')
-    if (left >= 10 && ptr[0] == 'I' && ptr[1] == 'D' && ptr[2] == '3') {
-        int id3Size = ((ptr[6] & 0x7F) << 21) | ((ptr[7] & 0x7F) << 14)
-                    | ((ptr[8] & 0x7F) <<  7) |  (ptr[9] & 0x7F);
-        id3Size += 10;
-        if (id3Size < left) { ptr += id3Size; left -= id3Size; }
-    }
 
     int offset = MP3FindSyncWord(ptr, left);
     if (offset < 0) { free(probeBuf); return 44100; }
@@ -228,18 +239,22 @@ void NativeAudioDriver::audioTask(void* param) {
         lv_fs_spi_lock();
         f = SD.open(path);
         lv_fs_spi_unlock();
+        if (!f) {
+            Serial.printf("[Audio] ERROR: SD.open fallo para ruta: '%s'\n", path.c_str());
+        }
     }
 
     if (!f) {
-        Serial.println("[Audio] No se pudo abrir el archivo por indice");
+        Serial.printf("[Audio] Fallo reproduccion: %s\n", descriptor.c_str());
         driver->playing = false;
         esp_task_wdt_delete(NULL);
         vTaskDelete(NULL);
         return;
     }
 
-    // ── 1. Probar el primer frame para conocer la sample rate real ───
-    int sampRate = probeMP3SampleRate(f, hMP3Decoder);
+    // ── 1. Calcular offset ID3v2 y probar sample rate real ─────────
+    uint32_t id3Offset = getID3v2Size(f);
+    int sampRate = probeMP3SampleRate(f, hMP3Decoder, id3Offset);
 
     // ── 2. Instalar I2S a la frecuencia exacta del archivo ───────────
     if (!installI2S(driver->_bclk, driver->_lrck, driver->_dout, sampRate)) {
@@ -271,18 +286,23 @@ void NativeAudioDriver::audioTask(void* param) {
     uint8_t* readPtr = readBuf;
     int bytesLeft    = 0;
     size_t  written  = 0;
+    bool eofReached  = false;
 
     // ── 4. Loop de decodificación y reproducción ─────────────────────
-    while (driver->playing && (f.available() || bytesLeft > 0)) {
+    while (driver->playing && (!eofReached || bytesLeft > 0)) {
         esp_task_wdt_reset(); // Alimentar watchdog en cada frame
 
         // Rellenar readBuf desde SD cuando quede menos de la mitad
-        if (bytesLeft < READ_BUF_SIZE / 2 && f.available()) {
+        if (bytesLeft < READ_BUF_SIZE / 2 && !eofReached) {
             memmove(readBuf, readPtr, bytesLeft);
             lv_fs_spi_lock();
             int got = f.read(readBuf + bytesLeft, READ_BUF_SIZE - bytesLeft);
             lv_fs_spi_unlock();
-            if (got > 0) bytesLeft += got;
+            if (got > 0) {
+                bytesLeft += got;
+            } else {
+                eofReached = true;
+            }
             readPtr = readBuf;
         }
 

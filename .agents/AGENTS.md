@@ -16,11 +16,24 @@
   cd firmware
   pio run -e esp32 -t upload
   ```
-- **Monitorear Puerto Serie (Serial Monitor):**
+- **Monitorear Puerto Serie (Serial Monitor Básico):**
   ```bash
   cd firmware
   pio device monitor -b 115200
   ```
+- **Monitorear y Decodificar Crashes/Excepciones (Backtrace Decoder):**
+  ```bash
+  cd firmware
+  pio device monitor -b 115200 --filter esp32_exception_decoder
+  ```
+
+---
+
+## 🔍 Guía de Diagnóstico de Reinicios / Crashes (Backtrace por Serie)
+Cuando ocurra un reinicio no deseado (Kernel Panic / Guru Meditation Error):
+1. **Ejecutar el monitor con el filtro decodificador:** `pio device monitor -b 115200 --filter esp32_exception_decoder`.
+2. **Reproducir la falla en la pantalla táctil / dispositivo.**
+3. **Analizar la traza de pila (*Backtrace*):** El filtro traducirá las direcciones hexadecimales (ej. `0x42001fd7`) a la línea exacta de código fuente C/C++ en el proyecto (ej. `NativeAudioDriver.cpp:291`).
 
 ---
 

@@ -70,45 +70,39 @@ void MenuView::loadDataFromSD() {
                 lowerName.toLowerCase();
 
                 if (!entry.isDirectory()) {
+                    std::string directPath = "A:/" + std::string(fileName.c_str());
                     if (lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".bmp") || lowerName.endsWith(".gif")) {
-                        std::string idxPath = "sdidx:/:" + std::to_string(rootFileIdx);
                         menuItems.push_back({
                             std::to_string(fileId++),
                             fileName.c_str(),
                             "Imagen en SD",
                             0.0f,
                             1,
-                            idxPath,
+                            directPath,
                             LV_SYMBOL_IMAGE
                         });
-                        rootFileIdx++;
                     } else if (lowerName.endsWith(".mp3") || lowerName.endsWith(".wav")) {
-                        std::string idxPath = "sdidx:/:" + std::to_string(rootFileIdx);
                         menuItems.push_back({
                             std::to_string(fileId++),
                             fileName.c_str(),
                             "Audio en SD",
                             0.0f,
                             2,
-                            idxPath,
+                            directPath,
                             LV_SYMBOL_AUDIO
                         });
-                        rootFileIdx++;
                     }
                 } else {
                     // Escanear 1 subnivel (ej. /fotos o /musica)
                     File subDir = SD.open("/" + fileName);
                     if (subDir) {
-                        int subFileIdx = 0;
                         File subEntry = subDir.openNextFile();
                         while (subEntry) {
                             String subName = subEntry.name();
                             String subLower = subName;
                             subLower.toLowerCase();
                             if (!subEntry.isDirectory()) {
-                                // Índice de directorio: sin construir ruta con el nombre
-                                std::string dirName = std::string(fileName.c_str());
-                                std::string idxPath = "sdidx:/" + dirName + ":" + std::to_string(subFileIdx);
+                                std::string directPath = "A:/" + std::string(fileName.c_str()) + "/" + std::string(subName.c_str());
                                 if (subLower.endsWith(".jpg") || subLower.endsWith(".png") || subLower.endsWith(".bmp") || subLower.endsWith(".gif")) {
                                     menuItems.push_back({
                                         std::to_string(fileId++),
@@ -116,10 +110,9 @@ void MenuView::loadDataFromSD() {
                                         ("Carpeta /" + fileName).c_str(),
                                         0.0f,
                                         1,
-                                        idxPath,
+                                        directPath,
                                         LV_SYMBOL_IMAGE
                                     });
-                                    subFileIdx++;
                                 } else if (subLower.endsWith(".mp3") || subLower.endsWith(".wav")) {
                                     menuItems.push_back({
                                         std::to_string(fileId++),
@@ -127,10 +120,9 @@ void MenuView::loadDataFromSD() {
                                         ("Carpeta /" + fileName).c_str(),
                                         0.0f,
                                         2,
-                                        idxPath,
+                                        directPath,
                                         LV_SYMBOL_AUDIO
                                     });
-                                    subFileIdx++;
                                 }
                             }
                             subEntry.close();
@@ -408,7 +400,7 @@ void MenuView::navigateTo(int index) {
     lv_obj_set_user_data(imgArea, (void*)(intptr_t)filteredIndices[index]);
 
     // Actualizar imagen/icono/audio
-    if (item.imageHash.length() > 0 && (item.icon == LV_SYMBOL_IMAGE || item.imageHash.find("sdidx:") != std::string::npos)) {
+    if (item.categoryId != 2 && item.imageHash.length() > 0 && (item.icon == LV_SYMBOL_IMAGE || item.imageHash.find("sdidx:") != std::string::npos)) {
         std::string resolved = resolveSdidxPath(item.imageHash);
         if (resolved.length() > 0) {
             lv_img_set_src(imgObj, resolved.c_str());
@@ -577,10 +569,9 @@ void MenuView::showProductModal(const MenuItem& item) {
         MenuItem* itemPtr = (MenuItem*)lv_event_get_user_data(e);
         if (itemPtr) {
             if (itemPtr->categoryId == 2) {
-                NativeAudioDriver::getInstance().playMP3(itemPtr->imageHash.c_str());
-                UIManager::showToast("Reproduciendo audio...");
+                UIManager::getInstance().loadMusicPlayer();
             } else {
-                showFullScreenImage(itemPtr->imageHash);
+                UIManager::getInstance().loadImageViewer(itemPtr->imageHash, itemPtr->name);
             }
         }
         lv_obj_t* btn       = (lv_obj_t*)lv_event_get_target(e);

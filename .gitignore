@@ -1,0 +1,29 @@
+# PlatformIO build artifacts
+.pio/
+firmware/.pio/
+.pioenvs/
+.piolibdeps/
+build/
+**/build/
+.pio/build/
+firmware/.pio/build/
+*_backup_*
+
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Compiled binaries
+*.bin
+*.elf
+*.hex
+*.out
+*.factory.bin
+
+# OS specific files
+.DS_Store
+Thumbs.db

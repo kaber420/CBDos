@@ -844,4 +844,5 @@
  .pio/libdeps/esp32/GFX\ Library\ for\ Arduino/src/display/Arduino_ST77916.h \
  .pio/libdeps/esp32/GFX\ Library\ for\ Arduino/src/display/Arduino_ST7796.h \
  .pio/libdeps/esp32/GFX\ Library\ for\ Arduino/src/display/Arduino_WEA2012.h \
- .pio/libdeps/esp32/JC3248W535\ Driver/src/JC3248W535_Touch.h
+ .pio/libdeps/esp32/JC3248W535\ Driver/src/JC3248W535_Touch.h \
+ src/Core/SystemStateAPI.h

@@ -453,4 +453,5 @@
  src/UI/Components/../UIManager.h \
  src/UI/Components/../Modals/DiagnosticsModal.h \
  src/UI/Components/../../Core/SystemDiagnostics.h \
+ src/UI/Components/../../Core/SystemStateAPI.h \
  src/UI/Components/QuickSettingsPanel.h
