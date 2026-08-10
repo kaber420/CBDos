@@ -1,6 +1,7 @@
 #include "UIManager.h"
 #include "Views/DashboardView.h"
 #include "Views/MenuView.h"
+#include "Views/TlvBrowserView.h"
 #include "Themes/DefaultTheme.h"
 #include <cstdio>
 
@@ -76,6 +77,12 @@ void UIManager::loadMeshChat() {
 
 void UIManager::loadWavBrowser() {
     showToast("WAV Browser: Iniciando...");
+}
+
+void UIManager::loadTlvBrowser() {
+    destroyTransient();
+    currentTransientScreen = TlvBrowserView::create();
+    lv_screen_load(currentTransientScreen);
 }
 
 #include "Views/ConfigView.h"

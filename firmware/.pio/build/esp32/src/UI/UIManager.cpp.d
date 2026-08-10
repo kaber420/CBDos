@@ -450,9 +450,9 @@
  .pio/libdeps/esp32/lvgl/src/lv_api_map_v9_3.h \
  .pio/libdeps/esp32/lvgl/src/lv_api_map_v9_4.h \
  src/UI/Views/DashboardView.h src/UI/Views/../Components/HeaderBar.h \
- src/UI/Views/MenuView.h src/UI/Themes/DefaultTheme.h \
- src/UI/Views/ConfigView.h src/UI/Views/WiFiConfigView.h \
- src/UI/Views/../../Network/ConfigManager.h \
+ src/UI/Views/MenuView.h src/UI/Views/TlvBrowserView.h \
+ src/UI/Themes/DefaultTheme.h src/UI/Views/ConfigView.h \
+ src/UI/Views/WiFiConfigView.h src/UI/Views/../../Network/ConfigManager.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp_arduino_version.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/freertos/FreeRTOS-Kernel/include/freertos/FreeRTOS.h \

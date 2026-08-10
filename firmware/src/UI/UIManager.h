@@ -16,6 +16,7 @@ public:
     void loadMediaGallery();
     void loadMeshChat();
     void loadWavBrowser();
+    void loadTlvBrowser();
     void loadConfigView();
     void loadWiFiConfig();
     void loadLoRaConfig();

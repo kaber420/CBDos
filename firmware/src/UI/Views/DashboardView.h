@@ -1,6 +1,15 @@
 #pragma once
 #include <lvgl.h>
+#include <vector>
 #include "../Components/HeaderBar.h"
+
+struct AppDescriptor {
+    int id;
+    const char* title;
+    const char* icon;
+    uint32_t colorHex;
+    void (*action)();
+};
 
 class DashboardView {
 public:
@@ -14,8 +23,7 @@ public:
 private:
     static HeaderBar* headerBar;
     static CommandCallback commandCb;
-    static lv_obj_t* ordersBtnLabel;
-    static lv_obj_t* ordersBtnIcon;
 
     static void btn_event_cb(lv_event_t * e);
+    static void renderAppGrid(lv_obj_t* parent);
 };

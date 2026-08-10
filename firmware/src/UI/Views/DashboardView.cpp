@@ -5,80 +5,56 @@
 
 HeaderBar* DashboardView::headerBar = nullptr;
 DashboardView::CommandCallback DashboardView::commandCb = nullptr;
-lv_obj_t* DashboardView::ordersBtnLabel = nullptr;
-lv_obj_t* DashboardView::ordersBtnIcon = nullptr;
+
+// ── Registro dinámico de apps del launcher ─────────────────────────
+// Agregar una app nueva = añadir una entrada aquí. El grid se adapta solo.
+static void launchMeshChat()    { UIManager::getInstance().loadMeshChat(); }
+static void launchGallery()     { UIManager::getInstance().loadMediaGallery(); }
+static void launchMusic()       { UIManager::getInstance().loadMusicPlayer(); }
+static void launchConfig()      { UIManager::getInstance().loadConfigView(); }
+static void launchTlvBrowser()  { UIManager::getInstance().loadTlvBrowser(); }
+
+static const AppDescriptor kApps[] = {
+    {1, "Mesh Chat",     LV_SYMBOL_WIFI,     0x00F5D4, launchMeshChat},
+    {2, "Galeria",       LV_SYMBOL_IMAGE,    0xFF2E93, launchGallery},
+    {3, "Musica",        LV_SYMBOL_AUDIO,    0xFFB800, launchMusic},
+    {4, "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD, launchConfig},
+    {5, "Navegador",     LV_SYMBOL_EYE_OPEN, 0x00B4D8, launchTlvBrowser},
+};
 
 void DashboardView::btn_event_cb(lv_event_t * e) {
     lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t * btn = (lv_obj_t *)lv_event_get_target(e);
-    
-    if (code == LV_EVENT_CLICKED) {
-        int id = (int)(intptr_t)lv_obj_get_user_data(btn);
-        if(id == 1) {
-            UIManager::getInstance().loadMeshChat();
-        } else if(id == 2) {
-            UIManager::getInstance().loadMediaGallery(); // Galería de fotos (MenuView)
-        } else if(id == 3) {
-            UIManager::getInstance().loadMusicPlayer(); // Reproductor de Música (MusicView)
-        } else if(id == 4) {
-            UIManager::getInstance().loadConfigView();
-        }
-    }
+    if (code != LV_EVENT_CLICKED) return;
+
+    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+    const AppDescriptor* app = (const AppDescriptor*)lv_obj_get_user_data(btn);
+    if (app && app->action) app->action();
 }
 
 void DashboardView::refreshState() {
 }
 
-lv_obj_t* DashboardView::create() {
-    lv_obj_t* screen = lv_obj_create(NULL);
-    DefaultTheme::applyFlatBg(screen);
-    DefaultTheme::disableScroll(screen);
+void DashboardView::renderAppGrid(lv_obj_t* parent) {
+    // Contenedor flexible con scroll vertical. Las apps fluyen en filas de 2.
+    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_all(parent, 2, 0);
+    lv_obj_set_style_pad_column(parent, 12, 0);
+    lv_obj_set_style_pad_row(parent, 12, 0);
+    // LV_OBJ_FLAG_SCROLLABLE se deja activo de forma predeterminada
+    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
+    lv_obj_set_scroll_snap_y(parent, LV_SCROLL_SNAP_NONE);
 
-    lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(screen, 12, 0);
-    lv_obj_set_style_pad_row(screen, 10, 0);
+    size_t appCount = sizeof(kApps) / sizeof(kApps[0]);
+    for (size_t i = 0; i < appCount; i++) {
+        const AppDescriptor& app = kApps[i];
 
-    // --- Header Bar ---
-    headerBar = HeaderBar::create(screen, "ESP32OS", false, true);
-    HeaderBar::setActiveHeader(headerBar);
-
-    // --- Dashboard Grid ---
-    lv_obj_t * grid = lv_obj_create(screen);
-    lv_obj_set_width(grid, lv_pct(100));
-    lv_obj_set_flex_grow(grid, 1);
-    DefaultTheme::disableScroll(grid);
-    
-    lv_obj_set_style_bg_opa(grid, 0, 0);
-    lv_obj_set_style_border_width(grid, 0, 0);
-    lv_obj_set_style_pad_all(grid, 2, 0);
-    
-    static int32_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static int32_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    lv_obj_set_layout(grid, LV_LAYOUT_GRID);
-    lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
-    lv_obj_set_style_pad_column(grid, 12, 0);
-    lv_obj_set_style_pad_row(grid, 12, 0);
-
-    const char* titles[] = {"Mesh Chat", "Galeria", "Musica", "Configuracion"};
-    const char* icons[] = {LV_SYMBOL_VOLUME_MAX, LV_SYMBOL_IMAGE, LV_SYMBOL_AUDIO, LV_SYMBOL_SETTINGS};
-    lv_color_t iconColors[] = {
-        DefaultTheme::getPrimaryAccent(),
-        lv_color_hex(0xFF2E93),
-        lv_color_hex(0xFFB800),
-        DefaultTheme::getSecondaryAccent()
-    };
-    int ids[] = {1, 2, 3, 4};
-
-    for(int i=0; i<4; i++) {
-        uint8_t col = i % 2;
-        uint8_t row = i / 2;
-        
-        lv_obj_t * btn = lv_button_create(grid);
-        lv_obj_set_grid_cell(btn, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
+        lv_obj_t * btn = lv_button_create(parent);
+        lv_obj_set_width(btn, LV_PCT(48));
+        lv_obj_set_height(btn, LV_SIZE_CONTENT);
         DefaultTheme::applyButton(btn, 16);
         DefaultTheme::disableScroll(btn);
 
-        lv_obj_set_user_data(btn, (void*)(intptr_t)ids[i]);
+        lv_obj_set_user_data(btn, (void*)&app);
         lv_obj_add_event_cb(btn, btn_event_cb, LV_EVENT_CLICKED, NULL);
 
         lv_obj_set_flex_flow(btn, LV_FLEX_FLOW_COLUMN);
@@ -94,18 +70,42 @@ lv_obj_t* DashboardView::create() {
         lv_obj_remove_flag(iconContainer, LV_OBJ_FLAG_CLICKABLE);
 
         lv_obj_t * icon = lv_label_create(iconContainer);
-        lv_label_set_text(icon, icons[i]);
-        lv_obj_set_style_text_color(icon, iconColors[i], 0);
+        lv_label_set_text(icon, app.icon);
+        lv_obj_set_style_text_color(icon, lv_color_hex(app.colorHex), 0);
         lv_obj_set_style_text_font(icon, &lv_font_montserrat_24, 0);
         lv_obj_center(icon);
 
         // Etiqueta de Texto
         lv_obj_t * label = lv_label_create(btn);
-        lv_label_set_text(label, titles[i]);
+        lv_label_set_text(label, app.title);
         lv_obj_set_style_text_color(label, DefaultTheme::getTextColor(), 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
         lv_obj_set_style_margin_top(label, 6, 0);
     }
+}
+
+lv_obj_t* DashboardView::create() {
+    lv_obj_t* screen = lv_obj_create(NULL);
+    DefaultTheme::applyFlatBg(screen);
+    DefaultTheme::disableScroll(screen);
+
+    lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(screen, 12, 0);
+    lv_obj_set_style_pad_row(screen, 10, 0);
+
+    // --- Header Bar ---
+    headerBar = HeaderBar::create(screen, "ESP32OS", false, true);
+    HeaderBar::setActiveHeader(headerBar);
+
+    // --- Dashboard Grid (dinámico + scroll) ---
+    lv_obj_t * grid = lv_obj_create(screen);
+    lv_obj_set_width(grid, lv_pct(100));
+    lv_obj_set_flex_grow(grid, 1);
+
+    lv_obj_set_style_bg_opa(grid, 0, 0);
+    lv_obj_set_style_border_width(grid, 0, 0);
+
+    renderAppGrid(grid);
 
     return screen;
 }
