@@ -79,7 +79,7 @@ lv_obj_t* MusicView::create() {
     headerBar = HeaderBar::create(scr, "Reproductor de Musica", true, true);
     HeaderBar::setActiveHeader(headerBar);
 
-    // Contenedor principal de la lista
+    // Contenedor principal de la lista (con scroll)
     listContainer = lv_obj_create(scr);
     lv_obj_set_size(listContainer, LV_PCT(92), LV_PCT(78));
     lv_obj_align(listContainer, LV_ALIGN_CENTER, 0, 15);
@@ -87,6 +87,9 @@ lv_obj_t* MusicView::create() {
     lv_obj_set_flex_flow(listContainer, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(listContainer, 10, 0);
     lv_obj_set_style_pad_row(listContainer, 8, 0);
+    lv_obj_add_flag(listContainer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(listContainer, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(listContainer, LV_SCROLLBAR_MODE_ACTIVE);
 
     renderPlaylist(listContainer);
 
@@ -190,6 +193,7 @@ void MusicView::renderPlaylist(lv_obj_t* parent) {
         lv_obj_set_size(itemBtn, LV_PCT(100), 45);
         DefaultTheme::applyButton(itemBtn, 10);
         lv_obj_set_user_data(itemBtn, (void*)(intptr_t)i);
+        lv_obj_add_flag(itemBtn, LV_OBJ_FLAG_EVENT_BUBBLE); // propaga el arrastre al padre para scroll
         lv_obj_add_event_cb(itemBtn, track_click_cb, LV_EVENT_CLICKED, nullptr);
 
         lv_obj_set_flex_flow(itemBtn, LV_FLEX_FLOW_ROW);

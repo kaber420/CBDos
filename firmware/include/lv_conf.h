@@ -46,13 +46,13 @@
 #define LV_USE_DEMO_BENCHMARK 0
 #define LV_USE_DEMO_STRESS 0
 
-/* --- Custom Memory Allocator (Use System Heap/PSRAM) --- */
+/* --- Custom Memory Allocator (PSRAM — 8MB externo en ESP32-S3) --- */
 #define LV_MEM_CUSTOM 1
 #if LV_MEM_CUSTOM
-    #define LV_MEM_CUSTOM_INCLUDE <stdlib.h>
-    #define LV_MEM_CUSTOM_ALLOC   malloc
+    #define LV_MEM_CUSTOM_INCLUDE <esp_heap_caps.h>
+    #define LV_MEM_CUSTOM_ALLOC   ps_malloc
     #define LV_MEM_CUSTOM_FREE    free
-    #define LV_MEM_CUSTOM_REALLOC realloc
+    #define LV_MEM_CUSTOM_REALLOC ps_realloc
 #endif
 
 /* --- Image and GIF Decoders --- */

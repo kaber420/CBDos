@@ -287,7 +287,11 @@ void setup() {
 #ifdef ARDUINO
     SPIClass* sdSPI = new SPIClass(HSPI);
     sdSPI->begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS (HSPI / SPI3_HOST para no colisionar con FSPI de la pantalla)
-    bool sdMounted = SD.begin(10, *sdSPI, 20000000); // 20MHz
+    bool sdMounted = SD.begin(10, *sdSPI, 10000000); // Intento 1: 10MHz
+    if (!sdMounted) {
+        Serial.println("[WARN] SD 10MHz fallo, reintentando a 4MHz (modo compatibilidad SDHC 16GB)...");
+        sdMounted = SD.begin(10, *sdSPI, 4000000); // Intento 2: 4MHz (Compatibilidad universal SDHC)
+    }
     g_sdMounted = sdMounted;
     if (!sdMounted) {
         Serial.println("[WARN] SD.begin() failed");

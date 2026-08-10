@@ -81,17 +81,8 @@ void MenuView::loadDataFromSD() {
                             directPath,
                             LV_SYMBOL_IMAGE
                         });
-                    } else if (lowerName.endsWith(".mp3") || lowerName.endsWith(".wav")) {
-                        menuItems.push_back({
-                            std::to_string(fileId++),
-                            fileName.c_str(),
-                            "Audio en SD",
-                            0.0f,
-                            2,
-                            directPath,
-                            LV_SYMBOL_AUDIO
-                        });
                     }
+                    // Archivos de audio (.mp3/.wav) se omiten — van al Reproductor de Música
                 } else {
                     // Escanear 1 subnivel (ej. /fotos o /musica)
                     File subDir = SD.open("/" + fileName);
@@ -113,17 +104,8 @@ void MenuView::loadDataFromSD() {
                                         directPath,
                                         LV_SYMBOL_IMAGE
                                     });
-                                } else if (subLower.endsWith(".mp3") || subLower.endsWith(".wav")) {
-                                    menuItems.push_back({
-                                        std::to_string(fileId++),
-                                        subName.c_str(),
-                                        ("Carpeta /" + fileName).c_str(),
-                                        0.0f,
-                                        2,
-                                        directPath,
-                                        LV_SYMBOL_AUDIO
-                                    });
                                 }
+                                // Audio ignorado en la galería
                             }
                             subEntry.close();
                             subEntry = subDir.openNextFile();
@@ -543,11 +525,9 @@ void MenuView::showProductModal(const MenuItem& item) {
     DefaultTheme::applyButton(addBtn, 12);
 
     lv_obj_t* addLbl = lv_label_create(addBtn);
-    if (item.categoryId == 2) {
-        lv_label_set_text(addLbl, LV_SYMBOL_PLAY " Reproducir MP3");
-    } else {
-        lv_label_set_text(addLbl, LV_SYMBOL_IMAGE " Ver a Pantalla Completa");
-    }
+    lv_label_set_text(addLbl, LV_SYMBOL_IMAGE " Ver a Pantalla Completa");
+    // Los archivos de musica (categoryId == 2) no se abren desde la galeria
+    if (item.categoryId == 2) lv_obj_add_flag(addBtn, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_style_text_color(addLbl, DefaultTheme::getPrimaryAccent(), 0);
     lv_obj_set_style_text_font(addLbl, &lv_font_montserrat_14, 0);
     lv_obj_center(addLbl);
@@ -567,12 +547,8 @@ void MenuView::showProductModal(const MenuItem& item) {
     lv_obj_add_event_cb(addBtn, [](lv_event_t* e) {
         UIManager::getInstance().resetInactivityTimer();
         MenuItem* itemPtr = (MenuItem*)lv_event_get_user_data(e);
-        if (itemPtr) {
-            if (itemPtr->categoryId == 2) {
-                UIManager::getInstance().loadMusicPlayer();
-            } else {
-                UIManager::getInstance().loadImageViewer(itemPtr->imageHash, itemPtr->name);
-            }
+        if (itemPtr && itemPtr->categoryId != 2) {
+            UIManager::getInstance().loadImageViewer(itemPtr->imageHash, itemPtr->name);
         }
         lv_obj_t* btn       = (lv_obj_t*)lv_event_get_target(e);
         lv_obj_t* modalCard = lv_obj_get_parent(btn);
