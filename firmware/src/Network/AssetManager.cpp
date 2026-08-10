@@ -102,12 +102,12 @@ bool AssetManager::downloadAsset(const DownloadTask& task) {
         return false;
     }
 
-    DeviceConfig config;
-    ConfigManager::getInstance().loadConfig(config);
-    if (config.hubIp.isEmpty()) return false;
+    GatewayConfig gateway;
+    if (!ConfigManager::getInstance().loadActiveGateway(gateway)) return false;
+    if (gateway.address.length() == 0) return false;
 
     String filename = String(task.hash.c_str()) + "_" + String(task.width) + "x" + String(task.height) + ".bin";
-    String url = "http://" + config.hubIp + ":8080/api/cdn/image?hash=" + String(task.hash.c_str()) + "&w=" + String(task.width) + "&h=" + String(task.height);
+    String url = "http://" + gateway.address + ":8080/api/cdn/image?hash=" + String(task.hash.c_str()) + "&w=" + String(task.width) + "&h=" + String(task.height);
     String path = "/assets/" + filename;
 
     Serial.printf("[CDN] Descargando asset: %s\n", url.c_str());

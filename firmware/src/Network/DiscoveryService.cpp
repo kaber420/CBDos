@@ -3,18 +3,24 @@
 #ifdef ARDUINO
 #include <ArduinoJson.h>
 
-void DiscoveryService::startDiscovery(const String& savedHubIp) {
-    targetStaticIp = savedHubIp;
+void DiscoveryService::startDiscovery(const GatewayConfig& gw) {
     hubIp = "";
     retryCount = 0;
-    stateStartTime = millis();
+    mqttPort = gw.mqttPort;
 
-    if (targetStaticIp.length() > 0) {
+    if (gw.discoveryMethod == "static") {
+        targetStaticIp = gw.address;
         currentState = DiscoveryState::TRY_STATIC_IP;
-        Serial.println("[Discovery] Iniciando Nivel 1: IP Guardada -> " + targetStaticIp);
-    } else {
+        Serial.println("[Discovery] Iniciando Nivel 1 (Estática): " + targetStaticIp);
+    } else if (gw.discoveryMethod == "mdns") {
         currentState = DiscoveryState::TRY_MDNS;
-        Serial.println("[Discovery] Iniciando Nivel 2: mDNS (_tablehub._tcp.local)...");
+        targetStaticIp = gw.domain;
+        Serial.println("[Discovery] Iniciando Nivel 2 (mDNS): " + targetStaticIp);
+    } else {
+        currentState = DiscoveryState::TRY_UDP_BROADCAST;
+        stateStartTime = millis();
+        udp.begin(9999);
+        Serial.println("[Discovery] Iniciando Nivel 3 (UDP Broadcast)...");
     }
 }
 
@@ -132,7 +138,7 @@ bool DiscoveryService::checkUdpResponse() {
 #else
 
 // Mock para entorno Native Emulator
-void DiscoveryService::startDiscovery(const String& savedHubIp) {
+void DiscoveryService::startDiscovery(const GatewayConfig& gw) {
     hubIp = "127.0.0.1";
     mqttPort = 1883;
     currentState = DiscoveryState::SUCCESS;

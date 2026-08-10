@@ -7,9 +7,9 @@
 #include <WiFi.h>
 #include <SD.h>
 
-void MQTTService::init(const String& hubIp, int mqttPort, const String& mac) {
-    this->hubIp = hubIp;
-    this->mqttPort = mqttPort;
+void MQTTService::init(const GatewayConfig& gw, const String& mac) {
+    this->hubIp = gw.address;
+    this->mqttPort = gw.mqttPort;
     this->macAddress = mac;
     
     espClient.setTimeout(50); // Timeout corto de 50ms para jamás congelar la UI si el Hub está offline
@@ -21,8 +21,18 @@ void MQTTService::init(const String& hubIp, int mqttPort, const String& mac) {
     });
 }
 
+void MQTTService::reconnectTo(const GatewayConfig& gw) {
+    if (client.connected()) {
+        client.disconnect();
+    }
+    this->hubIp = gw.address;
+    this->mqttPort = gw.mqttPort;
+    client.setServer(this->hubIp.c_str(), this->mqttPort);
+    lastReconnectAttempt = 0;
+}
+
 void MQTTService::update() {
-    if (WiFi.status() != WL_CONNECTED) return;
+    if (WiFi.status() != WL_CONNECTED || hubIp.length() == 0) return;
 
     if (!client.connected()) {
         long now = millis();
@@ -39,27 +49,27 @@ void MQTTService::update() {
                 client.subscribe((baseTopic + "/order/+/state").c_str());
                 Serial.println("[MQTT] Conectado y suscrito a la jerarquía de tópicos para: " + macAddress);
 
-                DeviceConfig config;
-                if (ConfigManager::getInstance().loadConfig(config)) {
-                    // 1. Enviar paquete de registro de aprovisionamiento con bootstrap_token
-                    if (config.bootstrapToken.length() > 0) {
+                GatewayConfig gwConfig;
+                if (ConfigManager::getInstance().loadActiveGateway(gwConfig)) {
+                    // 1. Enviar paquete de registro de aprovisionamiento con auth_token
+                    if (gwConfig.authToken.length() > 0) {
                         JsonDocument provDoc;
                         provDoc["mac"] = macAddress;
-                        provDoc["table_id"] = config.tableId;
-                        provDoc["bootstrap_token"] = config.bootstrapToken;
+                        provDoc["gateway_name"] = gwConfig.name;
+                        provDoc["auth_token"] = gwConfig.authToken;
                         provDoc["ip"] = WiFi.localIP().toString();
-                        provDoc["type"] = "table_pad";
+                        provDoc["type"] = "esp32OS";
 
                         char provBuf[256];
                         serializeJson(provDoc, provBuf);
-                        client.publish("tablehub/device/provision", provBuf);
-                        Serial.println("[MQTT] Paquete de Aprovisionamiento enviado a tablehub/device/provision");
+                        client.publish("esp32os/device/provision", provBuf);
+                        Serial.println("[MQTT] Paquete de Aprovisionamiento enviado a esp32os/device/provision");
                     }
 
                     // 2. Enviar telemetría inicial de estado
                     JsonDocument statusDoc;
                     statusDoc["mac"] = macAddress;
-                    statusDoc["table"] = config.tableId;
+                    statusDoc["gateway"] = gwConfig.name;
                     statusDoc["ip"] = WiFi.localIP().toString();
                     statusDoc["battery"] = 100;
                     statusDoc["wifi"] = WiFi.RSSI();
@@ -67,9 +77,8 @@ void MQTTService::update() {
 
                     char statusBuf[256];
                     serializeJson(statusDoc, statusBuf);
-                    String statusTopic = "tablehub/table/" + config.tableId + "/status";
+                    String statusTopic = "esp32os/device/" + macAddress + "/status";
                     client.publish(statusTopic.c_str(), statusBuf);
-                    Serial.println("[MQTT] Telemetría enviada a " + statusTopic);
                 }
             }
         }
@@ -286,11 +295,17 @@ void MQTTService::processSync(byte* payload, unsigned int length) {
 // Mock implementation for emulator
 #include <iostream>
 
-void MQTTService::init(const std::string& hubIp, int mqttPort, const std::string& mac) {
-    this->hubIp = hubIp;
-    this->mqttPort = mqttPort;
+void MQTTService::init(const GatewayConfig& gw, const std::string& mac) {
+    this->hubIp = gw.address;
+    this->mqttPort = gw.mqttPort;
     this->macAddress = mac;
-    std::cout << "[MQTT Mock] Inicializado hacia " << hubIp << ":" << mqttPort << std::endl;
+    std::cout << "[MQTT Mock] Inicializado hacia " << gw.address << ":" << gw.mqttPort << std::endl;
+}
+
+void MQTTService::reconnectTo(const GatewayConfig& gw) {
+    this->hubIp = gw.address;
+    this->mqttPort = gw.mqttPort;
+    std::cout << "[MQTT Mock] Reconectado hacia " << gw.address << ":" << gw.mqttPort << std::endl;
 }
 
 void MQTTService::update() {

@@ -12,6 +12,8 @@
 typedef std::string String;
 #endif
 
+#include "ConfigManager.h"
+
 enum class DiscoveryState {
     IDLE,
     TRY_STATIC_IP,
@@ -28,7 +30,7 @@ public:
         return instance;
     }
 
-    void startDiscovery(const String& savedHubIp = "");
+    void startDiscovery(const GatewayConfig& gw);
     DiscoveryState update();
     
     String getDiscoveredHubIp() const { return hubIp; }

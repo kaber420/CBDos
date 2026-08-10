@@ -1,7 +1,5 @@
-#include "py/runtime.h"
-#include "py/obj.h"
-#include "lvgl.h"
-#include <stdint.h>
+#include "tlv_parser.h"
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -12,33 +10,23 @@
 #define TYPE_ABS_IMAGE     0x14
 #define TYPE_END           0xFE
 
-// MAX nesting depth
 #define MAX_DEPTH 32
 
-// We will use a dummy event cb for buttons created from C for now, 
-// ideally this should send an event back to python or handle it directly
 static void btn_event_cb(lv_event_t * e) {
-    // int link_id = (int)lv_event_get_user_data(e);
-    // printf("Link clicked ID: %d\n", link_id);
+    int link_id = (int)(intptr_t)lv_event_get_user_data(e);
+    (void)link_id;
 }
 
-typedef struct {
-    mp_obj_base_t base;
-    void *data;
-} mp_lv_struct_t;
-
-static mp_obj_t tlv_browser_render(mp_obj_t parent_obj, mp_obj_t tlv_bytes_obj) {
-    mp_lv_struct_t *mp_lv = (mp_lv_struct_t *)MP_OBJ_TO_PTR(parent_obj);
-    lv_obj_t* root_parent = (lv_obj_t*)mp_lv->data;
-
-    mp_buffer_info_t bufinfo;
-    mp_get_buffer_raise(tlv_bytes_obj, &bufinfo, MP_BUFFER_READ);
-    
-    uint8_t* data = (uint8_t*)bufinfo.buf;
-    size_t length = bufinfo.len;
+lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t length) {
+    if (!root_parent || !data || length == 0) return NULL;
 
     size_t offset = 0;
     
+    // Magic Number 'PH' (0x50 0x48) check
+    if (length >= 2 && data[0] == 0x50 && data[1] == 0x48) {
+        offset = 2;
+    }
+
     lv_obj_t* parent_stack[MAX_DEPTH];
     int depth = 0;
     lv_obj_t* current_parent = root_parent; 
@@ -66,6 +54,17 @@ static mp_obj_t tlv_browser_render(mp_obj_t parent_obj, mp_obj_t tlv_bytes_obj) 
         offset += node_length;
         
         switch (node_type) {
+            case TYPE_ABS_PAGE: {
+                lv_obj_t* page = lv_obj_create(current_parent);
+                lv_obj_set_size(page, LV_PCT(100), LV_PCT(100));
+                lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
+                if (depth + 1 < MAX_DEPTH) {
+                    parent_stack[depth] = current_parent;
+                    depth++;
+                    current_parent = page;
+                }
+                break;
+            }
             case TYPE_ABS_TEXT: {
                 if (node_length >= 9) {
                     uint16_t x = (value[0] << 8) | value[1];
@@ -80,12 +79,12 @@ static mp_obj_t tlv_browser_render(mp_obj_t parent_obj, mp_obj_t tlv_bytes_obj) 
                     lv_obj_set_width(label, w);
                     
                     size_t text_len = node_length - 9;
-                    char* txt = (char*)m_malloc(text_len + 1);
+                    char* txt = (char*)malloc(text_len + 1);
                     if (txt) {
                         memcpy(txt, value + 9, text_len);
                         txt[text_len] = '\0';
                         lv_label_set_text(label, txt);
-                        m_free(txt);
+                        free(txt);
                     }
                     
                     if (style_id & 1) { // Bold
@@ -113,12 +112,12 @@ static mp_obj_t tlv_browser_render(mp_obj_t parent_obj, mp_obj_t tlv_bytes_obj) 
                     lv_obj_t* label = lv_label_create(btn);
                     lv_obj_center(label);
                     size_t text_len = node_length - 9;
-                    char* txt = (char*)m_malloc(text_len + 1);
+                    char* txt = (char*)malloc(text_len + 1);
                     if (txt) {
                         memcpy(txt, value + 9, text_len);
                         txt[text_len] = '\0';
                         lv_label_set_text(label, txt);
-                        m_free(txt);
+                        free(txt);
                     }
                 }
                 break;
@@ -137,7 +136,7 @@ static mp_obj_t tlv_browser_render(mp_obj_t parent_obj, mp_obj_t tlv_bytes_obj) 
                     
                     size_t str_len = node_length - 8;
                     if (str_len > 0) {
-                        char* txt = (char*)m_malloc(str_len + 1);
+                        char* txt = (char*)malloc(str_len + 1);
                         if (txt) {
                             memcpy(txt, value + 8, str_len);
                             txt[str_len] = '\0';
@@ -153,7 +152,7 @@ static mp_obj_t tlv_browser_render(mp_obj_t parent_obj, mp_obj_t tlv_bytes_obj) 
                             if (placeholder < txt + str_len) {
                                 lv_textarea_set_placeholder_text(ta, placeholder);
                             }
-                            m_free(txt);
+                            free(txt);
                         }
                     }
                 }
@@ -164,20 +163,5 @@ static mp_obj_t tlv_browser_render(mp_obj_t parent_obj, mp_obj_t tlv_bytes_obj) 
         }
     }
     
-    return mp_const_none;
+    return root_parent;
 }
-
-static MP_DEFINE_CONST_FUN_OBJ_2(tlv_browser_render_obj, tlv_browser_render);
-
-static const mp_rom_map_elem_t tlv_browser_globals_table[] = {
-    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_tlv_browser) },
-    { MP_ROM_QSTR(MP_QSTR_render), MP_ROM_PTR(&tlv_browser_render_obj) },
-};
-static MP_DEFINE_CONST_DICT(tlv_browser_globals, tlv_browser_globals_table);
-
-const mp_obj_module_t tlv_browser_user_cmodule = {
-    .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&tlv_browser_globals,
-};
-
-MP_REGISTER_MODULE(MP_QSTR_tlv_browser, tlv_browser_user_cmodule);

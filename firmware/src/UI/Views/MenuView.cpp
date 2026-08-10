@@ -62,6 +62,7 @@ void MenuView::loadDataFromSD() {
         File root = SD.open("/");
         if (root) {
             int fileId = 1;
+            int rootFileIdx = 0;
             File entry = root.openNextFile();
             while (entry) {
                 String fileName = entry.name();
@@ -69,28 +70,6 @@ void MenuView::loadDataFromSD() {
                 lowerName.toLowerCase();
 
                 if (!entry.isDirectory()) {
-                    int rootFileIdx = 0;
-                    // Contar posición del archivo en la raíz
-                    {
-                        File tmp = SD.open("/");
-                        if (tmp) {
-                            File te = tmp.openNextFile();
-                            while (te) {
-                                String tn = te.name();
-                                String tl = tn; tl.toLowerCase();
-                                if (!te.isDirectory() &&
-                                    (tl.endsWith(".mp3") || tl.endsWith(".wav") ||
-                                     tl.endsWith(".jpg") || tl.endsWith(".png") || tl.endsWith(".bmp") || tl.endsWith(".gif"))) {
-                                    if (tn == fileName) break;
-                                    rootFileIdx++;
-                                }
-                                te.close();
-                                te = tmp.openNextFile();
-                            }
-                            if (te) te.close();
-                            tmp.close();
-                        }
-                    }
                     if (lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".bmp") || lowerName.endsWith(".gif")) {
                         std::string idxPath = "sdidx:/:" + std::to_string(rootFileIdx);
                         menuItems.push_back({
@@ -102,6 +81,7 @@ void MenuView::loadDataFromSD() {
                             idxPath,
                             LV_SYMBOL_IMAGE
                         });
+                        rootFileIdx++;
                     } else if (lowerName.endsWith(".mp3") || lowerName.endsWith(".wav")) {
                         std::string idxPath = "sdidx:/:" + std::to_string(rootFileIdx);
                         menuItems.push_back({
@@ -113,6 +93,7 @@ void MenuView::loadDataFromSD() {
                             idxPath,
                             LV_SYMBOL_AUDIO
                         });
+                        rootFileIdx++;
                     }
                 } else {
                     // Escanear 1 subnivel (ej. /fotos o /musica)
@@ -176,7 +157,9 @@ void MenuView::loadDataFromSD() {
 //  create()
 // ────────────────────────────────────────────────────────────────
 lv_obj_t* MenuView::create() {
-    loadDataFromSD();
+    if (menuItems.empty()) {
+        loadDataFromSD();
+    }
 
     lv_obj_t* screen = lv_obj_create(NULL);
     DefaultTheme::applyFlatBg(screen);

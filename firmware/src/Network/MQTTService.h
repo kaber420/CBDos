@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <map>
+#include "ConfigManager.h"
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -34,10 +35,12 @@ public:
     }
 
 #ifdef ARDUINO
-    void init(const String& hubIp, int mqttPort, const String& mac);
+    void init(const GatewayConfig& gw, const String& mac);
+    void reconnectTo(const GatewayConfig& gw);
     void publishCommand(const String& cmd);
 #else
-    void init(const std::string& hubIp, int mqttPort, const std::string& mac);
+    void init(const GatewayConfig& gw, const std::string& mac);
+    void reconnectTo(const GatewayConfig& gw);
     void publishCommand(const std::string& cmd);
 #endif
 

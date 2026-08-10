@@ -69,43 +69,64 @@ void commandCallback(int cmdId) {
 void ordersCallback(const std::vector<OrderItem>& orders) {
 }
 
-static DeviceConfig g_config;
+static WiFiConfig g_wifiConfig;
+static GatewayConfig g_activeGateway;
+static bool g_hasWifi = false;
+static bool g_hasGateway = false;
 
 static volatile int g_currentRssi = -999;
 
 #ifdef ARDUINO
 static void networkTask(void* param) {
     while (1) {
-        if (g_isConfigured) {
+        if (WiFi.status() == WL_CONNECTED) {
             static uint32_t lastRssiCheck = 0;
             uint32_t now = millis();
-            if (now - lastRssiCheck >= 5000) {
+            if (now - lastRssiCheck >= 2000) {
                 lastRssiCheck = now;
-                if (WiFi.status() == WL_CONNECTED) {
-                    g_currentRssi = WiFi.RSSI();
-                } else {
-                    g_currentRssi = -999;
-                }
+                g_currentRssi = WiFi.RSSI();
             }
-            MQTTService::getInstance().update();
+            if (g_hasGateway) {
+                MQTTService::getInstance().update();
+            }
             AssetManager::getInstance().processQueue();
+        } else {
+            g_currentRssi = -999;
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 #endif
 
 void startNormalBoot() {
-    Serial.println("[OK] Starting normal boot, connecting to WiFi...");
+    Serial.println("[OK] Starting normal boot...");
+    String mac;
 #ifdef ARDUINO
-    WiFi.begin(g_config.wifiSsid.c_str(), g_config.wifiPass.c_str());
-    String mac = WiFi.macAddress();
-    // Lanzar tarea de red aislada en Core 0 para no interferir con el hilo principal de LVGL en Core 1
-    xTaskCreatePinnedToCore(networkTask, "NetworkTask", 4096, NULL, 1, NULL, 0);
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    mac = WiFi.macAddress();
+    if (g_hasWifi && g_wifiConfig.ssid.length() > 0) {
+        Serial.printf("[WiFi] Conectando a SSID: %s...\n", g_wifiConfig.ssid.c_str());
+        if (g_wifiConfig.useStaticIp) {
+            IPAddress ip, gw, sub, dns1;
+            if (ip.fromString(g_wifiConfig.staticIp.c_str()) && gw.fromString(g_wifiConfig.gateway.c_str())) {
+                sub.fromString(g_wifiConfig.subnet.length() > 0 ? g_wifiConfig.subnet.c_str() : "255.255.255.0");
+                if (g_wifiConfig.dns1.length() > 0) dns1.fromString(g_wifiConfig.dns1.c_str());
+                WiFi.config(ip, gw, sub, dns1);
+            }
+        }
+        WiFi.begin(g_wifiConfig.ssid.c_str(), g_wifiConfig.password.c_str());
+    } else {
+        Serial.println("[WiFi] No hay SSID configurado.");
+    }
+    // Lanzar tarea de red aislada en Core 0 con 12KB de stack para evitar Stack Overflow
+    xTaskCreatePinnedToCore(networkTask, "NetworkTask", 12288, NULL, 1, NULL, 0);
 #else
-    String mac = "00:11:22:33:44:55";
+    mac = "00:11:22:33:44:55";
 #endif
-    MQTTService::getInstance().init(g_config.hubIp, g_config.mqttPort, mac);
+    if (g_hasGateway) {
+        MQTTService::getInstance().init(g_activeGateway, mac);
+    }
     UIManager::getInstance().loadLauncher();
 }
 
@@ -186,7 +207,7 @@ void setup() {
 #ifdef ARDUINO
     Serial.begin(115200);
     delay(500); // Dar tiempo al Serial para conectar
-    Serial.println("\n=== TableHub Firmware Booting ===");
+    Serial.println("\n=== ESP32OS Firmware Booting ===");
     Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
     Serial.printf("PSRAM size: %u bytes\n", ESP.getPsramSize());
     Serial.printf("Free PSRAM: %u bytes\n", ESP.getFreePsram());
@@ -259,10 +280,6 @@ void setup() {
     DashboardView::setCommandCallback(commandCallback);
     MQTTService::getInstance().setOrdersCallback(ordersCallback);
 
-    Serial.println("[..] Loading config...");
-    ConfigManager::getInstance().init();
-    g_isConfigured = ConfigManager::getInstance().loadConfig(g_config);
-
 #ifdef ARDUINO
     SPIClass* sdSPI = new SPIClass(HSPI);
     sdSPI->begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS (HSPI / SPI3_HOST para no colisionar con FSPI de la pantalla)
@@ -279,15 +296,15 @@ void setup() {
         lv_fs_if_init();
         AssetManager::getInstance().init();
     }
-
-    if (g_isConfigured) {
-        startNormalBoot();
-    } else {
-        startNormalBoot();
-    }
-#else
-    startNormalBoot();
 #endif
+
+    Serial.println("[..] Loading config...");
+    ConfigManager::getInstance().init();
+    g_hasWifi = ConfigManager::getInstance().loadWiFi(g_wifiConfig);
+    g_hasGateway = ConfigManager::getInstance().loadActiveGateway(g_activeGateway);
+    g_isConfigured = g_hasWifi && g_hasGateway;
+
+    startNormalBoot();
     lv_refr_now(NULL);
     Serial.println("=== Boot complete ===");
 }
@@ -306,13 +323,13 @@ void loop() {
     uint32_t time_till_next = lv_timer_handler();
     UIManager::getInstance().update();
 
+    static int lastAppliedRssi = -9999;
+    int rssi = g_currentRssi;
+    if (rssi != lastAppliedRssi) {
+        lastAppliedRssi = rssi;
+        HeaderBar::updateActiveSignal(rssi);
+    }
     if (g_isConfigured) {
-        static int lastAppliedRssi = -9999;
-        int rssi = g_currentRssi;
-        if (rssi != lastAppliedRssi) {
-            lastAppliedRssi = rssi;
-            HeaderBar::updateActiveSignal(rssi);
-        }
         if (AssetManager::getInstance().checkAndClearRefreshFlag()) {
             lv_obj_send_event(lv_screen_active(), LV_EVENT_REFRESH, NULL);
         }

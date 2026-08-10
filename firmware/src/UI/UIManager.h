@@ -15,9 +15,15 @@ public:
     void loadMediaGallery();
     void loadMeshChat();
     void loadWavBrowser();
+    void loadConfigView();
+    void loadWiFiConfig();
+    void loadLoRaConfig();
+    void loadFLRCConfig();
+    void loadGatewayConfig();
 
     void resetInactivityTimer() {}
     static void showToast(const char* message);
+    static void attachKeyboard(lv_obj_t* ta);
 
 private:
     UIManager() {}

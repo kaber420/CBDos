@@ -224,6 +224,8 @@
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/esp_netif/include/esp_netif.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/esp_netif/include/esp_netif_types.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/esp_netif/include/esp_netif_defaults.h \
+ src/Network/ConfigManager.h \
+ /home/kaber420/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src/Preferences.h \
  .pio/libdeps/esp32/ArduinoJson/src/ArduinoJson.h \
  .pio/libdeps/esp32/ArduinoJson/src/ArduinoJson.hpp \
  .pio/libdeps/esp32/ArduinoJson/src/ArduinoJson/Configuration.hpp

@@ -90,10 +90,10 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackB
 
     // Componentes de Estado (Wi-Fi, Batería, Hora)
     if (showStatus) {
-        // Contenedor de señal Wi-Fi (Derecha, junto a la batería)
+        // Contenedor de señal Wi-Fi (Derecha al borde)
         hb->signalContainer = lv_obj_create(hb->container);
         lv_obj_set_size(hb->signalContainer, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_align(hb->signalContainer, LV_ALIGN_RIGHT_MID, -60, 0);
+        lv_obj_align(hb->signalContainer, LV_ALIGN_RIGHT_MID, -12, 0);
         lv_obj_set_style_bg_opa(hb->signalContainer, 0, 0);
         lv_obj_set_style_border_width(hb->signalContainer, 0, 0);
         lv_obj_set_style_pad_all(hb->signalContainer, 0, 0);
@@ -121,41 +121,12 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackB
         lv_obj_add_flag(hb->timeLabel, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(hb->timeLabel, status_tap_cb, LV_EVENT_CLICKED, nullptr);
 
-        // Batería (Derecha)
-        hb->batteryShell = lv_obj_create(hb->container);
-        lv_obj_set_size(hb->batteryShell, 26, 14);
-        lv_obj_align(hb->batteryShell, LV_ALIGN_RIGHT_MID, -16, 0);
-        lv_obj_set_style_bg_opa(hb->batteryShell, 0, 0);
-        lv_obj_set_style_border_width(hb->batteryShell, 2, 0);
-        lv_obj_set_style_border_color(hb->batteryShell, lv_color_hex(0x10B981), 0);
-        lv_obj_set_style_radius(hb->batteryShell, 4, 0);
-        lv_obj_set_style_pad_all(hb->batteryShell, 2, 0);
-        DefaultTheme::disableScroll(hb->batteryShell);
-
-        hb->batteryTip = lv_obj_create(hb->container);
-        lv_obj_set_size(hb->batteryTip, 3, 6);
-        lv_obj_align_to(hb->batteryTip, hb->batteryShell, LV_ALIGN_OUT_RIGHT_MID, 1, 0);
-        lv_obj_set_style_bg_color(hb->batteryTip, lv_color_hex(0x10B981), 0);
-        lv_obj_set_style_bg_opa(hb->batteryTip, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(hb->batteryTip, 0, 0);
-        lv_obj_set_style_radius(hb->batteryTip, 1, 0);
-        DefaultTheme::disableScroll(hb->batteryTip);
-
-        hb->batteryFill = lv_obj_create(hb->batteryShell);
-        lv_obj_set_size(hb->batteryFill, 18, 6);
-        lv_obj_align(hb->batteryFill, LV_ALIGN_LEFT_MID, 0, 0);
-        lv_obj_set_style_bg_color(hb->batteryFill, lv_color_hex(0x10B981), 0);
-        lv_obj_set_style_bg_opa(hb->batteryFill, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(hb->batteryFill, 0, 0);
-        lv_obj_set_style_radius(hb->batteryFill, 1, 0);
-        DefaultTheme::disableScroll(hb->batteryFill);
-        
         // Cargar los últimos valores guardados
         hb->updateTime(lastTimeStr);
-        hb->updateBattery(lastBatteryPercentage);
         hb->updateSignal(lastSignalStrength);
     }
 
+    setActiveHeader(hb);
     return hb;
 }
 
@@ -196,7 +167,6 @@ void HeaderBar::updateActiveBattery(int percentage) {
 }
 
 void HeaderBar::updateActiveSignal(int strength) {
-    if (lastSignalStrength == strength) return;
     lastSignalStrength = strength;
     if (activeHeader && activeHeader->container && lv_obj_is_valid(activeHeader->container)) {
         activeHeader->updateSignal(strength);
@@ -221,55 +191,35 @@ void HeaderBar::updateTime(const char* timeStr) {
 }
 
 void HeaderBar::updateBattery(int percentage) {
-    if (!batteryFill || !batteryShell || !batteryTip) return;
-
-    if (percentage < 0) percentage = 0;
-    if (percentage > 100) percentage = 100;
-
-    int maxFillWidth = 18;
-    int fillW = (percentage * maxFillWidth) / 100;
-    if (fillW < 2 && percentage > 0) fillW = 2;
-
-    lv_color_t color;
-    if (percentage <= 20) {
-        color = lv_color_hex(0xEF4444); // Red
-    } else if (percentage <= 50) {
-        color = lv_color_hex(0xF59E0B); // Yellow
-    } else {
-        color = lv_color_hex(0x10B981); // Green
-    }
-
-    lv_obj_set_width(batteryFill, fillW);
-    lv_obj_set_style_bg_color(batteryFill, color, 0);
-    lv_obj_set_style_border_color(batteryShell, color, 0);
-    lv_obj_set_style_bg_color(batteryTip, color, 0);
 }
 
 void HeaderBar::updateSignal(int strength) {
     if (!signalIcon) return;
 
-    bool disconnected = false;
-    lv_color_t color = lv_color_hex(0x10B981);
+    bool disconnected = (strength == -999);
+    uint32_t colorHex = 0x10B981; // Green
 
-    if (strength == -999) {
-        disconnected = true;
-    } else if (strength <= 0) {
+    if (!disconnected && strength <= 0) {
         if (strength < -80) {
-            color = lv_color_hex(0xEF4444);
+            colorHex = 0xEF4444; // Red
         } else if (strength < -70) {
-            color = lv_color_hex(0xF59E0B);
-        } else {
-            color = lv_color_hex(0x10B981);
+            colorHex = 0xF59E0B; // Yellow
         }
-    } else {
+    } else if (!disconnected && strength > 0) {
         if (strength <= 30) {
-            color = lv_color_hex(0xEF4444);
+            colorHex = 0xEF4444; // Red
         } else if (strength <= 65) {
-            color = lv_color_hex(0xF59E0B);
-        } else {
-            color = lv_color_hex(0x10B981);
+            colorHex = 0xF59E0B; // Yellow
         }
     }
+
+    if (disconnected == appliedDisconnected && colorHex == appliedColorHex) {
+        return; // No visible color/state change on this HeaderBar instance
+    }
+    appliedDisconnected = disconnected;
+    appliedColorHex = colorHex;
+
+    lv_color_t color = lv_color_hex(colorHex);
 
     if (disconnected) {
         lv_label_set_text(signalIcon, LV_SYMBOL_WIFI);
@@ -317,9 +267,11 @@ void HeaderBar::cart_btn_cb(lv_event_t * e) {
     }
 }
 
+#include "QuickSettingsPanel.h"
+
 void HeaderBar::status_tap_cb(lv_event_t * e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
-        DiagnosticsModal::show(lv_screen_active(), getSystemDiagnostics());
+        QuickSettingsPanel::toggle(lv_screen_active());
     }
 }

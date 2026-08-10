@@ -21,7 +21,7 @@ void DashboardView::btn_event_cb(lv_event_t * e) {
         } else if(id == 3) {
             UIManager::getInstance().loadWavBrowser();
         } else if(id == 4) {
-            UIManager::showToast("Configuración: Iniciando...");
+            UIManager::getInstance().loadConfigView();
         }
     }
 }
@@ -39,7 +39,7 @@ lv_obj_t* DashboardView::create() {
     lv_obj_set_style_pad_row(screen, 10, 0);
 
     // --- Header Bar ---
-    headerBar = HeaderBar::create(screen, "espOS32 System", false, true);
+    headerBar = HeaderBar::create(screen, "ESP32OS", false, true);
 
     // --- Dashboard Grid ---
     lv_obj_t * grid = lv_obj_create(screen);
@@ -58,7 +58,7 @@ lv_obj_t* DashboardView::create() {
     lv_obj_set_style_pad_column(grid, 12, 0);
     lv_obj_set_style_pad_row(grid, 12, 0);
 
-    const char* titles[] = {"Mesh Chat", "Media Viewer", "WAV Browser", "Configuración"};
+    const char* titles[] = {"Mesh Chat", "Media Viewer", "WAV Browser", "Configuracion"};
     const char* icons[] = {LV_SYMBOL_VOLUME_MAX, LV_SYMBOL_IMAGE, LV_SYMBOL_DIRECTORY, LV_SYMBOL_SETTINGS};
     lv_color_t iconColors[] = {
         DefaultTheme::getPrimaryAccent(),

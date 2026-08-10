@@ -451,7 +451,6 @@
  src/UI/Views/DashboardView.h src/UI/Views/../Components/HeaderBar.h \
  src/UI/Themes/DefaultTheme.h src/Network/ConfigManager.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
- /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/newlib/platform_include/stdio.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp_arduino_version.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/freertos/FreeRTOS-Kernel/include/freertos/FreeRTOS.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/freertos/config/include/freertos/FreeRTOSConfig.h \
@@ -577,7 +576,6 @@
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-cpu.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-hosted.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/WCharacter.h \
- /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/newlib/platform_include/ctype.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/WString.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/pgmspace.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/Stream.h \
@@ -675,7 +673,7 @@
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/esp_netif/include/esp_netif.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/esp_netif/include/esp_netif_types.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/esp_netif/include/esp_netif_defaults.h \
- src/Network/MQTTService.h \
+ src/Network/ConfigManager.h src/Network/MQTTService.h \
  .pio/libdeps/esp32/ArduinoJson/src/ArduinoJson.h \
  .pio/libdeps/esp32/ArduinoJson/src/ArduinoJson.hpp \
  .pio/libdeps/esp32/ArduinoJson/src/ArduinoJson/Configuration.hpp \

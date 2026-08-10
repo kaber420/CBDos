@@ -43,6 +43,9 @@ private:
     lv_obj_t* signalIcon = nullptr;
     lv_obj_t* signalBadge = nullptr;
 
+    bool appliedDisconnected = true;
+    uint32_t appliedColorHex = 0;
+
     // Estado global compartido
     static HeaderBar* activeHeader;
     static char lastTimeStr[16];

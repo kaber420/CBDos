@@ -1,7 +1,6 @@
 .pio/build/esp32/src/Network/ConfigManager.cpp.o: \
  src/Network/ConfigManager.cpp src/Network/ConfigManager.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
- /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/newlib/platform_include/stdio.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp_arduino_version.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/freertos/FreeRTOS-Kernel/include/freertos/FreeRTOS.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/freertos/config/include/freertos/FreeRTOSConfig.h \
@@ -128,7 +127,6 @@
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-cpu.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-hosted.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/WCharacter.h \
- /home/kaber420/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/newlib/platform_include/ctype.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/WString.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/pgmspace.h \
  /home/kaber420/.platformio/packages/framework-arduinoespressif32/cores/esp32/Stream.h \

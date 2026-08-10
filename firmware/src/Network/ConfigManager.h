@@ -1,17 +1,55 @@
 #ifndef CONFIG_MANAGER_H
-#ifndef ARDUINO
 #define CONFIG_MANAGER_H
 
 #include <string>
+#include <vector>
 
-struct DeviceConfig {
-    std::string wifiSsid;
-    std::string wifiPass;
-    std::string hubIp;
+#ifndef ARDUINO
+// ─── Emulator Definitions ───
+struct WiFiConfig {
+    std::string ssid;
+    std::string password;
+    bool useStaticIp = false;
+    std::string staticIp;
+    std::string gateway;
+    std::string subnet;
+    std::string dns1;
+    std::string dns2;
+};
+
+struct LoRaConfig {
+    float frequency = 915.0f;
+    int8_t txPower = 14;
+    float bandwidth = 250.0f;
+    uint8_t spreadingFactor = 7;
+    uint8_t codingRate = 5;
+    uint16_t syncWord = 0x32;
+    bool enableCRC = true;
+    uint16_t preambleLength = 8;
+};
+
+struct FLRCConfig {
+    float frequency = 2.400f;
+    int8_t txPower = 10;
+    float bandwidth = 1.2f;
+    uint8_t dataRate = 1;
+    uint8_t codingRate = 2;
+    uint16_t syncWord = 0x7B5A;
+    bool enableCRC = true;
+    uint16_t preambleLength = 8;
+};
+
+struct GatewayConfig {
+    std::string id;
+    std::string name;
+    std::string address;
+    std::string domain;
     int mqttPort = 1883;
-    std::string bootstrapToken;
-    std::string tableId;
-    bool isConfigured = false;
+    bool mqttUseTls = false;
+    std::string authToken;
+    std::string authType = "token";
+    std::string discoveryMethod = "static";
+    std::string notes;
 };
 
 class ConfigManager {
@@ -22,32 +60,83 @@ public:
     }
 
     bool init();
-    bool loadConfig(DeviceConfig& config);
-    bool saveConfig(const DeviceConfig& config);
-    bool clearConfig();
-    bool attemptProvisioning(const std::string& pin, std::string& errorMessage);
+
+    // WiFi
+    bool loadWiFi(WiFiConfig& cfg);
+    bool saveWiFi(const WiFiConfig& cfg);
+
+    // LoRa
+    bool loadLoRa(LoRaConfig& cfg);
+    bool saveLoRa(const LoRaConfig& cfg);
+
+    // FLRC
+    bool loadFLRC(FLRCConfig& cfg);
+    bool saveFLRC(const FLRCConfig& cfg);
+
+    // Gateways
+    bool importGateway(const std::string& encPath, const std::string& pin, std::string& errorOut);
+    bool removeGateway(const std::string& gwId);
+    std::vector<GatewayConfig> listGateways();
+    bool setActiveGateway(const std::string& gwId);
+    bool loadActiveGateway(GatewayConfig& gw);
+
+    // Limpieza NVS
+    bool clearLegacyConfig();
+    bool clearAllNvs();
 
 private:
     ConfigManager() = default;
-    DeviceConfig _cachedConfig;
-    bool _isLoaded = false;
 };
 
 #else
-#define CONFIG_MANAGER_H
-
+// ─── Arduino / ESP32 Definitions ───
 #include <Arduino.h>
 #include <Preferences.h>
-#include <string>
 
-struct DeviceConfig {
-    String wifiSsid;
-    String wifiPass;
-    String hubIp;
+struct WiFiConfig {
+    String ssid;
+    String password;
+    bool useStaticIp = false;
+    String staticIp;
+    String gateway;
+    String subnet;
+    String dns1;
+    String dns2;
+};
+
+struct LoRaConfig {
+    float frequency = 915.0f;
+    int8_t txPower = 14;
+    float bandwidth = 250.0f;
+    uint8_t spreadingFactor = 7;
+    uint8_t codingRate = 5;
+    uint16_t syncWord = 0x32;
+    bool enableCRC = true;
+    uint16_t preambleLength = 8;
+};
+
+struct FLRCConfig {
+    float frequency = 2.400f;
+    int8_t txPower = 10;
+    float bandwidth = 1.2f;
+    uint8_t dataRate = 1;
+    uint8_t codingRate = 2;
+    uint16_t syncWord = 0x7B5A;
+    bool enableCRC = true;
+    uint16_t preambleLength = 8;
+};
+
+struct GatewayConfig {
+    String id;
+    String name;
+    String address;
+    String domain;
     int mqttPort = 1883;
-    String bootstrapToken;
-    String tableId;
-    bool isConfigured = false;
+    bool mqttUseTls = false;
+    String authToken;
+    String authType = "token";
+    String discoveryMethod = "static";
+    String notes;
 };
 
 class ConfigManager {
@@ -58,17 +147,35 @@ public:
     }
 
     bool init();
-    bool loadConfig(DeviceConfig& config);
-    bool saveConfig(const DeviceConfig& config);
-    bool clearConfig();
-    bool attemptProvisioning(const std::string& pin, String& errorMessage);
+
+    // WiFi
+    bool loadWiFi(WiFiConfig& cfg);
+    bool saveWiFi(const WiFiConfig& cfg);
+
+    // LoRa
+    bool loadLoRa(LoRaConfig& cfg);
+    bool saveLoRa(const LoRaConfig& cfg);
+
+    // FLRC
+    bool loadFLRC(FLRCConfig& cfg);
+    bool saveFLRC(const FLRCConfig& cfg);
+
+    // Gateways
+    bool importGateway(const String& encPath, const String& pin, String& errorOut);
+    bool removeGateway(const String& gwId);
+    std::vector<GatewayConfig> listGateways();
+    bool setActiveGateway(const String& gwId);
+    bool loadActiveGateway(GatewayConfig& gw);
+
+    // Limpieza NVS
+    bool clearLegacyConfig();
+    bool clearAllNvs();
 
 private:
     ConfigManager() = default;
     Preferences preferences;
-    DeviceConfig _cachedConfig;
-    bool _isLoaded = false;
 };
 
 #endif
 #endif
+
