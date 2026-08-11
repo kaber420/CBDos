@@ -62,18 +62,28 @@ gateway/test_*.py
 Thumbs.db
 desktop.ini
 
-# ─── Playwright / Browser testing ─────────────────────────────────────────────
+# ─── Playwright / Browser testing & perfiles de navegador ────────────────────
 test-results/
 playwright-report/
 playwright/.cache/
 .playwright/
-**/raw-profiles/
-**/default-profile/
+
+# Perfiles de Firefox y Chromium generados por Playwright/tests
+**/ff_profile/
+**/raw_profile/
 **/firefox-profile*/
 **/chromium-*/
 **/webkit-*/
 **/.local-chromium/
 **/.local-firefox/
 **/.local-webkit/
+**/raw-profiles/
+**/default-profile/
 *.raw-profiles
 *.profraw
+
+# ─── Bases de datos ───────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+*.bd
