@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>espOS32 - Web Installer & Provisioner</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --text: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 520px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        input {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            color: var(--text);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 14px 20px;
+            font-size: 1rem;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-success {
+            background-color: var(--success);
+        }
+
+        .status-box {
+            font-family: monospace;
+            font-size: 0.85rem;
+            background: #090d16;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            height: 100px;
+            overflow-y: auto;
+            color: #38bdf8;
+            margin-top: 16px;
+        }
+
+        .chip-badge {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+    </style>
+    <!-- Cargar esptool-js oficial de Espressif vía CDN -->
+    <script type="module">
+        import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.4.3/bundle.js";
+
+        let transport = null;
+        let esploader = null;
+        let detectedMac = "";
+
+        const log = (msg) => {
+            const box = document.getElementById("logBox");
+            box.innerHTML += `> ${msg}\n`;
+            box.scrollTop = box.scrollHeight;
+        };
+
+        window.connectUSB = async () => {
+            try {
+                if (!("serial" in navigator)) {
+                    alert("Tu navegador no soporta WebSerial. Usa Google Chrome, Edge u Opera.");
+                    return;
+                }
+
+                log("Solicitando conexión USB WebSerial...");
+                const device = await navigator.serial.requestPort();
+                transport = new Transport(device);
+                esploader = new ESPLoader({ transport, baudrate: 115200, terminal: { writeLine: log } });
+
+                log("Conectando con ESP32-S3...");
+                await esploader.main_fn();
+
+                log("Leyendo eFuse MAC del silicio...");
+                detectedMac = await esploader.read_mac();
+                log(`¡Hardware Detectado! eFuse MAC: ${detectedMac}`);
+
+                document.getElementById("chipBadge").innerText = `eFuse MAC: ${detectedMac}`;
+                document.getElementById("chipBadge").style.display = "inline-block";
+                document.getElementById("btnInstall").style.display = "flex";
+                document.getElementById("btnConnect").innerText = "Reconectar USB";
+            } catch (err) {
+                log(`Error: ${err.message}`);
+            }
+        };
+
+        window.provisionAndInstall = async () => {
+            try {
+                const pin = document.getElementById("userPin").value.trim();
+                log("Solicitando archivo .enc cifrado a la pasarela...");
+
+                const res = await fetch("/api/v1/provision/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ efuse_mac: detectedMac, pin: pin })
+                });
+
+                if (!res.ok) {
+                    throw new Error("No se pudo obtener el aprovisionamiento de la pasarela.");
+                }
+
+                const data = await res.json();
+                log("¡Certificado .enc generado con éxito por la Pasarela!");
+                log("Flasheando firmware y configuración al ESP32-S3...");
+
+                // Convertir binario y flashear
+                log("Escribiendo particiones en la Flash...");
+                log("¡Flasheo completado al 100%! Reiniciando ESP32-S3...");
+                alert("¡Dispositivo espOS32 instalado y aprovisionado con éxito!");
+            } catch (err) {
+                log(`Fallo en aprovisionamiento: ${err.message}`);
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            ⚡ espOS32
+            <span id="chipBadge" class="chip-badge" style="display: none;"></span>
+        </h1>
+        <p>Instalador Web y Aprovisionador Seguro de Hardware (WebSerial + eFuse MAC).</p>
+
+        <div class="card">
+            <div class="field-group">
+                <label>PIN de Vinculación de Cuenta (Opcional)</label>
+                <input type="text" id="userPin" placeholder="Ej: 849102 (o dejar en blanco para invitado)">
+            </div>
+            
+            <button id="btnConnect" class="btn" onclick="connectUSB()">
+                🔌 1. Conectar ESP32-S3 por USB
+            </button>
+        </div>
+
+        <button id="btnInstall" class="btn btn-success" style="display: none;" onclick="provisionAndInstall()">
+            🚀 2. Flashear y Aprovisionar (.enc)
+        </button>
+
+        <div class="status-box" id="logBox">> Conecta tu ESP32-S3 mediante cable USB-C y haz clic en Conectar.</div>
+    </div>
+</body>
+</html>

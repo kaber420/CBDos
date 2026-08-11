@@ -28,6 +28,7 @@ son opacos y se reenvían sin parsear.
 ### Comunicación Local (misma torre)
 El destino está en la misma torre. Se omiten ASN, Zona y Torre — se asume local.
 
+**1. Cabecera Local Estándar (9 Bytes):**
 ```
 ┌─────────┬───────────┬───────────┐
 │ Control │ UUID dst  │ UUID src  │
@@ -36,7 +37,7 @@ El destino está en la misma torre. Se omiten ASN, Zona y Torre — se asume loc
 Total: 9 bytes → payload útil: 244 bytes (de 253 MTU del SX1280)
 ```
 
-**Compresión Ultra-Ligera (Tabla Local Cacheada):**
+**2. Compresión Ultra-Ligera (Tabla Local Cacheada - 3 Bytes):**
 Cuando los nodos locales ya están registrados en la torre (tienen una sesión o lease activo), se les asigna un identificador local (Short ID) de solo 2 bytes en lugar del UUID completo de 4 bytes. 
 La cabecera se reduce a su mínima expresión:
 
@@ -45,32 +46,50 @@ La cabecera se reduce a su mínima expresión:
 │ Control │ Short ID dst │
 │   1B    │      2B      │
 └─────────┴──────────────┘
-Total: 3 bytes de cabecera!
+Total: 3 bytes de cabecera! (Bit MESH_CTRL_DST_ONLY = 1)
 Payload útil: 250 bytes (de 253 MTU)
 ```
 - **Airtime mínimo:** Transmitir 3 bytes de cabecera toma una fracción de milisegundo en FLRC.
 - **Procesamiento nulo:** La torre lee el Short ID (2 bytes), lo busca en su tabla de RAM (`uint16_t -> slot/MAC`), y despacha. 
-- **Ceros si no hay tabla:** Si un nodo aún no tiene Short ID, usa el UUID completo de 4 bytes, pero el resto de los campos (ASN, Zona, Torre) no se envían (ahorrando procesamiento).
 
 ### Comunicación Intra-Zona (distinta torre, mismo ASN+Zona)
+
+**1. Intra-Zona Optimizada con Short IDs compartidos de Zona (9 Bytes):**
+Al estar en la misma Zona OSPF, los routers de borde/zona comparten la tabla local de Short IDs (2B). Al establecer sesión, la cabecera conmuta enviando la Torre Origen (2B) + Torre Destino (2B) + Short IDs (2B cada uno):
+
 ```
-┌─────────┬────────┬────────┬───────────┬───────────┐
-│ Control │  Zona  │ Torre  │ UUID dst  │ UUID src  │
-│   1B    │   2B   │   2B   │    4B     │    4B     │
-└─────────┴────────┴────────┴───────────┴───────────┘
-Total: 13 bytes → pseudo-OSPF lee Zona+Torre
+┌─────────┬───────────┬───────────┬──────────────┬──────────────┐
+│ Control │ Torre src │ Torre dst │ Short ID src │ Short ID dst │
+│   1B    │    2B     │    2B     │      2B      │      2B      │
+└─────────┴───────────┴───────────┴──────────────┴──────────────┘
+Total: 9 bytes → (Bit MESH_CTRL_SHORT_ID = 1, Bit MESH_CTRL_INTRA_ZONE = 1)
 ```
 
-### Comunicación Global (distinto ASN)
+**2. Intra-Zona Estándar con UUIDs completos (13 Bytes):**
+Utilizado para paquetes iniciales o nodos no registrados en la tabla de zona:
+
 ```
-┌─────────┬───────┬────────┬────────┬───────────┬───────────┐
-│ Control │  ASN  │  Zona  │ Torre  │ UUID dst  │ UUID src  │
-│   1B    │  2B   │  2B    │  2B   │    4B     │    4B     │
-└─────────┴───────┴────────┴────────┴───────────┴───────────┘
-         ×2 (src + dst)
-Total: 1 + (2+2+2+4)×2 = 21 bytes → pseudo-BGP lee solo ASN
+┌─────────┬───────────┬───────────┬───────────┬───────────┐
+│ Control │ Torre src │ Torre dst │ UUID src  │ UUID dst  │
+│   1B    │    2B     │    2B     │    4B     │    4B     │
+└─────────┴───────────┴───────────┴───────────┴───────────┘
+Total: 13 bytes → (Bit MESH_CTRL_SHORT_ID = 0, Bit MESH_CTRL_INTRA_ZONE = 1)
+```
+
+### Comunicación Global (distinto ASN - 21 Bytes)
+```
+┌─────────┬───────────────────────────────────┬───────────────────────────────────┐
+│ Control │      Dirección Completa Origen    │     Dirección Completa Destino    │
+│   1B    │ 2B ASN + 2B Zona + 2B Torre + 4B  │ 2B ASN + 2B Zona + 2B Torre + 4B  │
+└─────────┴───────────────────────────────────┴───────────────────────────────────┘
+Total: 1 + 10 + 10 = 21 bytes (Bit MESH_CTRL_GLOBAL_BIT = 1)
 Payload útil: 232 bytes
 ```
+
+### Conmutación Dinámica de Estado (Handshake → Sesión)
+- **Fase 1 (Descubrimiento / Handshake):** El nodo transmite con Bit `SHORT_ID = 0` enviando su UUID completo de 4 Bytes (Cabecera de 13B o 21B) para registrarse sin riesgo de colisión en la torre/zona.
+- **Fase 2 (Sesión Activa):** La torre/gateway le asigna un Short ID de 2 Bytes en la respuesta. En los paquetes posteriores, la cabecera conmuta el Bit `SHORT_ID = 1`, reduciendo la cabecera a **9 Bytes** (Intra-Zona) o **3 Bytes** (Local), logrando máxima velocidad y mínimo airtime en la radio.
+
 
 ---
 

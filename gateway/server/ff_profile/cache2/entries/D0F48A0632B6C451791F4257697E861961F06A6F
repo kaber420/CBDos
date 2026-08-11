@@ -1,0 +1,538 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; object-src 'none'; script-src resource: chrome:; connect-src https:; img-src https: data: blob: chrome:; style-src 'unsafe-inline';">
+    <meta name="color-scheme" content="light dark">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-l10n-id="newtab-page-title"></title>
+    <link rel="icon" type="image/png" href="chrome://branding/content/icon32.png"/>
+    <link rel="localization" href="branding/brand.ftl" />
+    <link rel="localization" href="toolkit/branding/brandings.ftl" />
+    <link rel="localization" href="browser/newtab/newtab.ftl" />
+    <link rel="localization" href="toolkit/global/mozMessageBar.ftl" />
+    <link rel="stylesheet" href="chrome://global/skin/design-system/tokens-brand.css">
+    <link rel="stylesheet" href="chrome://newtab/content/css/activity-stream.css" />
+  </head>
+  <!-- Cached: Wed, 05 Aug 2026 17:28:05 GMT -->
+  <body class="activity-stream">
+    <div id="header-asrouter-container" role="presentation"></div>
+    <div id="root">
+      <div class="nova-outer-wrapper"><div class="container nova-enabled logo-in-content"><aside class="sidebar-inline-start"></aside><aside class="sidebar-inline-end"></aside><main class="content"><h1 class="logo-and-wordmark-wrapper"><div class="logo-and-wordmark" role="img" data-l10n-id="newtab-logo-and-wordmark"><div class="logo"></div><div class="wordmark"></div></div></h1><div class="sticky-search-sentinel" aria-hidden="true"></div><div class="search-wrapper"><div class="search-inner-wrapper"></div></div><section class="top-sites" data-section-id="topsites"><div class="top-sites-list-wrapper"><ul role="group" aria-label="Shortcuts" class="top-sites-list" style="--top-sites-max-per-row:8"><li class="top-site-outer"><div class="top-site-inner"><a class="top-site-button" href="https://www.wikipedia.org/" tabindex="0" draggable="true" data-is-sponsored-link="false" aria-label="Wikipedia" title="Wikipedia" data-l10n-args="{&quot;title&quot;:&quot;Wikipedia&quot;}"><div class="tile" aria-hidden="true"><div class="icon-wrapper" data-fallback="W"><div class="top-site-icon rich-icon" style="background-image:url(chrome://activity-stream/content/data/content/tippytop/images/wikipedia-org@2x.png)"></div></div></div><div class="title"><span class="title-label" dir="auto">Wikipedia</span><span class="sponsored-label" data-l10n-id="newtab-topsite-sponsored"></span></div></a><div><button aria-haspopup="menu" aria-expanded="false" data-l10n-id="newtab-menu-content-tooltip" data-l10n-args="{&quot;title&quot;:&quot;Wikipedia&quot;}" class="context-menu-button icon" tabindex="0"></button></div><div class="topsite-impression-observer"></div></div></li><li class="top-site-outer"><div class="top-site-inner"><a class="top-site-button" href="https://www.youtube.com/" tabindex="-1" draggable="true" data-is-sponsored-link="false" aria-label="YouTube" title="YouTube" data-l10n-args="{&quot;title&quot;:&quot;YouTube&quot;}"><div class="tile" aria-hidden="true"><div class="icon-wrapper" data-fallback="Y"><div class="top-site-icon rich-icon" style="background-image:url(chrome://activity-stream/content/data/content/tippytop/images/youtube-com@2x.png)"></div></div></div><div class="title"><span class="title-label" dir="auto">YouTube</span><span class="sponsored-label" data-l10n-id="newtab-topsite-sponsored"></span></div></a><div><button aria-haspopup="menu" aria-expanded="false" data-l10n-id="newtab-menu-content-tooltip" data-l10n-args="{&quot;title&quot;:&quot;YouTube&quot;}" class="context-menu-button icon" tabindex="-1"></button></div><div class="topsite-impression-observer"></div></div></li><li class="top-site-outer"><div class="top-site-inner"><a class="top-site-button" href="https://www.reddit.com/" tabindex="-1" draggable="true" data-is-sponsored-link="false" aria-label="Reddit" title="Reddit" data-l10n-args="{&quot;title&quot;:&quot;Reddit&quot;}"><div class="tile" aria-hidden="true"><div class="icon-wrapper" data-fallback="R"><div class="top-site-icon rich-icon" style="background-image:url(chrome://activity-stream/content/data/content/tippytop/images/reddit-com@2x.png)"></div></div></div><div class="title"><span class="title-label" dir="auto">Reddit</span><span class="sponsored-label" data-l10n-id="newtab-topsite-sponsored"></span></div></a><div><button aria-haspopup="menu" aria-expanded="false" data-l10n-id="newtab-menu-content-tooltip" data-l10n-args="{&quot;title&quot;:&quot;Reddit&quot;}" class="context-menu-button icon" tabindex="-1"></button></div><div class="topsite-impression-observer"></div></div></li><li class="top-site-outer"><div class="top-site-inner"><a class="top-site-button" href="https://addons.mozilla.org/" tabindex="-1" draggable="true" data-is-sponsored-link="false" aria-label="Add-ons for Firefox" title="Add-ons for Firefox" data-l10n-args="{&quot;title&quot;:&quot;Add-ons for Firefox&quot;}"><div class="tile" aria-hidden="true"><div class="icon-wrapper" data-fallback="A"><div class="top-site-icon rich-icon" style="background-image:url(chrome://activity-stream/content/data/content/tippytop/images/addons-mozilla@2x.png)"></div></div></div><div class="title"><span class="title-label" dir="auto">Add-ons for Firefox</span><span class="sponsored-label" data-l10n-id="newtab-topsite-sponsored"></span></div></a><div><button aria-haspopup="menu" aria-expanded="false" data-l10n-id="newtab-menu-content-tooltip" data-l10n-args="{&quot;title&quot;:&quot;Add-ons for Firefox&quot;}" class="context-menu-button icon" tabindex="-1"></button></div><div class="topsite-impression-observer"></div></div></li><li class="top-site-outer add-button "><div class="top-site-inner"><a class="top-site-button" tabindex="-1" draggable="true" data-is-sponsored-link="false" aria-label="" data-l10n-id="newtab-topsites-add-shortcut-title" data-l10n-args="{&quot;title&quot;:&quot;&quot;}"><div class="tile" aria-hidden="true"><div class="icon-wrapper"><div class=""></div></div></div><div class="title"><span class="title-label" dir="auto" data-l10n-id="newtab-topsites-add-shortcut-label"></span><span class="sponsored-label" data-l10n-id="newtab-topsite-sponsored"></span></div></a><div class="topsite-impression-observer"></div></div></li></ul></div><div class="edit-topsites-wrapper"></div></section></main></div><dialog class="confirmation-dialog" aria-labelledby="confirmation-dialog-title"><div class="modal"><section class="modal-message"></section><section class="button-group"><moz-button-group><moz-button type="ghost"></moz-button><moz-button type="destructive"></moz-button></moz-button-group></section></div></dialog><menu class="personalizeButtonWrapper nova-enabled"><span><moz-button class="open-customization-button" data-l10n-id="newtab-customize-panel-label" aria-haspopup="dialog" aria-expanded="false" iconsrc="chrome://global/skin/icons/edit-outline.svg" iconposition="end" type="default"></moz-button><dialog class="customize-menu nova-enabled" data-l10n-id="newtab-settings-dialog-label"><div class="customize-menu-content"><div class="close-button-wrapper"><moz-button id="close-button" type="icon ghost" data-l10n-id="newtab-custom-close-menu-button" iconsrc="chrome://global/skin/icons/close.svg"></moz-button></div><div class="home-section"><div class="wallpapers-section"><moz-toggle id="wallpapers-toggle" data-preference="newtabWallpapers.user.enabled" data-event-source="WALLPAPERS" data-l10n-id="newtab-wallpaper-toggle-title"></moz-toggle><div class="nova-enabled"><div class="category-header"></div><div role="grid" aria-label="Wallpaper category selection. Use arrow keys to navigate."><fieldset class="category-list"></fieldset></div></div></div><div class="settings-toggles"><span class="divider" role="separator"></span><div id="shortcuts-section" class="section"><moz-toggle id="shortcuts-toggle" pressed="" data-preference="feeds.topsites" data-event-source="TOP_SITES" data-l10n-id="newtab-custom-shortcuts-nova"><div slot="nested"><div class="more-info-top-wrapper"><div class="more-information"><moz-select id="row-selector" class="selector" name="row-count" data-preference="topSitesRows" value="1" aria-labelledby="custom-shortcuts-title" data-l10n-id="newtab-custom-row-description" inputLayout="inline-end"><moz-option value="1" label="1"></moz-option><moz-option value="2" label="2"></moz-option><moz-option value="3" label="3"></moz-option><moz-option value="4" label="4"></moz-option></moz-select></div></div></div></moz-toggle></div></div></div><div class="manage-settings-footer"><button id="settings-link" class="external-link" data-l10n-id="newtab-custom-settings"></button></div></div></dialog></span></menu></div>
+    </div>
+    <div id="footer-asrouter-container" role="presentation"></div>
+    <script src="about:home?jscache"></script>
+    <script src="chrome://browser/content/contentTheme.js"></script>
+    <script src="resource://newtab/data/content/vendor.bundle.js"></script>
+    <script src="resource://newtab/data/content/activity-stream.bundle.js"></script>
+    <script src="resource://newtab/data/content/newtab-render.js"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-toggle.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-badge.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-button.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-button-group.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-input-text.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-input-search.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-box-button.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-message-bar.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-radio-group.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-select.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-reorderable-list.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/panel-list.js"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-support-link.mjs"></script>
+    <script async type="module" src="chrome://global/content/elements/moz-checkbox.mjs"></script>
+  </body>
+</html>
+window.__FROM_STARTUP_CACHE__ = true;
+window.__STARTUP_STATE__ = {
+	"TopSites": {
+		"initialized": true,
+		"rows": [
+			{
+				"isDefault": true,
+				"url": "https://www.wikipedia.org/",
+				"hostname": "wikipedia",
+				"sendAttributionRequest": false,
+				"label": "Wikipedia",
+				"tippyTopIcon": "chrome://activity-stream/content/data/content/tippytop/images/wikipedia-org@2x.png",
+				"smallFavicon": "chrome://activity-stream/content/data/content/tippytop/favicons/wikipedia-org.ico",
+				"typedBonus": true
+			},
+			{
+				"isDefault": true,
+				"url": "https://www.youtube.com/",
+				"hostname": "youtube",
+				"sendAttributionRequest": false,
+				"label": "YouTube",
+				"tippyTopIcon": "chrome://activity-stream/content/data/content/tippytop/images/youtube-com@2x.png",
+				"smallFavicon": "chrome://activity-stream/content/data/content/tippytop/favicons/youtube-com.png",
+				"typedBonus": true
+			},
+			{
+				"isDefault": true,
+				"url": "https://www.reddit.com/",
+				"hostname": "reddit",
+				"sendAttributionRequest": false,
+				"label": "Reddit",
+				"tippyTopIcon": "chrome://activity-stream/content/data/content/tippytop/images/reddit-com@2x.png",
+				"smallFavicon": "chrome://activity-stream/content/data/content/tippytop/favicons/reddit-com.png",
+				"typedBonus": true
+			},
+			{
+				"isDefault": true,
+				"url": "https://addons.mozilla.org/",
+				"hostname": "addons.mozilla",
+				"sendAttributionRequest": false,
+				"label": "Add-ons for Firefox",
+				"tippyTopIcon": "chrome://activity-stream/content/data/content/tippytop/images/addons-mozilla@2x.png",
+				"smallFavicon": "chrome://activity-stream/content/data/content/tippytop/favicons/addons-mozilla.png",
+				"typedBonus": true
+			}
+		],
+		"editForm": null,
+		"showSearchShortcutsForm": false,
+		"searchShortcuts": [],
+		"sov": {
+			"ready": false,
+			"positions": []
+		}
+	},
+	"App": {
+		"initialized": true,
+		"locale": "es-ES",
+		"isForStartupCache": {
+			"App": true,
+			"TopSites": true,
+			"DiscoveryStream": true,
+			"Weather": true,
+			"Wallpaper": true
+		},
+		"customizeMenuVisible": false
+	},
+	"Ads": {
+		"initialized": false,
+		"lastUpdated": null,
+		"tiles": {},
+		"spocs": {},
+		"spocPlacements": {}
+	},
+	"Prefs": {
+		"initialized": true,
+		"values": {
+			"default.sites": "https://www.wikipedia.org/,https://www.youtube.com/,https://www.reddit.com/,https://addons.mozilla.org",
+			"feeds.topsites": true,
+			"hideTopSitesTitle": false,
+			"hideLogo": false,
+			"showSponsored": true,
+			"system.showSponsored": false,
+			"showSponsoredTopSites": false,
+			"mobileDownloadModal.enabled": false,
+			"mobileDownloadModal.variant-a": false,
+			"mobileDownloadModal.variant-b": false,
+			"mobileDownloadModal.variant-c": false,
+			"discoverystream.merino-provider.ohttp.enabled": false,
+			"unifiedAds.ohttp.enabled": true,
+			"unifiedAds.adsFeed.enabled": false,
+			"unifiedAds.tiles.enabled": true,
+			"unifiedAds.spocs.enabled": true,
+			"unifiedAds.endpoint": "https://ads.mozilla.org/",
+			"unifiedAds.blockedAds": "",
+			"system.showWeather": false,
+			"showWeather": true,
+			"system.showWeatherOptIn": false,
+			"discoverystream.optIn-region-weather-config": "DE,GB,FR,ES,IT,CH,AT,BE,IE,NL,PL,CZ,SE,SG,HU,SK,FI,DK,NO,PT",
+			"weather.optInDisplayed": true,
+			"weather.optInAccepted": false,
+			"weather.staticData.enabled": true,
+			"weather.query": "",
+			"weather.locationSearchEnabled": true,
+			"weather.temperatureUnits": "c",
+			"weather.display": "detailed",
+			"weather.reportEndpoint": "https://merino.services.mozilla.com/api/v1/suggest",
+			"weather.hourlyEndpoint": "https://merino.services.mozilla.com/api/v1/weather/hourly-forecasts",
+			"sports.worldCup.teamsEndpoint": "https://merino.services.mozilla.com/api/v1/wcs/teams",
+			"sports.worldCup.matchesEndpoint": "https://merino.services.mozilla.com/api/v1/wcs/matches",
+			"sports.worldCup.liveEndpoint": "https://merino.services.mozilla.com/api/v1/wcs/live",
+			"sports.worldCup.watchLiveEndpoint": "https://merino.services.mozilla.com/api/v1/wcs/watch-links",
+			"widgets.sportsWidget.pollIdleMs": 21600000,
+			"widgets.sportsWidget.pollMatchDayMs": 1800000,
+			"widgets.sportsWidget.pollLiveMs": 180000,
+			"widgets.sportsWidget.pollPregameLeadMs": 600000,
+			"images.smart": true,
+			"pocketCta": "{\"cta_button\":\"\",\"cta_text\":\"\",\"cta_url\":\"\",\"use_cta\":false}",
+			"showSearch": true,
+			"logowordmark.alwaysVisible": true,
+			"topSitesRows": 1,
+			"topSitesMaxSitesPerRow": 8,
+			"telemetry": true,
+			"telemetry.ut.events": false,
+			"telemetry.structuredIngestion.endpoint": "https://incoming.telemetry.mozilla.org/submit",
+			"telemetry.privatePing.enabled": true,
+			"telemetry.surfaceId": "",
+			"telemetry.privatePing.redactNewtabPing.enabled": true,
+			"telemetry.privatePing.inferredInterests.enabled": false,
+			"section.highlights.includeVisited": true,
+			"section.highlights.includeBookmarks": true,
+			"section.highlights.includeDownloads": true,
+			"section.highlights.rows": 1,
+			"feeds.section.topstories": true,
+			"section.topstories.rows": 1,
+			"sectionOrder": "topsites,topstories,highlights",
+			"newtabWallpapers.enabled": true,
+			"newtabWallpapers.user.enabled": false,
+			"newtabWallpapers.customColor.enabled": true,
+			"newtabWallpapers.customWallpaper.enabled": true,
+			"newtabWallpapers.customWallpaper.uuid": "",
+			"newtabWallpapers.customWallpaper.uploadedPreviously": false,
+			"newtabWallpapers.customWallpaper.fileSize.enabled": false,
+			"newtabWallpapers.customWallpaper.fileSize": 0,
+			"newtabWallpapers.customWallpaper.theme": "",
+			"newtabAdSize.leaderboard": false,
+			"newtabAdSize.leaderboard.position": "3",
+			"newtabAdSize.billboard": false,
+			"newtabAdSize.billboard.position": "3",
+			"newtabAdSize.mediumRectangle": false,
+			"discoverystream.promoCard.enabled": false,
+			"discoverystream.promoCard.visible": true,
+			"discoverystream.sections.enabled": false,
+			"discoverystream.sections.personalization.enabled": true,
+			"discoverystream.sections.customizeMenuPanel.enabled": true,
+			"discoverystream.sections.cards.enabled": true,
+			"discoverystream.sections.contextualAds.enabled": false,
+			"discoverystream.sections.personalization.inferred.enabled": false,
+			"discoverystream.dailyBrief.sectionId": "top_stories_section",
+			"discoverystream.dailyBrief.enabled": false,
+			"discoverystream.sections.layout": "7-double-row-2-ad",
+			"discoverystream.shortcuts.personalization.enabled": true,
+			"discoverystream.shortcuts.force_log.enabled": false,
+			"discoverystream.attribution.enabled": false,
+			"discoverystream.sections.personalization.inferred.user.enabled": true,
+			"discoverystream.sections.personalization.inferred.model.override": "",
+			"discoverystream.reportAds.enabled": true,
+			"discoverystream.sections.following": "",
+			"discoverystream.sections.blocked": "",
+			"discoverystream.sections.interestPicker.enabled": false,
+			"discoverystream.sections.interestPicker.visibleSections": "",
+			"discoverystream.spoc-positions": "2,4,8,13,17,20",
+			"discoverystream.placements.contextualSpocs": "newtab_stories_1, newtab_stories_2, newtab_stories_3, newtab_stories_4, newtab_stories_5, newtab_stories_6",
+			"discoverystream.placements.contextualSpocs.counts": "1, 1, 1, 1, 1, 1",
+			"discoverystream.placements.contextualBanners": "",
+			"discoverystream.placements.contextualBanners.counts": "",
+			"discoverystream.placements.spocs": "newtab_stories_1, newtab_stories_2, newtab_stories_3, newtab_stories_4, newtab_stories_5, newtab_stories_6",
+			"discoverystream.placements.spocs.counts": "1,1,1,1,1,1",
+			"discoverystream.placements.tiles": "newtab_tile_1, newtab_tile_2, newtab_tile_3",
+			"discoverystream.placements.tiles.counts": "1, 1, 1",
+			"discoverystream.imageProxy.enabled": true,
+			"newtabWallpapers.highlightEnabled": false,
+			"newtabWallpapers.highlightDismissed": false,
+			"newtabWallpapers.highlightSeenCounter": 0,
+			"newtabWallpapers.highlightHeaderText": "",
+			"newtabWallpapers.highlightContentText": "",
+			"newtabWallpapers.highlightCtaText": "",
+			"newtabWallpapers.wallpaper": "",
+			"newtabWallpapers.initialWallpaper": "",
+			"sov.enabled": false,
+			"sov.name": "SOV-20251122215625",
+			"sov.frecency.exposure": false,
+			"sov.amp.allocation": "100, 100, 100",
+			"sov.frecency.allocation": "0, 0, 0",
+			"widgets.system.enabled": false,
+			"widgets.enabled": true,
+			"widgets.lists.enabled": true,
+			"widgets.lists.maxLists": 10,
+			"widgets.lists.maxListItems": 100,
+			"widgets.system.lists.enabled": false,
+			"widgets.lists.interaction": false,
+			"widgets.lists.badge.enabled": false,
+			"widgets.lists.badge.label": "",
+			"widgets.maximized": true,
+			"widgets.system.maximized": false,
+			"widgets.row.expanded": false,
+			"widgets.focusTimer.enabled": true,
+			"widgets.system.focusTimer.enabled": false,
+			"widgets.focusTimer.interaction": false,
+			"widgets.focusTimer.showSystemNotifications": false,
+			"widgets.weatherForecast.enabled": true,
+			"widgets.weather.enabled": true,
+			"widgets.system.weather.enabled": false,
+			"widgets.system.weatherForecast.enabled": false,
+			"widgets.weatherForecast.interaction": false,
+			"widgets.weather.size": "small",
+			"widgets.clocks.enabled": true,
+			"widgets.system.clocks.enabled": false,
+			"widgets.defaultSize": "medium",
+			"widgets.lists.size": "",
+			"widgets.focusTimer.size": "",
+			"widgets.sportsWidget.enabled": true,
+			"widgets.system.sportsWidget.enabled": false,
+			"widgets.sportsWidget.size": "",
+			"widgets.sportsWidget.live.enabled": false,
+			"widgets.sportsWidget.celebrations.enabled": false,
+			"widgets.sportsWidget.celebrations.windowMs": 86400000,
+			"widgets.sports.forceLiveDataTrustable": false,
+			"widgets.sportsWidget.interaction": false,
+			"widgets.clocks.size": "",
+			"widgets.clocks.hourFormat": "",
+			"widgets.clocks.zones": "",
+			"widgets.feedback.enabled": false,
+			"widgets.hideAllToast.enabled": false,
+			"widgets.order": "",
+			"improvesearch.noDefaultSearchTile": true,
+			"improvesearch.topSiteSearchShortcuts.searchEngines": "",
+			"improvesearch.topSiteSearchShortcuts.havePinned": "",
+			"asrouter.devtoolsEnabled": false,
+			"discoverystream.flight.blocks": "{}",
+			"discoverystream.config": "{\"collapsible\":true,\"enabled\":true}",
+			"discoverystream.endpoints": "https://getpocket.cdn.mozilla.net/,https://firefox-api-proxy.cdn.mozilla.net/,https://spocs.getpocket.com/,https://merino.services.mozilla.com/,https://ads.mozilla.org/",
+			"discoverystream.region-basic-layout": false,
+			"discoverystream.spoc.impressions": "{}",
+			"discoverystream.endpointSpocsClear": "https://spocs.getpocket.com/user",
+			"discoverystream.rec.impressions": "{}",
+			"discoverystream.topicSelection.enabled": false,
+			"discoverystream.topicSelection.topics": "business, arts, food, health, finance, government, sports, tech, travel, education-science, society",
+			"discoverystream.topicSelection.selectedTopics": "",
+			"discoverystream.topicSelection.suggestedTopics": "business, arts, government",
+			"discoverystream.topicSelection.hasBeenUpdatedPreviously": false,
+			"discoverystream.topicSelection.onboarding.displayCount": 0,
+			"discoverystream.topicSelection.onboarding.maybeDisplay": true,
+			"discoverystream.topicSelection.onboarding.lastDisplayed": "",
+			"discoverystream.topicSelection.onboarding.displayTimeout": 0,
+			"discoverystream.topicSelection.onboarding.enabled": false,
+			"discoverystream.topicLabels.enabled": false,
+			"discoverystream.spocs.onDemand": false,
+			"discoverystream.spocs.startupCache.enabled": false,
+			"discoverystream.publisherFavicon.enabled": true,
+			"discoverystream.sections.clientLayout.enabled": false,
+			"support.url": "https://support.mozilla.org/1/firefox/153.0.1/Linux/es-ES/new-tab",
+			"privacyInfo.url": "https://support.mozilla.org/1/firefox/153.0.1/Linux/es-ES/sponsor-privacy",
+			"sectionsLearnMore.url": "https://support.mozilla.org/1/firefox/153.0.1/Linux/es-ES/firefox-new-tab-personalization",
+			"caretBlinkCount": -1,
+			"caretBlinkTime": 567,
+			"showSponsoredCheckboxes": true,
+			"activationWindow.variant": "",
+			"nova.enabled": true,
+			"selfLoading.enabled": true,
+			"remote-renderer.enabled": false,
+			"logo.variation": "",
+			"feeds.startupcacheinit": true,
+			"feeds.aboutpreferences": true,
+			"feeds.newtabinit": true,
+			"feeds.places": true,
+			"feeds.prefs": true,
+			"feeds.sections": true,
+			"feeds.section.highlights": false,
+			"feeds.system.topstories": false,
+			"feeds.systemtick": true,
+			"feeds.telemetry": true,
+			"feeds.favicon": true,
+			"feeds.system.topsites": true,
+			"feeds.discoverystreamfeed": true,
+			"feeds.sectionslayoutfeed": true,
+			"feeds.wallpaperfeed": true,
+			"feeds.weatherfeed": true,
+			"feeds.adsfeed": true,
+			"feeds.inferredpersonalizationfeed": true,
+			"feeds.smartshortcutsfeed": true,
+			"feeds.newtabattributionfeed": true,
+			"feeds.newtabmessaging": true,
+			"feeds.listsfeed": true,
+			"feeds.sportsfeed": true,
+			"feeds.timerfeed": true,
+			"feeds.externalcomponentsfeed": true,
+			"isPrivateBrowsingEnabled": true,
+			"platform": "linux",
+			"fxa_endpoint": "https://accounts.firefox.com/",
+			"appUpdateChannel": "release",
+			"improvesearch.topSiteSearchShortcuts": true,
+			"mayHaveSponsoredTopSites": true,
+			"featureConfig": {
+				"customizationMenuEnabled": null,
+				"topSitesContileEnabled": false
+			},
+			"pocketConfig": {
+				"contileTopsitesPositions": "0,1,2",
+				"spocAdTypes": "",
+				"spocZoneIds": "",
+				"spocSiteId": "",
+				"widgetPositions": "",
+				"hybridLayout": false,
+				"hideCardBackground": false,
+				"fourCardLayout": false,
+				"newFooterSection": false,
+				"hideDescriptions": true,
+				"hideDescriptionsRegions": "",
+				"compactGrid": false,
+				"compactImages": false,
+				"imageGradient": false,
+				"titleLines": 3,
+				"descLines": 3,
+				"readTime": true,
+				"newSponsoredLabel": false,
+				"ctaButtonSponsors": "",
+				"ctaButtonVariant": "",
+				"regionStoriesConfig": "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES",
+				"merinoProviderEndpoint": "merino.services.mozilla.com",
+				"regionStoriesBlock": "",
+				"localeListConfig": "",
+				"regionSpocsConfig": "US,CA,DE,GB,FR,IT,ES",
+				"pocketFeedParameters": ""
+			},
+			"smartShortcutsConfig": {},
+			"widgetsConfig": {},
+			"trainhopConfig": {},
+			"adsBackendConfig": {},
+			"discoverystream.enabled": true,
+			"discoverystream.hardcoded-basic-layout": false,
+			"discoverystream.spocs-endpoint": "",
+			"discoverystream.spocs-endpoint-query": "",
+			"discoverystream.sections.personalization.inferred.debug.override": "",
+			"newNewtabExperience.colors": "#004CA4,#009E97,#7550C2,#B63B39,#C96A00,#CA9600,#CC527F"
+		}
+	},
+	"Dialog": {
+		"visible": false,
+		"data": {}
+	},
+	"Sections": [],
+	"Messages": {
+		"isVisible": true,
+		"portID": "",
+		"messageData": {}
+	},
+	"Notifications": {
+		"showNotifications": false,
+		"toastCounter": 0,
+		"toastId": "",
+		"toastData": {},
+		"toastQueue": []
+	},
+	"Pocket": {
+		"pocketCta": {},
+		"waitingForSpoc": true
+	},
+	"InferredPersonalization": {
+		"initialized": false,
+		"lastUpdated": null,
+		"inferredInterests": {},
+		"coarseInferredInterests": {},
+		"coarsePrivateInferredInterests": {},
+		"debugFeatures": null,
+		"inferredTelemetrySettingsOverrides": {}
+	},
+	"DiscoveryStream": {
+		"config": {
+			"enabled": false
+		},
+		"layout": [],
+		"topicsLoading": false,
+		"feeds": {
+			"data": {},
+			"loaded": false
+		},
+		"impressions": {
+			"feed": {}
+		},
+		"blocks": {},
+		"spocs": {
+			"spocs_endpoint": "",
+			"lastUpdated": null,
+			"cacheUpdateTime": null,
+			"onDemand": {
+				"enabled": false,
+				"loaded": false
+			},
+			"data": {},
+			"loaded": false,
+			"frequency_caps": [],
+			"blocked": [],
+			"placements": []
+		},
+		"experimentData": {
+			"utmSource": "pocket-newtab"
+		},
+		"showTopicSelection": false,
+		"report": {
+			"visible": false,
+			"data": {}
+		},
+		"sectionPersonalization": {}
+	},
+	"Search": {
+		"fakeFocus": false,
+		"hide": false
+	},
+	"TimerWidget": {
+		"timerType": "focus",
+		"focus": {
+			"duration": 1500,
+			"initialDuration": 1500,
+			"startTime": null,
+			"isRunning": false
+		},
+		"break": {
+			"duration": 300,
+			"initialDuration": 300,
+			"startTime": null,
+			"isRunning": false
+		}
+	},
+	"ListsWidget": {
+		"selected": "taskList",
+		"lists": {
+			"taskList": {
+				"label": "",
+				"tasks": [],
+				"completed": []
+			}
+		}
+	},
+	"Wallpapers": {
+		"wallpaperList": [],
+		"highlightSeenCounter": 0,
+		"categories": [],
+		"uploadedWallpaper": ""
+	},
+	"SectionsLayout": {
+		"configs": {}
+	},
+	"Weather": {
+		"initialized": false,
+		"lastUpdated": null,
+		"query": "",
+		"suggestions": [],
+		"hourlyForecasts": [],
+		"locationData": {
+			"city": "",
+			"adminArea": "",
+			"country": ""
+		},
+		"searchActive": false,
+		"locationSearchString": "",
+		"suggestedLocations": []
+	},
+	"ExternalComponents": {
+		"components": []
+	},
+	"SportsWidget": {
+		"data": null,
+		"initialized": false,
+		"widgetState": "sports-intro",
+		"selectedTeams": [],
+		"matchesTab": "upcoming",
+		"followedOnly": {
+			"results": true,
+			"upcoming": true
+		},
+		"watchLive": {
+			"loaded": false,
+			"data": null
+		},
+		"lastLiveUpdated": null,
+		"liveIndex": 0,
+		"celebrations": {
+			"endedAt": {},
+			"celebrated": []
+		}
+	}
+};
+
+Ž™:½i"           jsr¥IÉC¥ÿÿÿÿ       :about:home alt-data 1;10615,script version 20260728005402      lÏ

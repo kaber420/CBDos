@@ -3,19 +3,72 @@
 #include <string.h>
 #include <stdio.h>
 
-#define TYPE_ABS_PAGE      0x10
-#define TYPE_ABS_TEXT      0x11
-#define TYPE_ABS_LINK      0x12
-#define TYPE_ABS_INPUT     0x13
-#define TYPE_ABS_IMAGE     0x14
-#define TYPE_END           0xFE
+static tlv_uplink_send_cb_t g_uplink_cb = NULL;
 
-#define MAX_DEPTH 32
+void tlv_browser_set_uplink_cb(tlv_uplink_send_cb_t cb) {
+    g_uplink_cb = cb;
+}
 
 static void btn_event_cb(lv_event_t * e) {
     int link_id = (int)(intptr_t)lv_event_get_user_data(e);
-    (void)link_id;
+    if (g_uplink_cb) {
+        uint8_t frame[16];
+        size_t len = tlv_build_req_click(frame, sizeof(frame), (uint8_t)link_id);
+        if (len > 0) {
+            g_uplink_cb(frame, len);
+        }
+    }
 }
+
+static void textarea_event_cb(lv_event_t * e) {
+    lv_obj_t * ta = lv_event_get_target(e);
+    int element_id = (int)(intptr_t)lv_event_get_user_data(e);
+    const char * text = lv_textarea_get_text(ta);
+    if (g_uplink_cb && text) {
+        uint8_t frame[256];
+        size_t len = tlv_build_req_submit(frame, sizeof(frame), (uint8_t)element_id, text);
+        if (len > 0) {
+            g_uplink_cb(frame, len);
+        }
+    }
+}
+
+size_t tlv_build_req_url(uint8_t* buf, size_t max_len, const char* url) {
+    if (!buf || !url || max_len < 4) return 0;
+    size_t url_len = strlen(url);
+    if (3 + url_len > max_len) return 0;
+
+    buf[0] = TYPE_REQ_URL;
+    buf[1] = (url_len >> 8) & 0xFF;
+    buf[2] = url_len & 0xFF;
+    memcpy(buf + 3, url, url_len);
+    return 3 + url_len;
+}
+
+size_t tlv_build_req_submit(uint8_t* buf, size_t max_len, uint8_t element_id, const char* text) {
+    if (!buf || !text || max_len < 5) return 0;
+    size_t text_len = strlen(text);
+    size_t payload_len = 1 + text_len; // [Element_ID: 1B] [Text: N Bytes]
+    if (3 + payload_len > max_len) return 0;
+
+    buf[0] = TYPE_REQ_INPUT_SUBMIT;
+    buf[1] = (payload_len >> 8) & 0xFF;
+    buf[2] = payload_len & 0xFF;
+    buf[3] = element_id;
+    memcpy(buf + 4, text, text_len);
+    return 3 + payload_len;
+}
+
+size_t tlv_build_req_click(uint8_t* buf, size_t max_len, uint8_t link_id) {
+    if (!buf || max_len < 4) return 0;
+    buf[0] = TYPE_REQ_LINK_CLICK;
+    buf[1] = 0x00;
+    buf[2] = 0x01; // Payload size: 1 byte
+    buf[3] = link_id;
+    return 4;
+}
+
+#define MAX_DEPTH 32
 
 lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t length) {
     if (!root_parent || !data || length == 0) return NULL;
@@ -123,37 +176,95 @@ lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t 
                 break;
             }
             case TYPE_ABS_INPUT: {
-                if (node_length >= 8) {
+                if (node_length >= 9) { // [x:2][y:2][w:2][h:2][element_id:1][placeholder...]
                     uint16_t x = (value[0] << 8) | value[1];
                     uint16_t y = (value[2] << 8) | value[3];
                     uint16_t w = (value[4] << 8) | value[5];
                     uint16_t h = (value[6] << 8) | value[7];
+                    uint8_t elem_id = value[8];
                     
                     lv_obj_t* ta = lv_textarea_create(current_parent);
                     lv_obj_set_pos(ta, x, y);
                     lv_obj_set_size(ta, w, h);
                     lv_textarea_set_one_line(ta, true);
                     
-                    size_t str_len = node_length - 8;
+                    lv_obj_add_event_cb(ta, textarea_event_cb, LV_EVENT_READY, (void*)(intptr_t)elem_id);
+                    
+                    size_t str_len = node_length - 9;
                     if (str_len > 0) {
                         char* txt = (char*)malloc(str_len + 1);
                         if (txt) {
-                            memcpy(txt, value + 8, str_len);
+                            memcpy(txt, value + 9, str_len);
                             txt[str_len] = '\0';
-                            
-                            char* param = txt;
-                            while (*param && param < txt + str_len) param++;
-                            if (param < txt + str_len) param++;
-                            
-                            char* placeholder = param;
-                            while (*placeholder && placeholder < txt + str_len) placeholder++;
-                            if (placeholder < txt + str_len) placeholder++;
-                            
-                            if (placeholder < txt + str_len) {
-                                lv_textarea_set_placeholder_text(ta, placeholder);
-                            }
+                            lv_textarea_set_placeholder_text(ta, txt);
                             free(txt);
                         }
+                    }
+                }
+                break;
+            }
+            case TYPE_ABS_CHECKBOX: {
+                if (node_length >= 2) { // [id:1][state:1][text...]
+                    uint8_t state = value[1];
+                    lv_obj_t* cb = lv_checkbox_create(current_parent);
+                    if (state) {
+                        lv_obj_add_state(cb, LV_STATE_CHECKED);
+                    }
+                    if (node_length > 2) {
+                        size_t str_len = node_length - 2;
+                        char* txt = (char*)malloc(str_len + 1);
+                        if (txt) {
+                            memcpy(txt, value + 2, str_len);
+                            txt[str_len] = '\0';
+                            lv_checkbox_set_text(cb, txt);
+                            free(txt);
+                        }
+                    }
+                }
+                break;
+            }
+            case TYPE_ABS_SWITCH: {
+                if (node_length >= 2) { // [id:1][state:1]
+                    uint8_t state = value[1];
+                    lv_obj_t* sw = lv_switch_create(current_parent);
+                    if (state) {
+                        lv_obj_add_state(sw, LV_STATE_CHECKED);
+                    }
+                }
+                break;
+            }
+            case TYPE_ABS_SLIDER: {
+                if (node_length >= 7) { // [id:1][min:2][max:2][val:2]
+                    int16_t min_v = (value[1] << 8) | value[2];
+                    int16_t max_v = (value[3] << 8) | value[4];
+                    int16_t cur_v = (value[5] << 8) | value[6];
+                    lv_obj_t* slider = lv_slider_create(current_parent);
+                    lv_slider_set_range(slider, min_v, max_v);
+                    lv_slider_set_value(slider, cur_v, LV_ANIM_OFF);
+                }
+                break;
+            }
+            case TYPE_ABS_PROGRESS: {
+                if (node_length >= 6) { // [min:2][max:2][val:2]
+                    int16_t min_v = (value[0] << 8) | value[1];
+                    int16_t max_v = (value[2] << 8) | value[3];
+                    int16_t cur_v = (value[4] << 8) | value[5];
+                    lv_obj_t* bar = lv_bar_create(current_parent);
+                    lv_bar_set_range(bar, min_v, max_v);
+                    lv_bar_set_value(bar, cur_v, LV_ANIM_OFF);
+                }
+                break;
+            }
+            case TYPE_ABS_DROPDOWN: {
+                if (node_length >= 2) { // [id:1][options string with \n]
+                    lv_obj_t* dd = lv_dropdown_create(current_parent);
+                    size_t str_len = node_length - 1;
+                    char* txt = (char*)malloc(str_len + 1);
+                    if (txt) {
+                        memcpy(txt, value + 1, str_len);
+                        txt[str_len] = '\0';
+                        lv_dropdown_set_options(dd, txt);
+                        free(txt);
                     }
                 }
                 break;

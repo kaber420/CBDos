@@ -1,0 +1,192 @@
+# espOS32 — Estado del Proyecto
+
+**Fecha:** 2026-08-11
+**Sistema:** Navegador TLVGL en ESP32-S3 (JC3248W535) + servidores en PC (Python) + red mesh (diseño)
+
+---
+
+## 1. QUÉ FUNCIONA HOY (verificado en vivo)
+
+### Navegación ESP32 ↔ server de contenido TLVGL por WiFi ✅
+
+**IMPORTANTE:** lo que se probó hoy es el ESP32 hablando con el **server de
+hosting de contenido** (`tlvgl_server.py`) — NO con el gateway-router.
+El gateway es un **router (ABR/ASBR): rutea, no sirve contenido**. En esta
+prueba el ESP32 llegó directo al server (LAN WiFi), sin gateway de por medio.
+
+```
+ESP32 (192.168.66.248, WiFi "romero24")
+   │  trama binaria MeshHeader + TLV   (TCP 8765)
+   ▼
+server de contenido: gateway/tlvgl/tlvgl_server.py  (0.0.0.0:8765)
+   │  parsea Control byte → servicio TLVGL_REQUEST
+   │  resuelve URL .mesh → compila HTML de content/ → TLV
+   ▼
+respuesta MeshHeader (control 0x08) + magic "PH" + TLV
+   │
+   ▼
+ESP32: processNetworkPacket → tlv_browser_render (página visible)
+```
+
+Evidencia en `tlvgl_server.log`: el ESP32 (`UUID=C0A842F8` = `192.168.66.248`)
+envía `REQ_URL 'http://clima.mesh'` y `LINK_CLICK id=N`, y recibe 191B TLV
+por cada petición.
+
+> **Terminología (ver `drafts/tlv proxy ruteo/GLOSARIO_Inventario_Piezas.md`):**
+> - **Gateway = router** de la red mesh (Pseudo-BGP/OSPF). Lee el MeshHeader,
+>   decide si entregar o reenviar. **No sirve contenido.** Aún NO está integrado.
+> - **Server de hosting** (`tlvgl_server.py`) = sirve páginas `.tlvgl`. Es lo
+>   que se probó hoy.
+
+### Piezas que lo componen
+
+| Pieza | Ruta | Rol | Estado |
+|:---|:---|:---|:---|
+| Servidor TLVGL (hosting) | `gateway/tlvgl/tlvgl_server.py` | Sirve páginas `.tlvgl` desde `content/`. Modo legacy ASCII `GET` + modo binario MeshHeader | ✅ funciona |
+| Capa de red MeshHeader (Python) | `gateway/tlvgl/mesh_proto.py` | Espejo de `mesh_header.c`: parseo 3B/9B/13B/21B, tags TLV, construcción de respuesta | ✅ funciona |
+| Compilador HTML→TLV | `gateway/tlvgl/tlvgl_compiler.py` | Convierte HTML de `content/` a nodos TLV (PAGE/TEXT/LINK/INPUT/PANEL) | ✅ funciona |
+| Firmware navegador | `firmware/src/UI/Views/TlvBrowserView.cpp` | Arma trama DST_ONLY(3B)+TLV, renderiza respuesta | ✅ funciona |
+| Cliente de red (firmware) | `firmware/src/Network/TlvNetworkClient.cpp` | TCP al gateway (IP hardcodeada, ver §3) | ✅ funciona |
+
+### Formato `.enc` de provisionamiento (lado firmware) ✅ implementado
+
+`ConfigManager::importGateway()` (`firmware/src/Network/ConfigManager.cpp:235`)
+ya descifra archivos de gateway cifrados:
+
+- **Algoritmo:** AES-256-GCM + PBKDF2-HMAC-SHA256
+- **Parámetros exactos:**
+  - `PBKDF2_SALT_LEN = 8` bytes
+  - `GCM_IV_LEN = 12` bytes
+  - `GCM_TAG_LEN = 16` bytes
+  - `PBKDF2_ITERATIONS = 10000`
+- **Layout del archivo `.enc`:**
+
+```
+┌──────────┬─────────────┬───────────────────────────┬──────────┐
+│ salt 8B  │ iv 12B      │ ciphertext (JSON)         │ tag 16B  │
+└──────────┴─────────────┴───────────────────────────┴──────────┘
+```
+
+- **JSON descifrado** (es lo que se serializa a `gateways.bin`):
+  `name`, `address`, `domain`, `mqtt_port`, `mqtt_tls`, `auth_token`,
+  `auth_type`, `discovery`, `notes`
+- Se guarda la lista en SD: `/config/gateways.bin` (MessagePack)
+
+**El firmware ya puede IMPORTAR gateways desde `.enc`. Lo que falta es el
+GENERADOR del `.enc` del lado servidor (ver §4).**
+
+---
+
+## 2. QUÉ FALTA / EN DESARROLLO
+
+| # | Pendiente | Estado | Dónde |
+|:--|:---|:---|:---|
+| 1 | **Integrar el gateway-router real** (ABR/ASBR: lee MeshHeader, rutea BGP/OSPF/ARP, no sirve contenido). El ESP32 debe pasar por él antes de llegar al server de contenido | ❌ no integrado | prototipo en `drafts/.../gateway_router.py` |
+| 2 | Generador de `.enc` (endpoint `/api/v1/provision/generate`) | ❌ no existe | gateway (servidor) |
+| 3 | Integrar capa MeshHeader en `server/main.py` (proxy web real) | ❌ | `gateway/server/main.py` |
+| 4 | Unificar Control byte en firmware (híbrido 3 niveles) | ⏳ diseño en drafts | `mesh_header.c` |
+| 5 | Resolver tag `0x15` (PANEL vs CHECKBOX) | ⏳ conflicto | firmware + compilador |
+| 6 | Router mesh real (BGP/OSPF/ARP) fuera de drafts, como server accesible | ⏳ prototipo | `drafts/.../gateway_router.py` |
+| 7 | Negociación de resolución ESP32→gateway | ❌ | firmware |
+| 8 | Pruebas automatizadas del modo binario | ⏳ manual | `test_server.py` |
+
+---
+
+## 3. PROBLEMA CONOCIDO: IP HARDCODEADA
+
+El firmware **aún tiene la IP del gateway hardcodeada**:
+
+- `firmware/src/Network/TlvNetworkClient.cpp:7` → `"192.168.66.254"`
+- `firmware/src/Network/TlvNetworkClient.h:19` → `"192.168.66.254"` (default de `init()`)
+
+Además, `TlvNetworkClient::init()` **no se llama en ningún sitio** — el
+firmware usa la IP estática del código, ignorando la config del gateway
+guardada en NVS/SD (`ConfigManager`).
+
+**Consecuencias:**
+- Cambiar de red → hay que recompilar y reflashear.
+- La IP es la de una PC con DHCP: puede cambiar al reconectar el WiFi.
+- No se aprovecha la lista de gateways que el firmware YA sabe gestionar.
+
+**Solución planificada (ver §4):** dejar de hardcodear y usar el gateway
+configurado (provisionado por `.enc` o por la UI `AddGatewayModal`).
+
+---
+
+## 4. PLAN: PROVISIONAR GATEWAYS CON EL ENCODER (SIN HARDCODEAR)
+
+Objetivo: que el ESP32 tome el gateway de su configuración (SD/NVS) en vez
+de la IP del código.
+
+### 4.1. Generar el `.enc` desde el servidor
+
+Falta implementar el generador. Los parámetros ya los define el firmware
+(§1). El generador debe:
+
+1. Recibir los datos del gateway (name, address, domain, mqtt_port, token…).
+2. Generar `salt` (8B) aleatorio + `iv` (12B) aleatorio.
+3. Derivar clave: `PBKDF2-HMAC-SHA256(pin, salt, iter=10000, dklen=32)`.
+4. Cifrar el JSON con **AES-256-GCM** → ciphertext + tag(16B).
+5. Escribir `salt || iv || ciphertext || tag` en el `.enc`.
+
+Se propone exponerlo como endpoint en el servidor gateway:
+`POST /api/v1/provision/generate` (diseño en `drafts/tlv proxy ruteo/`).
+
+### 4.2. El firmware usa el gateway configurado
+
+En vez de la IP hardcodeada de `TlvNetworkClient`:
+
+```
+TlvNetworkClient::setGatewayConfig(g_activeGateway.address, 8765)
+```
+llamado al arrancar con el gateway activo de `ConfigManager::loadActiveGateway`
+(ya implementado en `main.cpp:313`). Así el ESP32 habla con el gateway
+provisionado, no con el del código.
+
+### 4.3. Flujo completo de provisionamiento
+
+```
+[servidor] POST /api/v1/provision/generate
+    → .enc (salt+iv+ciphertext+tag)   (falta implementar)
+[PC] copia el .enc a la SD del ESP32
+[ESP32] ConfigManager::importGateway("x.enc", PIN)   ✅ ya existe
+    → guarda en /config/gateways.bin  (MessagePack)  ✅ ya existe
+[ESP32] arranca → usa g_activeGateway.address        ⏳ falta conectar
+```
+
+---
+
+## 5. ARQUITECTURA DEL SISTEMA (estado real)
+
+### 5.1. HOY (probado y funcionando): ESP32 → server de contenido directo
+
+```
+┌─────────────────┐   WiFi TCP   ┌──────────────────────────────────┐
+│   ESP32-S3      │◀────────────▶│  server de contenido  (Python)   │
+│  Navegador TLV  │  MeshHeader  │                                  │
+│                 │    + TLV     │  gateway/tlvgl/tlvgl_server.py   │
+│  TlvBrowserView │              │    (sirve páginas .tlvgl)        │
+│  TlvNetworkClient│             │  mesh_proto.py  (capa de red)    │
+└─────────────────┘              └──────────────────────────────────┘
+   NO hay gateway/router de por medio (LAN misma subred)
+```
+
+### 5.2. OBJETIVO: el gateway-router se interpone y rutea
+
+```
+┌──────────┐  MeshHeader  ┌──────────────────┐  reenvía  ┌───────────────────┐
+│  ESP32   │─────────────▶│  GATEWAY-ROUTER  │──────────▶│ server contenido  │
+│ (nodo    │              │  rutea, NO sirve │           │  tlvgl_server.py  │
+│  cliente)│◀─────────────│  BGP/OSPF/ARP    │◀──────────│  (otro nodo)      │
+└──────────┘   respuesta   └──────────────────┘   resp.   └───────────────────┘
+                              (drafts/gateway_router.py, a integrar)
+```
+
+- **El gateway es un router ABR/ASBR:** lee el Control byte, decide si entregar
+  o reenviar (Pseudo-BGP inter-ASN, Pseudo-OSPF intra-zona, tabla ARP local).
+  **No sirve contenido él mismo** — reenvía tramas al server TLVGL que sí lo hace.
+- **Hoy el gateway no está en el camino:** el ESP32 habla directo con el server.
+  Integrarlo (pendiente #1 de §2) es poner el `gateway_router.py` delante.
+- **El TLV es agnóstico al transporte:** mismo payload por WiFi (TCP-IP) o
+  por radio mesh (MeshHeader+TLV). El router decide por el MeshHeader.
+- Documentos de diseño y prototipos: `drafts/tlv proxy ruteo/`.

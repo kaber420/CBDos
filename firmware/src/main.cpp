@@ -9,6 +9,7 @@
 #include "Core/SystemDiagnostics.h"
 #include "Core/LVFS_Driver.h"
 #include "Network/AssetManager.h"
+#include "Network/TlvNetworkClient.h"
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
 #include <unistd.h>
@@ -330,6 +331,7 @@ void loop() {
 #endif
     uint32_t time_till_next = lv_timer_handler();
     UIManager::getInstance().update();
+    TlvNetworkClient::loop();
 
     static uint32_t lastBadgeCheck = 0;
     uint32_t now = millis();

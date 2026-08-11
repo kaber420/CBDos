@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alternet Studio — TLVGL Visual Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">Alternet <span>Studio</span></div>
+</header>
+
+<div class="workspace">
+  <!-- LEFT: TOOLBOX -->
+  <div class="left-panel">
+    <div class="panel-section">
+      <div class="panel-label">Componentes</div>
+      <div class="toolbox-grid">
+        <div class="tool-btn" draggable="true" data-tag="div"><span class="tool-icon">🍱</span><span class="tool-name">Panel Bento</span></div>
+        <div class="tool-btn" draggable="true" data-tag="h1"><span class="tool-icon">T</span><span class="tool-name">Título H1</span></div>
+        <div class="tool-btn" draggable="true" data-tag="p"><span class="tool-icon">¶</span><span class="tool-name">Párrafo</span></div>
+        <div class="tool-btn" draggable="true" data-tag="button"><span class="tool-icon">🔘</span><span class="tool-name">Botón</span></div>
+        <div class="tool-btn" draggable="true" data-tag="input"><span class="tool-icon">📝</span><span class="tool-name">Input</span></div>
+        <div class="tool-btn" draggable="true" data-tag="i"><span class="tool-icon">⭐</span><span class="tool-name">Icono FA</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: CANVAS -->
+  <div class="center-panel">
+    <div class="canvas-header">
+      <span class="res-badge" id="res-label">240 × 320</span>
+      <select id="res-select" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:3px;margin-left:10px;">
+        <option value="240x320">ESP32 S (240x320)</option>
+        <option value="320x240">ESP32 Land. (320x240)</option>
+        <option value="320x480">ESP32 L (320x480)</option>
+        <option value="480x320">ESP32 XL Land. (480x320)</option>
+      </select>
+    </div>
+    <div class="canvas-scroll">
+      <div class="screen-frame" id="screen-frame" style="width:240px; height:320px;">
+        <div class="screen-inner" id="screen-inner"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: PROPERTIES & HTML -->
+  <div class="right-panel">
+    <div class="panel-section" id="props-container" style="display:none">
+      <div class="panel-label">Propiedades</div>
+      <div class="prop-group">
+        <label class="prop-label">Texto / Contenido</label>
+        <input type="text" class="prop-input" id="prop-text">
+      </div>
+      <div class="prop-group" id="prop-class-group" style="display:none;">
+        <label class="prop-label">Icono (FontAwesome)</label>
+        <select class="prop-input" id="prop-class" style="font-family: 'FontAwesome', 'Inter';">
+<option value="fa fa-audio">&#xf001; Audio / Música</option>
+<option value="fa fa-video">&#xf008; Video</option>
+<option value="fa fa-list">&#xf00b; Lista</option>
+<option value="fa fa-check">&#xf00c; OK / Confirmar</option>
+<option value="fa fa-times">&#xf00d; Cerrar / Cancelar</option>
+<option value="fa fa-power-off">&#xf011; Apagar</option>
+<option value="fa fa-cog">&#xf013; Ajustes</option>
+<option value="fa fa-home">&#xf015; Inicio</option>
+<option value="fa fa-download">&#xf019; Descargar</option>
+<option value="fa fa-hdd">&#xf01c; Disco / Drive</option>
+<option value="fa fa-sync">&#xf021; Actualizar / Refresh</option>
+<option value="fa fa-volume-mute">&#xf026; Silenciar</option>
+<option value="fa fa-volume-down">&#xf027; Volumen Medio</option>
+<option value="fa fa-volume-up">&#xf028; Volumen Máximo</option>
+<option value="fa fa-image">&#xf03e; Imagen</option>
+<option value="fa fa-tint">&#xf043; Gota / Color</option>
+<option value="fa fa-edit">&#xf044; Editar</option>
+<option value="fa fa-step-backward">&#xf048; Pista Anterior</option>
+<option value="fa fa-play">&#xf04b; Play</option>
+<option value="fa fa-pause">&#xf04c; Pausa</option>
+<option value="fa fa-stop">&#xf04d; Stop</option>
+<option value="fa fa-step-forward">&#xf051; Pista Siguiente</option>
+<option value="fa fa-eject">&#xf052; Expulsar</option>
+<option value="fa fa-chevron-left">&#xf053; Flecha Izquierda</option>
+<option value="fa fa-chevron-right">&#xf054; Flecha Derecha</option>
+<option value="fa fa-plus">&#xf067; Más / Añadir</option>
+<option value="fa fa-minus">&#xf068; Menos / Quitar</option>
+<option value="fa fa-eye">&#xf06e; Ver</option>
+<option value="fa fa-eye-slash">&#xf070; Ocultar</option>
+<option value="fa fa-exclamation-triangle">&#xf071; Advertencia</option>
+<option value="fa fa-random">&#xf074; Aleatorio / Shuffle</option>
+<option value="fa fa-chevron-up">&#xf077; Flecha Arriba</option>
+<option value="fa fa-chevron-down">&#xf078; Flecha Abajo</option>
+<option value="fa fa-redo">&#xf01e; Rehacer / Loop</option>
+<option value="fa fa-folder">&#xf07b; Carpeta</option>
+<option value="fa fa-upload">&#xf093; Subir</option>
+<option value="fa fa-phone">&#xf095; Llamar</option>
+<option value="fa fa-cut">&#xf0c4; Cortar</option>
+<option value="fa fa-copy">&#xf0c5; Copiar</option>
+<option value="fa fa-save">&#xf0c7; Guardar</option>
+<option value="fa fa-bars">&#xf0c9; Menú (Barras)</option>
+<option value="fa fa-envelope">&#xf0e0; Correo</option>
+<option value="fa fa-bolt">&#xf0e7; Rayo / Energía</option>
+<option value="fa fa-bell">&#xf0f3; Campana / Alerta</option>
+<option value="fa fa-keyboard">&#xf11c; Teclado</option>
+<option value="fa fa-map-marker-alt">&#xf3c5; Ubicación / GPS</option>
+<option value="fa fa-wifi">&#xf1eb; WiFi</option>
+<option value="fa fa-battery-full">&#xf240; Batería 100%</option>
+<option value="fa fa-battery-three-quarters">&#xf241; Batería 75%</option>
+<option value="fa fa-battery-half">&#xf242; Batería 50%</option>
+<option value="fa fa-battery-quarter">&#xf243; Batería 25%</option>
+<option value="fa fa-battery-empty">&#xf244; Batería 0%</option>
+<option value="fa fa-usb">&#xf287; USB</option>
+<option value="fa fa-bluetooth">&#xf293; Bluetooth</option>
+<option value="fa fa-trash">&#xf1f8; Papelera</option>
+<option value="fa fa-backspace">&#xf55a; Retroceso</option>
+<option value="fa fa-sd-card">&#xf7c2; Tarjeta SD</option>
+<option value="fa fa-user">&#xf007; Usuario</option>
+<option value="fa fa-thermometer-half">&#xf2c9; Temperatura</option>
+        </select>
+      </div>
+      <div class="prop-group" style="display:flex; gap:10px;">
+        <div><label class="prop-label">X</label><input type="number" class="prop-input" id="prop-x"></div>
+        <div><label class="prop-label">Y</label><input type="number" class="prop-input" id="prop-y"></div>
+      </div>
+      <div class="prop-group" style="display:flex; gap:10px;">
+        <div><label class="prop-label">Ancho</label><input type="number" class="prop-input" id="prop-w"></div>
+        <div><label class="prop-label">Alto</label><input type="number" class="prop-input" id="prop-h"></div>
+      </div>
+      <button class="prop-input" style="background:var(--accent);color:white;border:none;cursor:pointer;margin-top:10px" id="prop-apply">Aplicar Cambios</button>
+      <button class="prop-input" style="background:var(--red);color:white;border:none;cursor:pointer;margin-top:5px" id="prop-delete">Borrar Elemento</button>
+    </div>
+    <div class="editor-wrap">
+      <div class="panel-label">HTML (Sincronizado)</div>
+      <textarea id="html-editor" spellcheck="false"><div class="bento" style="position:absolute; left:10px; top:10px; width:220px; height:300px;">
+  <h1 style="position:absolute; left:10px; top:10px;">Red Mesh</h1>
+  <i class="fa fa-wifi" style="position:absolute; left:10px; top:50px;"></i>
+  <p style="position:absolute; left:35px; top:50px;">Conectado</p>
+  <button style="position:absolute; left:10px; top:250px; width:200px;">Ajustes</button>
+</div></textarea>
+    </div>
+  </div>
+</div>
+
+<script src="editor.js"></script>
+</body>
+</html>
