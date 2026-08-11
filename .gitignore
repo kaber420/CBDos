@@ -1,29 +1,63 @@
-# PlatformIO build artifacts
+# =============================================================================
+# espOS32 — .gitignore
+# =============================================================================
+
+# ─── PlatformIO ───────────────────────────────────────────────────────────────
 .pio/
 firmware/.pio/
 .pioenvs/
 .piolibdeps/
+.piopm
+
+# ─── Binarios compilados ──────────────────────────────────────────────────────
 build/
 **/build/
-.pio/build/
-firmware/.pio/build/
-*_backup_*
-
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Compiled binaries
 *.bin
 *.elf
 *.hex
 *.out
+*.map
 *.factory.bin
+*.bootloader.bin
+*.partitions.bin
 
-# OS specific files
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+.venv/
+*.egg-info/
+dist/
+.eggs/
+
+# ─── Archivos de respaldo y temporales ────────────────────────────────────────
+*_backup_*/
+*_backup.*
+*.bak
+*.tmp
+*.swp
+*.swo
+*~
+
+# ─── Gateway / legacy / prototipos locales ────────────────────────────────────
+# Archivos de prueba y código muerto — no forman parte del proyecto principal
+gateway/native-legacy-codigomuerto/
+gateway/tlvgl_backup/
+gateway/test_*.html
+gateway/test_*.py
+
+# ─── IDE / Editores ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+.project
+.cproject
+.settings/
+
+# ─── Sistema operativo ────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
