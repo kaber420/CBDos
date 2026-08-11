@@ -61,3 +61,19 @@ gateway/test_*.py
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ─── Playwright / Browser testing ─────────────────────────────────────────────
+test-results/
+playwright-report/
+playwright/.cache/
+.playwright/
+**/raw-profiles/
+**/default-profile/
+**/firefox-profile*/
+**/chromium-*/
+**/webkit-*/
+**/.local-chromium/
+**/.local-firefox/
+**/.local-webkit/
+*.raw-profiles
+*.profraw
