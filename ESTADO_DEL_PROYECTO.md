@@ -46,9 +46,11 @@ por cada petición.
 
 | Pieza | Ruta | Rol | Estado |
 |:---|:---|:---|:---|
-| Servidor TLVGL (hosting) | `gateway/tlvgl/tlvgl_server.py` | Sirve páginas `.tlvgl` desde `content/`. Modo legacy ASCII `GET` + modo binario MeshHeader | ✅ funciona |
+| Servidor TLVGL (hosting) | `gateway/tlvgl/tlvgl_server.py` | Sirve páginas `.tlvgl` desde `content/`. Modo legacy ASCII `GET` + modo binario MeshHeader + invalidación por `mtime` | ✅ funciona |
 | Capa de red MeshHeader (Python) | `gateway/tlvgl/mesh_proto.py` | Espejo de `mesh_header.c`: parseo 3B/9B/13B/21B, tags TLV, construcción de respuesta | ✅ funciona |
-| Compilador HTML→TLV | `gateway/tlvgl/tlvgl_compiler.py` | Convierte HTML de `content/` a nodos TLV (PAGE/TEXT/LINK/INPUT/PANEL) | ✅ funciona |
+| Compilador HTML→TLV | `gateway/tlvgl/tlvgl_compiler.py` | Convierte HTML a nodos TLV (PAGE/TEXT/LINK/INPUT/PANEL/CHART) | ✅ funciona (arreglado filtro de tags sin texto) |
+| Soporte de Gráficas (LVGL Charts) | `firmware/src/Core/tlv_parser.c` | Renderiza `TYPE_ABS_CHART` (`0x1B`) (líneas y barras) con auto-escalado del eje Y | ✅ funciona (probado y flasheado en vivo) |
+| Editor Visual / Preview Web | `gateway/tlvgl/editor.js` & `tlvgl_preview.html` | WYSIWYG drag-and-drop con soporte para `<chart>` | ✅ funciona |
 | Firmware navegador | `firmware/src/UI/Views/TlvBrowserView.cpp` | Arma trama DST_ONLY(3B)+TLV, renderiza respuesta | ✅ funciona |
 | Cliente de red (firmware) | `firmware/src/Network/TlvNetworkClient.cpp` | TCP al gateway (IP hardcodeada, ver §3) | ✅ funciona |
 
