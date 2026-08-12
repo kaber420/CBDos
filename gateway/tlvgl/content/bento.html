@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head><title>Bento Grid Demo</title></head>
+<body>
+  <h1>Dashboard Bento</h1>
+  <h2>Panel de Control Modular</h2>
+
+  <!-- Bento Box 1: Tarjeta Informativa con Icono / Imagen y Texto -->
+  <panel style="background-color: #161b26">
+    <i class="fa fa-image"></i>
+    <h3>Camara / Monitoreo</h3>
+    <p>Sensor de Presencia Activo en Zona Norte</p>
+  </panel>
+
+  <!-- Bento Box 2: Telemetria con Grafica de Linea -->
+  <panel style="background-color: #0d1b2a">
+    <h3>Rendimiento del Nodo</h3>
+    <p>CPU: 240MHz | RAM: 8MB PSRAM</p>
+    <chart type="line" values="30,42,55,48,65,72,80,85"></chart>
+  </panel>
+
+  <!-- Bento Box 3: Estado de Sensores y Navegacion -->
+  <panel style="background-color: #1a1a2e">
+    <h3>Estado de Red Mesh</h3>
+    <p>RSSI: -68 dBm | Calidad: Excelente</p>
+    <a href="/index.html">Volver a Inicio</a>
+  </panel>
+</body>
+</html>

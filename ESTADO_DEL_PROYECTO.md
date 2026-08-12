@@ -54,6 +54,33 @@ por cada petición.
 | Firmware navegador | `firmware/src/UI/Views/TlvBrowserView.cpp` | Arma trama DST_ONLY(3B)+TLV, renderiza respuesta | ✅ funciona |
 | Cliente de red (firmware) | `firmware/src/Network/TlvNetworkClient.cpp` | TCP al gateway (IP hardcodeada, ver §3) | ✅ funciona |
 
+### Tabla Maestra de Etiquetas PseudoHTML / TLVGL
+
+| Tag Hex | Nombre PseudoHTML | Equivalente HTML | Widget LVGL | Payload (Value) Estructurado | Estado |
+| :---: | :--- | :--- | :--- | :--- | :---: |
+| `0x10` | **PAGE** | `<body>` | `lv_screen` | `[bg_color: 2B]` | ✅ Implementado |
+| `0x11` | **TEXT** | `<h1>` .. `<p>` | `lv_label` | `[x:2][y:2][w:2][h:2][style:1][Texto]` | ✅ Implementado |
+| `0x12` | **LINK** | `<a>` / `<button>` | `lv_btn` | `[x:2][y:2][w:2][h:2][link_id:1][Texto]` | ✅ Implementado |
+| `0x13` | **INPUT** | `<input>` | `lv_textarea` | `[x:2][y:2][w:2][h:2][Act\0Name\0Placeholder]` | ✅ Implementado |
+| `0x14` | **IMAGE** | `<img>` | `lv_image` | `[x:2][y:2][w:2][h:2][Image_Bytes]` | ✅ Implementado |
+| `0x1A` | **PANEL** | `<div>` / `<panel>` | `lv_obj` (Bento) | `[x:2][y:2][w:2][h:2][bg_color:2]` | ✅ Implementado |
+| `0x1B` | **CHART** | `<chart>` | `lv_chart` | `[x:2][y:2][w:2][h:2][type:1][pts:2][vals:2*N]` | ✅ Implementado |
+| `0x15` | **CHECKBOX** | `<input type="checkbox">` | `lv_checkbox` | `[x:2][y:2][w:2][h:2][id:1][state:1][Texto]` | ⏳ Pendiente |
+| `0x16` | **SWITCH** | `<input type="checkbox" class="toggle">` | `lv_switch` | `[x:2][y:2][w:2][h:2][id:1][state:1]` | ⏳ Pendiente |
+| `0x17` | **SLIDER** | `<input type="range">` | `lv_slider` | `[x:2][y:2][w:2][h:2][id:1][min:2][max:2][val:2]` | ⏳ Pendiente |
+| `0x18` | **PROGRESS** | `<progress>` | `lv_bar` | `[x:2][y:2][w:2][h:2][min:2][max:2][val:2]` | ⏳ Pendiente |
+| `0x19` | **DROPDOWN** | `<select>` | `lv_dropdown` | `[x:2][y:2][w:2][h:2][id:1][Options\0]` | ⏳ Pendiente |
+| `0x1C` | **ARC** | `<input type="range" class="radial">` | `lv_arc` (Perilla) | `[x:2][y:2][w:2][h:2][id:1][min:2][max:2][val:2]` | ⏳ Pendiente |
+| `0x1D` | **SPINNER** | `<spinner>` | `lv_spinner` | `[x:2][y:2][w:2][h:2][spin_time:2][arc_length:2]` | ⏳ Pendiente |
+| `0x1E` | **ROLLER** | `<select mode="wheel">` | `lv_roller` | `[x:2][y:2][w:2][h:2][id:1][Options\0]` | ⏳ Pendiente |
+| `0x1F` | **MSGBOX** | `<dialog>` / `<modal>` | `lv_msgbox` (Modal) | `[title\0msg\0buttons\0]` | ⏳ Pendiente |
+| `0x22` | **TABVIEW** | `<nav>` / `<tab>` | `lv_tabview` (Tabs) | `[tab_count:1][Titles\0]` | ⏳ Pendiente |
+| `0x23` | **TILEVIEW** | `<div class="carousel">` | `lv_tileview` (Gestos) | `[rows:1][cols:1]` | ⏳ Pendiente |
+| `0x24` | **ANIMIMG** | `<img src="*.gif">` | `lv_animimg` / `lv_gif` | `[x:2][y:2][w:2][h:2][frames:1][Gif_Bytes]` | ⏳ Pendiente |
+| `0x25` | **SOUND** | `<audio src="beep">` | Tone / RTTTL / Beep | `[sound_id:1][rtttl_string\0]` (Ultraligero < 50B) | ⏳ Pendiente |
+
+> **Nota Teclado (`lv_keyboard`):** El teclado en pantalla no requiere tag TLV; el firmware del ESP32 se encarga nativamente de desplegarlo al tocar cualquier campo `<input>`.
+
 ### Formato `.enc` de provisionamiento (lado firmware) ✅ implementado
 
 `ConfigManager::importGateway()` (`firmware/src/Network/ConfigManager.cpp:235`)

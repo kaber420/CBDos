@@ -37,14 +37,24 @@ Propongo agregar la siguiente tabla de Widgets a nuestro estándar TLV:
 
 | Tag Hex | Nombre PseudoHTML | Equivalente HTML | Widget LVGL | Payload (Value) Estructurado |
 | :---: | :--- | :--- | :--- | :--- |
-| `0x15` | **CHECKBOX** | `<input type="checkbox">` | `lv_checkbox` | `[ID: 1B] [Estado_Inicial: 1B] [Texto: N Bytes]` |
-| `0x16` | **SWITCH** | `<input type="checkbox" class="toggle">`| `lv_switch` | `[ID: 1B] [Estado_Inicial: 1B]` |
-| `0x17` | **SLIDER** | `<input type="range">` | `lv_slider` | `[ID: 1B] [Min: 2B] [Max: 2B] [Valor_Actual: 2B]` |
-| `0x18` | **PROGRESS** | `<progress>` | `lv_bar` | `[Min: 2B] [Max: 2B] [Valor_Actual: 2B]` |
-| `0x19` | **DROPDOWN** | `<select>` | `lv_dropdown` | `[ID: 1B] [Opciones_Separadas_Por_Cero: N Bytes]` |
-| `0x1A` | **MARQUEE** | `<marquee>` | `lv_label` (Con LONG_MODE_SCROLL_CIRCULAR) | `[Velocidad: 1B] [Texto: N Bytes]` |
-| `0x1B` | **SPINNER** | Carga asíncrona | `lv_spinner` | `[Velocidad: 2B] [Arco: 2B]` |
-| `0x1C` | **LINE_CHART**| `<canvas>` (Gráficas) | `lv_chart` | `[Puntos_X: 1B] [Valores_Int16: N Bytes]` |
+| `0x15` | **CHECKBOX** | `<input type="checkbox">` | `lv_checkbox` | `[x:2][y:2][w:2][h:2][id:1][state:1][Texto]` |
+| `0x16` | **SWITCH** | `<input type="checkbox" class="toggle">`| `lv_switch` | `[x:2][y:2][w:2][h:2][id:1][state:1]` |
+| `0x17` | **SLIDER** | `<input type="range">` | `lv_slider` | `[x:2][y:2][w:2][h:2][id:1][min:2][max:2][val:2]` |
+| `0x18` | **PROGRESS** | `<progress>` | `lv_bar` | `[x:2][y:2][w:2][h:2][min:2][max:2][val:2]` |
+| `0x19` | **DROPDOWN** | `<select>` | `lv_dropdown` | `[x:2][y:2][w:2][h:2][id:1][Options\0]` |
+| `0x1A` | **PANEL** | `<div>` / `<panel>` | `lv_obj` (Bento) | `[x:2][y:2][w:2][h:2][bg_color:2]` |
+| `0x1B` | **CHART** | `<chart>` | `lv_chart` | `[x:2][y:2][w:2][h:2][type:1][pts:2][vals:2*N]` |
+| `0x1C` | **ARC** | `<input type="range" class="radial">` | `lv_arc` (Perilla) | `[x:2][y:2][w:2][h:2][id:1][min:2][max:2][val:2]` |
+| `0x1D` | **SPINNER** | `<spinner>` | `lv_spinner` | `[x:2][y:2][w:2][h:2][spin_time:2][arc_length:2]` |
+| `0x1E` | **ROLLER** | `<select mode="wheel">` | `lv_roller` | `[x:2][y:2][w:2][h:2][id:1][Options\0]` |
+| `0x1F` | **MSGBOX** | `<dialog>` / `<modal>` | `lv_msgbox` (Modal) | `[title\0msg\0buttons\0]` |
+| `0x22` | **TABVIEW** | `<nav>` / `<tab>` | `lv_tabview` (Tabs) | `[tab_count:1][Titles\0]` |
+| `0x23` | **TILEVIEW** | `<div class="carousel">` | `lv_tileview` (Gestos) | `[rows:1][cols:1]` |
+| `0x24` | **ANIMIMG** | `<img src="*.gif">` | `lv_animimg` / `lv_gif` | `[x:2][y:2][w:2][h:2][frames:1][Gif_Bytes]` |
+| `0x25` | **SOUND** | `<audio src="beep">` | Tone / RTTTL / Beep | `[sound_id:1][rtttl_string\0]` (Ultraligero < 50B) |
+
+> [!NOTE]
+> **Teclado en Pantalla (`lv_keyboard`):** No requiere un tag TLV. El firmware del ESP32 se encarga de manera 100% nativa de desplegar el teclado del sistema al enfocar cualquier campo de texto `<input>` (`TYPE_ABS_INPUT`).
 
 ## 4. ¿Cómo funcionaría la integración?
 

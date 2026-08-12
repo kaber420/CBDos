@@ -157,8 +157,12 @@ class TLVGLServer:
             print(f"[UUID={uuid_str}] REQ_URL: '{requested_url}'")
         elif tag == MESH.TYPE_REQ_LINK_CLICK:
             link_id = value[0] if len(value) > 0 else 0
-            print(f"[UUID={uuid_str}] LINK_CLICK id={link_id}")
-            requested_url = f"http://link-{link_id}.mesh"
+            if link_id in self.compiler.last_link_map:
+                requested_url = self.compiler.last_link_map[link_id]
+                print(f"[UUID={uuid_str}] LINK_CLICK id={link_id} → '{requested_url}'")
+            else:
+                requested_url = f"http://link-{link_id}.mesh"
+                print(f"[UUID={uuid_str}] LINK_CLICK id={link_id} (fallback)")
         elif tag == MESH.TYPE_REQ_INPUT_SUBMIT:
             elem_id = value[0] if len(value) > 0 else 0
             txt = value[1:].decode('utf-8', errors='ignore')
@@ -202,11 +206,10 @@ class TLVGLServer:
           http://x.mesh/pag    → x/pag.html
           path absoluto        → se usa tal cual (buscando .html)
         """
+        import re
         url = url.strip()
-        if url.startswith('http://'):
-            url = url[7:]
-        if url.startswith('https://'):
-            url = url[8:]
+        url = re.sub(r'^https?:/+', '', url, flags=re.IGNORECASE)
+
         # Quitar sufijos .mesh / .tlvgl / query / fragmento
         for suffix in ('.mesh', '.tlvgl', '.html'):
             if url.endswith(suffix):

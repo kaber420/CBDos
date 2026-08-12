@@ -232,12 +232,23 @@ class _LayoutParser(HTMLParser):
 
 
 class TLVGLCompiler:
+    def __init__(self):
+        self.last_link_map = {}
+
     def compile(self, html: str, screen_w: int, screen_h: int) -> bytes:
         screen_w = min(max(int(screen_w), 1), MAX_W)
         screen_h = min(max(int(screen_h), 1), MAX_H)
 
         parser = _LayoutParser(screen_w, screen_h)
         parser.feed(html)
+
+        self.last_link_map = {}
+        for el in parser.elements:
+            if el['tag'] in ('a', 'button'):
+                lid = el['link_id']
+                href = el['attrs'].get('href', '')
+                if href:
+                    self.last_link_map[lid] = href
 
         parser.elements.sort(key=lambda e: e.get('z_index', 0))
 
