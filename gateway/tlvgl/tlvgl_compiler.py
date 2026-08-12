@@ -195,7 +195,7 @@ class _LayoutParser(HTMLParser):
         if tag == 'input':
             texto = (self._current_attrs.get('placeholder') or self._current_attrs.get('name', ''))
 
-        if not texto and tag != 'input' and tag != 'i':
+        if not texto and tag not in ('input', 'i', 'chart'):
             self._current_tag = None
             return
 

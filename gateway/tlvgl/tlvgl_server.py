@@ -109,13 +109,7 @@ class TLVGLServer:
         return True
 
     def _compile_or_cache(self, clean_filename: str, w: int, h: int):
-        """Compila el archivo HTML a TLV con caché LRU. Devuelve bytes o None."""
-        cache_key = (clean_filename, w, h)
-        if cache_key in self.cache:
-            tlv_bytes = self.cache[cache_key]
-            self.cache.move_to_end(cache_key)
-            return tlv_bytes
-
+        """Compila el archivo HTML a TLV con caché LRU e invalidación por mtime. Devuelve bytes o None."""
         target_path = (self.content_dir / clean_filename).resolve()
         base_dir = self.content_dir.resolve()
         is_safe = False
@@ -125,14 +119,22 @@ class TLVGLServer:
         except ValueError:
             is_safe = False
 
-        tlv_bytes = None
-        if is_safe and target_path.is_file():
-            with open(target_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-            tlv_bytes = self.compiler.compile(html_content, w, h)
-            self.cache[cache_key] = tlv_bytes
-            if len(self.cache) > self.cache_limit:
-                self.cache.popitem(last=False)
+        if not is_safe or not target_path.is_file():
+            return None
+
+        mtime = target_path.stat().st_mtime
+        cache_key = (clean_filename, w, h, mtime)
+        if cache_key in self.cache:
+            tlv_bytes = self.cache[cache_key]
+            self.cache.move_to_end(cache_key)
+            return tlv_bytes
+
+        with open(target_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        tlv_bytes = self.compiler.compile(html_content, w, h)
+        self.cache[cache_key] = tlv_bytes
+        if len(self.cache) > self.cache_limit:
+            self.cache.popitem(last=False)
         return tlv_bytes
 
     async def _handle_mesh_binary(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, first_bytes: bytes):

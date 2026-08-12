@@ -35,13 +35,13 @@ function renderDoc() {
     if (node.nodeType !== 1) return; // Only element nodes
     
     // Parse inline styles
-    const style = node.style;
     const isPanel = node.tagName.toLowerCase() === 'div';
+    const isChart = node.tagName.toLowerCase() === 'chart';
     
     const x = (parseInt(style.left) || 0) + parentX;
     const y = (parseInt(style.top) || 0) + parentY;
-    const w = parseInt(style.width) || (isPanel ? 100 : 80);
-    const h = parseInt(style.height) || (isPanel ? 100 : 30);
+    const w = parseInt(style.width) || (isPanel ? 100 : (isChart ? 180 : 80));
+    const h = parseInt(style.height) || (isPanel ? 100 : (isChart ? 100 : 30));
     
     const el = document.createElement('div');
     el.className = 'lv-el';
@@ -53,6 +53,12 @@ function renderDoc() {
     const tag = node.tagName.toLowerCase();
     
     if (tag === 'div') { el.classList.add('lv-panel'); }
+    else if (tag === 'chart') {
+      el.classList.add('lv-chart');
+      const cType = node.getAttribute('type') || 'line';
+      const cVals = node.getAttribute('values') || '18,19,21,24';
+      el.innerHTML = `<span style="pointer-events:none">📊 ${cType.toUpperCase()} CHART<br>[${cVals}]</span>`;
+    }
     else if (tag === 'button' || tag === 'a') { el.classList.add('lv-btn'); el.textContent = node.textContent; }
     else if (tag === 'input') { el.classList.add('lv-input'); el.textContent = node.placeholder || 'Input'; }
     else if (tag === 'i') { 
@@ -273,6 +279,7 @@ screenInner.addEventListener('drop', e => {
   else if(tag === 'p') { newNode.textContent = "Texto"; }
   else if(tag === 'input') { newNode.style.width="120px"; newNode.placeholder = "Input"; }
   else if(tag === 'i') { newNode.className = "fa fa-home"; }
+  else if(tag === 'chart') { newNode.setAttribute('type', 'line'); newNode.setAttribute('values', '10,25,18,30,42,35'); newNode.style.width="180px"; newNode.style.height="100px"; }
 
   htmlDoc.body.appendChild(newNode);
   updateEditorFromDoc();

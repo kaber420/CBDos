@@ -63,6 +63,7 @@ textarea#html-editor { flex: 1; resize: none; background: var(--bg3); border: 1p
 .lv-btn { background: var(--lvgl-btn); border-radius: 4px; color: var(--lvgl-btn-text); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; justify-content: center; }
 .lv-input { background: var(--lvgl-input-bg); border: 1px solid var(--lvgl-border); border-radius: 4px; color: var(--text2); font-family: 'JetBrains Mono', monospace; padding: 0 8px; }
 .lv-icon { font-family: 'FontAwesome'; color: var(--lvgl-label); font-size: 14px; justify-content: center; }
+.lv-chart { background: #0e1626; border: 1px dashed var(--accent); border-radius: 6px; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 10px; display: flex; align-items: center; justify-content: center; text-align: center; }
 
 /* Properties */
 .prop-group { margin-bottom: 12px; }

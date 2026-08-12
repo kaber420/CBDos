@@ -308,13 +308,19 @@ lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t 
                     }
                     lv_chart_set_point_count(chart, num_pts);
 
-                    lv_chart_series_t* ser = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
+                    lv_chart_series_t* ser = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_CYAN), LV_CHART_AXIS_PRIMARY_Y);
 
                     size_t pt_offset = 11;
+                    int16_t min_v = 32767, max_v = -32768;
                     for (uint16_t i = 0; i < num_pts && pt_offset + 2 <= node_length; i++) {
                         int16_t val = (value[pt_offset] << 8) | value[pt_offset + 1];
-                        lv_chart_set_next_value(chart, ser, val);
+                        lv_chart_set_value_by_id(chart, ser, i, val);
+                        if (val < min_v) min_v = val;
+                        if (val > max_v) max_v = val;
                         pt_offset += 2;
+                    }
+                    if (min_v < max_v) {
+                        lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, (min_v > 5) ? (min_v - 5) : 0, max_v + 5);
                     }
                     lv_chart_refresh(chart);
                 }
