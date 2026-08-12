@@ -1,34 +1,39 @@
 <!DOCTYPE html>
 <html>
-<head><title>Dashboard Bento</title></head>
+<head><title>Grid Bento Feed</title></head>
 <body>
-  <h1>Dashboard Bento</h1>
-  <h2>Telemetria en Tiempo Real</h2>
+  <h1>Feed Mesh 2x2</h1>
 
-  <!-- Card 1: Sensor de Temperatura -->
-  <panel style="background-color: #161b26; height: 90px;">
+  <!-- Fila 1: Tarjetas 1 y 2 en Grid (150px ancho cada una) -->
+  <panel style="left: 4px; top: 50px; width: 152px; height: 110px; background-color: #161b26;">
+    <i class="fa fa-user"></i>
+    <h3>@nodo_01</h3>
+    <p>Telemetria OK</p>
+    <a href="/post_1.html">Ver Detalle</a>
+  </panel>
+
+  <panel style="left: 164px; top: 50px; width: 152px; height: 110px; background-color: #0d1b2a;">
     <i class="fa fa-thermometer-half"></i>
-    <h3>Temperatura Ambiente</h3>
-    <p>24.5 °C — Sensor SHT31 Activo</p>
+    <h3>@clima</h3>
+    <p>24.5 °C H:75%</p>
+    <a href="/post_2.html">Ver Detalle</a>
   </panel>
 
-  <!-- Card 2: Estado de Bateria -->
-  <panel style="background-color: #0d1b2a; height: 90px;">
-    <i class="fa fa-battery-full"></i>
-    <h3>Bateria del Nodo</h3>
-    <p>98% (4.15V) — Carga Solar Activa</p>
-  </panel>
-
-  <!-- Card 3: Estado de Red Mesh -->
-  <panel style="background-color: #1a1a2e; height: 90px;">
+  <!-- Fila 2: Tarjetas 3 y 4 en Grid -->
+  <panel style="left: 4px; top: 170px; width: 152px; height: 110px; background-color: #1a1a2e;">
     <i class="fa fa-wifi"></i>
-    <h3>Conexion Mesh LoRa</h3>
-    <p>RSSI: -65 dBm | Nodo Gateway #00FE</p>
+    <h3>@radio</h3>
+    <p>LoRa -65dBm</p>
+    <a href="/post_3.html">Ver Detalle</a>
   </panel>
 
-  <!-- Card 4: Accion de Navegacion -->
-  <panel style="background-color: #111827; height: 80px;">
-    <a href="/index.html">Volver a Inicio</a>
+  <panel style="left: 164px; top: 170px; width: 152px; height: 110px; background-color: #111827;">
+    <i class="fa fa-battery-full"></i>
+    <h3>@bateria</h3>
+    <p>4.15V (98%)</p>
+    <a href="/post_4.html">Ver Detalle</a>
   </panel>
+
+  <a href="/index.html" style="left: 60px; top: 290px; width: 200px;">Volver a Inicio</a>
 </body>
 </html>

@@ -66,6 +66,21 @@ Propongo agregar la siguiente tabla de Widgets a nuestro estándar TLV:
 
 Este enfoque garantiza que el microcontrolador renderice controles interactivos hermosos, acelerados por hardware y a 60 FPS, recibiendo tan solo unos 6 u 8 bytes de datos a través de la radio LoRa, descartando completamente la necesidad de enviar hojas de estilo (CSS) o scripts (JS).
 
+### 💡 Patrón de Optimización: Feed en Grid Bento + Carga de Multimedia Bajo Demanda (On-Demand)
+
+Para maximizar la eficiencia en redes de radio Mesh de bajo ancho de banda:
+
+1. **Feed Ligero (Grid Bento 2x2):**
+   - El Feed principal renderiza una cuadrícula de tarjetas Bento (2x2 por pantalla).
+   - Cada tarjeta contiene exclusivamente: Avatar/Icono (`<i>`), usuario (`<h3>`) y marquesina de texto ultraligera (`<p>`).
+   - **Cero transferencia de imágenes o GIF en el Feed:** El paquete TLV del Feed completo pesa menos de 300 Bytes.
+
+2. **Carga de Detalle bajo demanda (Modal / Click Event):**
+   - Al tocar cualquier tarjeta Bento, el firmware envía un `TYPE_REQ_LINK_CLICK` solicitando el detalle de esa publicación específica (`/post_123.html`).
+   - **Solo cuando el usuario entra a la publicación**, el servidor transmite la imagen estática (`TYPE_ABS_IMAGE`) o animación GIF (`TYPE_ABS_ANIMIMG`).
+
+Este patrón minimiza el consumo de batería y espacio radioeléctrico en la red Mesh.
+
 ## 5. Evolución y Arquitecturas de Compresión Evaluadas
 
 Para llegar al estándar definitivo, se evaluaron 3 enfoques de compresión de diccionario:
