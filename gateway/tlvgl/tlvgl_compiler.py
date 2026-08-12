@@ -25,7 +25,8 @@ HEIGHT_MAP = {
     'a': 28, 'button': 28,
     'input': 32,
     'chart': 140,
-    'div': 0,
+    'div': 85,
+    'panel': 85,
 }
 
 STYLE_MAP = {
@@ -121,7 +122,8 @@ def _estimate_layout(tag: str, texto: str, screen_w: int, attrs: dict, current_y
         w = parent_w - mx * 2
         x = parent_x + mx
 
-    h = HEIGHT_MAP.get(tag, 20)
+    default_h = HEIGHT_MAP.get(tag, 85 if tag in ('div', 'panel') else 20)
+    h = parse_px(styles.get('height'), default_h)
     y = current_y
     return x, y, w, h
 
@@ -144,7 +146,7 @@ class _LayoutParser(HTMLParser):
         tag = tag.lower()
         attr_dict = dict(attrs)
         
-        if tag == 'div':
+        if tag in ('div', 'panel'):
             x, y, w, h = _estimate_layout(tag, "", self.screen_w, attr_dict, self._y)
             self._active_panel = {'x': x, 'y': y, 'w': w, 'h': h}
             self.elements.append({
@@ -180,7 +182,7 @@ class _LayoutParser(HTMLParser):
 
     def handle_endtag(self, tag: str):
         tag = tag.lower()
-        if tag == 'div':
+        if tag in ('div', 'panel'):
             if self._active_panel:
                 self._y = self._active_panel['y'] + self._active_panel['h'] + 4
                 self._active_panel = None

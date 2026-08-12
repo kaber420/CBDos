@@ -110,7 +110,8 @@ lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t 
             case TYPE_ABS_PAGE: {
                 lv_obj_t* page = lv_obj_create(current_parent);
                 lv_obj_set_size(page, LV_PCT(100), LV_PCT(100));
-                lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
+                lv_obj_set_style_pad_all(page, 0, 0);
+                lv_obj_set_scroll_dir(page, LV_DIR_VER);
                 if (depth + 1 < MAX_DEPTH) {
                     parent_stack[depth] = current_parent;
                     depth++;
@@ -130,11 +131,22 @@ lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t 
                 } else {
                     lv_obj_set_size(panel, LV_PCT(100), LV_SIZE_CONTENT);
                 }
-                if (depth + 1 < MAX_DEPTH) {
-                    parent_stack[depth] = current_parent;
-                    depth++;
-                    current_parent = panel;
+
+                // Color de fondo desde payload RGB565 o por defecto Bento Card oscuro
+                if (node_length >= 10) {
+                    uint16_t c565 = (value[8] << 8) | value[9];
+                    uint8_t r = ((c565 >> 11) & 0x1F) << 3;
+                    uint8_t g = ((c565 >> 5) & 0x3F) << 2;
+                    uint8_t b = (c565 & 0x1F) << 3;
+                    lv_obj_set_style_bg_color(panel, lv_color_make(r, g, b), 0);
+                } else {
+                    lv_obj_set_style_bg_color(panel, lv_color_make(26, 31, 46), 0);
                 }
+
+                lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+                lv_obj_set_style_radius(panel, 8, 0);
+                lv_obj_set_style_border_width(panel, 1, 0);
+                lv_obj_set_style_border_color(panel, lv_color_make(44, 53, 80), 0);
                 break;
             }
 
