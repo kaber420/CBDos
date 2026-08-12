@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><title>Clima Mesh</title></head>
+<body>
+  <h1>Estacion Climatica</h1>
+  <h2>Telemetria en Tiempo Real</h2>
+
+  <panel style="background-color: #1a1a2e">
+    <h3>Temperatura Actual</h3>
+    <h1>24.5 °C</h1>
+    <p>Humedad: 62% | Presion: 1013 hPa</p>
+  </panel>
+
+  <p>Historial Temperatura (Ultimas 8h)</p>
+  <chart type="line" values="18,19,21,24,27,26,25,23"></chart>
+
+  <p>Control de Sensibilidad Sensor</p>
+  <input type="range" min="0" max="100" value="75">
+
+  <p>Bateria del Nodo Sensor</p>
+  <progress min="0" max="100" value="88"></progress>
+
+  <a href="/index.html">Volver a Inicio</a>
+</body>
+</html>

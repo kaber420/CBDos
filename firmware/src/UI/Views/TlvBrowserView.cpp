@@ -71,8 +71,9 @@ void TlvBrowserView::onUplinkFrameGenerated(const uint8_t* frame, size_t len) {
     MeshHeader hdr;
     memset(&hdr, 0, sizeof(hdr));
     hdr.control = MESH_CTRL_DST_ONLY | MESH_SVC_TLVGL_REQUEST; // Cabecera ultra-corta de 3 bytes
-    hdr.dst_id = 0x00FE; // Short ID local del gateway
+    hdr.dst_id = 0x0001; // Short ID de destino del Servidor Hosting (0x0001)
     hdr.is_dst_only = true;
+
     
     uint8_t packet[512];
     size_t hdr_len = build_mesh_header(packet, sizeof(packet), &hdr);

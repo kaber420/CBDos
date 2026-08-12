@@ -37,50 +37,52 @@ class TLVGLServer:
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
-            first_bytes = await reader.read(512)
-            if not first_bytes:
-                return
+            while True:
+                first_bytes = await reader.read(512)
+                if not first_bytes:
+                    break
 
-            # Modo binario: primer byte es un Control byte MeshHeader válido
-            if self._looks_binary(first_bytes):
-                await self._handle_mesh_binary(reader, writer, first_bytes)
-                return
+                # Modo binario: primer byte es un Control byte MeshHeader válido
+                if self._looks_binary(first_bytes):
+                    await self._handle_mesh_binary(reader, writer, first_bytes)
+                    continue
 
-            # Modo legado ASCII: GET /archivo W= H=
-            line = first_bytes.decode('utf-8', errors='replace').strip()
-            parts = line.split()
-            if not parts or parts[0].upper() != 'GET':
-                await self._send_response(writer, None, "", self.max_w, self.max_h)
-                return
+                # Modo legado ASCII: GET /archivo W= H=
+                line = first_bytes.decode('utf-8', errors='replace').strip()
+                parts = line.split()
+                if not parts or parts[0].upper() != 'GET':
+                    await self._send_response(writer, None, "", self.max_w, self.max_h)
+                    break
 
-            raw_filename = parts[1] if len(parts) > 1 else '/index.html'
-            clean_filename = raw_filename.lstrip('/')
-            if not clean_filename:
-                clean_filename = 'index.html'
+                raw_filename = parts[1] if len(parts) > 1 else '/index.html'
+                clean_filename = raw_filename.lstrip('/')
+                if not clean_filename:
+                    clean_filename = 'index.html'
 
-            parsed_w = None
-            parsed_h = None
-            for part in parts[2:]:
-                if '=' in part:
-                    k, v = part.split('=', 1)
-                    k_upper = k.upper()
-                    if k_upper == 'W':
-                        try:
-                            parsed_w = int(v)
-                        except ValueError:
-                            pass
-                    elif k_upper == 'H':
-                        try:
-                            parsed_h = int(v)
-                        except ValueError:
-                            pass
+                parsed_w = None
+                parsed_h = None
+                for part in parts[2:]:
+                    if '=' in part:
+                        k, v = part.split('=', 1)
+                        k_upper = k.upper()
+                        if k_upper == 'W':
+                            try:
+                                parsed_w = int(v)
+                            except ValueError:
+                                pass
+                        elif k_upper == 'H':
+                            try:
+                                parsed_h = int(v)
+                            except ValueError:
+                                pass
 
-            w = self.max_w if parsed_w is None else min(parsed_w, self.max_w)
-            h = self.max_h if parsed_h is None else min(parsed_h, self.max_h)
+                w = self.max_w if parsed_w is None else min(parsed_w, self.max_w)
+                h = self.max_h if parsed_h is None else min(parsed_h, self.max_h)
 
-            tlv_bytes = self._compile_or_cache(clean_filename, w, h)
+                tlv_bytes = self._compile_or_cache(clean_filename, w, h)
 
-            await self._send_response(writer, tlv_bytes, clean_filename, w, h)
+                await self._send_response(writer, tlv_bytes, clean_filename, w, h)
+                break
         except Exception:
             pass
         finally:
@@ -89,6 +91,7 @@ class TLVGLServer:
                 await writer.wait_closed()
             except Exception:
                 pass
+
 
     @staticmethod
     def _looks_binary(data: bytes) -> bool:
@@ -167,23 +170,27 @@ class TLVGLServer:
         if tlv_bytes is None:
             # Fallback: index.html (página por defecto)
             tlv_bytes = self._compile_or_cache('index.html', self.max_w, self.max_h)
+        resp_dst_id = hdr['src_id'] if hdr['src_id'] != 0 else (hdr['dst_id'] if hdr['dst_id'] != 0 else 0x00FE)
         if tlv_bytes is None:
             # Página vacía mínima: nunca dejar colgado al cliente
             page_tlv = b"PH" + MESH.build_tlv_node(MESH.TYPE_ABS_PAGE, b"") + bytes([MESH.TYPE_END])
-            response = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | MESH.MESH_SVC_TLVGL_RESPONSE)
+            response = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | MESH.MESH_SVC_TLVGL_RESPONSE, resp_dst_id)
             response += page_tlv
             writer.write(response)
             await writer.drain()
-            print(f"[UUID={uuid_str}] → {len(response)}B página vacía (sin contenido) para '{requested_url}'")
+            print(f"[UUID={uuid_str}] → {len(response)}B página vacía (sin contenido) para '{requested_url}'", flush=True)
             return
 
         # Construir respuesta MeshHeader + TLV (igual que gateway_prototype.py)
         page_tlv = b"PH" + tlv_bytes
-        response = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | MESH.MESH_SVC_TLVGL_RESPONSE)
+        if not page_tlv.endswith(bytes([MESH.TYPE_END])):
+            page_tlv += bytes([MESH.TYPE_END])
+        response = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | MESH.MESH_SVC_TLVGL_RESPONSE, resp_dst_id)
         response += page_tlv
         writer.write(response)
         await writer.drain()
-        print(f"[UUID={uuid_str}] → {len(response)}B respuesta TLVGL para '{requested_url}'")
+        print(f"[UUID={uuid_str}] → {len(response)}B respuesta TLVGL para '{requested_url}'", flush=True)
+
 
     def _resolve_mesh_url(self, url: str) -> str:
         """Convierte una URL .mesh a un archivo del content_dir.

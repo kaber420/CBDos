@@ -40,6 +40,8 @@ TYPE_ABS_SWITCH    = 0x16
 TYPE_ABS_SLIDER    = 0x17
 TYPE_ABS_PROGRESS  = 0x18
 TYPE_ABS_DROPDOWN  = 0x19
+TYPE_ABS_PANEL     = 0x1A
+TYPE_ABS_CHART     = 0x1B
 TYPE_END           = 0xFE
 
 # ── Tags TLV Uplink (tlv_parser.h) ──
@@ -57,9 +59,10 @@ def parse_mesh_header(data: bytes):
     if not data or len(data) < 1:
         return None, 0
 
+    svc = MESH_SVC_TLVGL_RESPONSE if (data[0] & 0x0F) == MESH_SVC_TLVGL_RESPONSE else (data[0] & 0x07)
     hdr = {
         'control': data[0],
-        'service': data[0] & 0x0F,
+        'service': svc,
         'flags': {
             'GLOBAL_BIT': bool(data[0] & MESH_CTRL_GLOBAL_BIT),
             'SIGNAL_BIT': bool(data[0] & MESH_CTRL_SIGNAL_BIT),
@@ -160,11 +163,12 @@ def parse_uplink_tlv(data: bytes):
     return tag, data[3:3 + length]
 
 
-def build_response_header(control: int = 0x08) -> bytes:
+def build_response_header(control: int = 0x08, dst_id: int = 0x00FE) -> bytes:
     """Cabecera de respuesta estándar para TlvBrowserView.
 
     El firmware valida service = control & 0x3F == MESH_SVC_TLVGL_RESPONSE.
     Con ctrl = 0x08 (DST_ONLY + service 0x08), parse_mesh_header lo lee
     como 3B y processNetworkPacket renderiza payload desde offset 3.
     """
-    return build_mesh_header(control, 0x0001)
+    return build_mesh_header(control, dst_id & 0xFFFF)
+

@@ -274,6 +274,11 @@ class GatewayRouter:
         if f["INTRA"]:
             return self._route_ospf(parsed)
 
+        # Si es un servicio de petición (0x07 TLVGL_REQUEST, 0x05 PROXY), entregar al servidor local/backend
+        svc = parsed.get("service")
+        if svc in (MESH_SVC_TLVGL_REQUEST, MESH_SVC_PROXY):
+            return {"action": "deliver", "why": f"Servicio de petición 0x{svc:02X}"}
+
         # DST_ONLY → es local (torre): entregar al cliente por su Short ID (tabla ARP)
         if f["DST_ONLY"]:
             short = parsed.get("dst_short")

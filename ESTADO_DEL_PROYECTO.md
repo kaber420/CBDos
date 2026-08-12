@@ -1,32 +1,36 @@
 # espOS32 — Estado del Proyecto
 
 **Fecha:** 2026-08-11
-**Sistema:** Navegador TLVGL en ESP32-S3 (JC3248W535) + servidores en PC (Python) + red mesh (diseño)
+**Sistema:** Navegador TLVGL en ESP32-S3 (JC3248W535) + Router Mesh en Go (`espOS32-router`) + Servidor de Hosting Python + Red Mesh (Protocolo Unificado 3 Capas)
 
 ---
 
 ## 1. QUÉ FUNCIONA HOY (verificado en vivo)
 
-### Navegación ESP32 ↔ server de contenido TLVGL por WiFi ✅
+### Router Mesh en Go (`espOS32-router`) + Servidor TLVGL (E2E Verificado) ✅
 
-**IMPORTANTE:** lo que se probó hoy es el ESP32 hablando con el **server de
-hosting de contenido** (`tlvgl_server.py`) — NO con el gateway-router.
-El gateway es un **router (ABR/ASBR): rutea, no sirve contenido**. En esta
-prueba el ESP32 llegó directo al server (LAN WiFi), sin gateway de por medio.
+El Router en Go (`gateway/router-go/build/router`) está **implementado, compilado y funcionando en vivo en TCP :8765** y Unix Socket `/tmp/espos32_router.sock`:
 
 ```
-ESP32 (192.168.66.248, WiFi "romero24")
-   │  trama binaria MeshHeader + TLV   (TCP 8765)
+ESP32 (192.168.66.248) / Cliente Test
+   │  Trama binaria MeshHeader + TLV  (TCP 8765)
    ▼
-server de contenido: gateway/tlvgl/tlvgl_server.py  (0.0.0.0:8765)
-   │  parsea Control byte → servicio TLVGL_REQUEST
-   │  resuelve URL .mesh → compila HTML de content/ → TLV
+Router Mesh en Go (gateway/router-go/build/router)  (0.0.0.0:8765)
+   │  Parsea Control byte (3B DST_ONLY / 9B)
+   │  Auto-registra cliente en Tabla Pseudo-ARP (NodeID 0x0001 / 0x00FE)
+   │  Rutea tramas de ServiceID 0x07 hacia backend de Hosting
    ▼
-respuesta MeshHeader (control 0x08) + magic "PH" + TLV
+Servidor de Hosting TLVGL (gateway/tlvgl/tlvgl_server.py)  (127.0.0.1:8766)
+   │  Resuelve URL .mesh → compila HTML de content/ → TLV (b"PH" + TLV + 0xFE)
+   ▼
+Respuesta devuelta por Router Go a la conexión TCP del ESP32
    │
    ▼
-ESP32: processNetworkPacket → tlv_browser_render (página visible)
+ESP32: renderiza interfaz TLVGL en pantalla
 ```
+
+* **Especificación Maestra Oficial:** [PROTOCOLO_UNIFICADO_MASTER.md](file:///home/kaber420/Documentos/proyectos/espOS32/drafts/tlv%20proxy%20ruteo/PROTOCOLO_UNIFICADO_MASTER.md)
+
 
 Evidencia en `tlvgl_server.log`: el ESP32 (`UUID=C0A842F8` = `192.168.66.248`)
 envía `REQ_URL 'http://clima.mesh'` y `LINK_CLICK id=N`, y recibe 191B TLV

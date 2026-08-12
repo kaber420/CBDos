@@ -18,7 +18,10 @@ extern "C" {
 #define TYPE_ABS_SLIDER    0x17
 #define TYPE_ABS_PROGRESS  0x18
 #define TYPE_ABS_DROPDOWN  0x19
+#define TYPE_ABS_PANEL     0x1A
+#define TYPE_ABS_CHART     0x1B
 #define TYPE_END           0xFE
+
 
 // Uplink TLV Event Tags
 #define TYPE_REQ_URL          0x01

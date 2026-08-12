@@ -118,6 +118,26 @@ lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t 
                 }
                 break;
             }
+            case TYPE_ABS_PANEL: {
+                lv_obj_t* panel = lv_obj_create(current_parent);
+                if (node_length >= 8) {
+                    uint16_t x = (value[0] << 8) | value[1];
+                    uint16_t y = (value[2] << 8) | value[3];
+                    uint16_t w = (value[4] << 8) | value[5];
+                    uint16_t h = (value[6] << 8) | value[7];
+                    lv_obj_set_pos(panel, x, y);
+                    lv_obj_set_size(panel, w, h);
+                } else {
+                    lv_obj_set_size(panel, LV_PCT(100), LV_SIZE_CONTENT);
+                }
+                if (depth + 1 < MAX_DEPTH) {
+                    parent_stack[depth] = current_parent;
+                    depth++;
+                    current_parent = panel;
+                }
+                break;
+            }
+
             case TYPE_ABS_TEXT: {
                 if (node_length >= 9) {
                     uint16_t x = (value[0] << 8) | value[1];
@@ -266,6 +286,37 @@ lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t 
                         lv_dropdown_set_options(dd, txt);
                         free(txt);
                     }
+                }
+                break;
+            }
+            case TYPE_ABS_CHART: {
+                if (node_length >= 11) { // [x:2][y:2][w:2][h:2][chart_type:1][num_pts:2] + [p0:2...]
+                    uint16_t x = (value[0] << 8) | value[1];
+                    uint16_t y = (value[2] << 8) | value[3];
+                    uint16_t w = (value[4] << 8) | value[5];
+                    uint16_t h = (value[6] << 8) | value[7];
+                    uint8_t chart_type = value[8];
+                    uint16_t num_pts = (value[9] << 8) | value[10];
+
+                    lv_obj_t* chart = lv_chart_create(current_parent);
+                    lv_obj_set_pos(chart, x, y);
+                    lv_obj_set_size(chart, w, h);
+                    if (chart_type == 1) {
+                        lv_chart_set_type(chart, LV_CHART_TYPE_BAR);
+                    } else {
+                        lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
+                    }
+                    lv_chart_set_point_count(chart, num_pts);
+
+                    lv_chart_series_t* ser = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
+
+                    size_t pt_offset = 11;
+                    for (uint16_t i = 0; i < num_pts && pt_offset + 2 <= node_length; i++) {
+                        int16_t val = (value[pt_offset] << 8) | value[pt_offset + 1];
+                        lv_chart_set_next_value(chart, ser, val);
+                        pt_offset += 2;
+                    }
+                    lv_chart_refresh(chart);
                 }
                 break;
             }

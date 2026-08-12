@@ -13,7 +13,10 @@ TYPE_ABS_TEXT  = 0x11
 TYPE_ABS_LINK  = 0x12
 TYPE_ABS_INPUT = 0x13
 TYPE_ABS_IMAGE = 0x14
-TYPE_ABS_PANEL = 0x15
+TYPE_ABS_CHECKBOX = 0x15
+TYPE_ABS_PANEL = 0x1A
+TYPE_ABS_CHART = 0x1B
+
 
 # Altura visual de cada componente LVGL (incluye padding interno)
 HEIGHT_MAP = {
@@ -21,6 +24,7 @@ HEIGHT_MAP = {
     'p': 18, 'span': 18, 'i': 18,
     'a': 28, 'button': 28,
     'input': 32,
+    'chart': 140,
     'div': 0,
 }
 
@@ -283,6 +287,24 @@ class TLVGLCompiler:
                 str_payload = f"{action}\x00{param}\x00{placeholder}".encode('utf-8', errors='replace')
                 payload = struct.pack(">HHHH", x, y, w, h) + str_payload
                 output.extend(struct.pack(">BH", TYPE_ABS_INPUT, len(payload)) + payload)
+
+            elif tag == 'chart':
+                attrs = el['attrs']
+                chart_type = 1 if attrs.get('type', 'line').lower() == 'bar' else 0
+                val_str = attrs.get('values', '')
+                vals = []
+                for v in val_str.split(','):
+                    v = v.strip()
+                    if v:
+                        try:
+                            vals.append(int(v))
+                        except ValueError:
+                            pass
+                pts_bytes = bytearray()
+                for val in vals:
+                    pts_bytes.extend(struct.pack(">h", val))
+                payload = struct.pack(">HHHHBH", x, y, w, h, chart_type, len(vals)) + pts_bytes
+                output.extend(struct.pack(">BH", TYPE_ABS_CHART, len(payload)) + payload)
 
         return bytes(output)
 

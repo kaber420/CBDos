@@ -55,6 +55,8 @@
     #define LV_MEM_CUSTOM_REALLOC ps_realloc
 #endif
 
+
+
 /* --- Image and GIF Decoders --- */
 #define LV_USE_BMP 1
 #define LV_USE_TJPGD 1
