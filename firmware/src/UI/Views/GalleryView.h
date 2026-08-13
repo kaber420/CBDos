@@ -1,7 +1,14 @@
 #pragma once
 #include <lvgl.h>
 #include <string>
+#include <vector>
 #include "../Components/HeaderBar.h"
+
+struct GalleryItem {
+    std::string id;
+    std::string name;
+    std::string path;
+};
 
 class GalleryView {
 public:

@@ -40,6 +40,7 @@ Cuando ocurra un reinicio no deseado (Kernel Panic / Guru Meditation Error):
 ## 🛠️ Reglas del Proyecto
 1. **Target de Hardware:** ESP32-S3 (AMOLED/LCD QSPI, Touch GT911/AXS15231B).
 2. **UI Framework:** LVGL v9 con el tema base `DefaultTheme`.
+3. **Control de Ejecución (Zero Presumption):** El usuario es quien dirige y planea; la IA es quien ejecuta. Queda **ESTRICTAMENTE PROHIBIDO** editar código fuente, crear archivos o flashear sin la previa solicitud y autorización explícita del usuario.
 
 
 

@@ -15,18 +15,39 @@ int HeaderBar::lastSignalStrength = -999;
 int HeaderBar::lastCartCount = 0;
 
 HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackButton, bool showStatus, bool showCartButton) {
+    HeaderBarConfig config;
+    config.title = title;
+    config.showBackButton = showBackButton;
+    config.showTime = showStatus;
+    config.showWifi = showStatus;
+    config.showCartButton = showCartButton;
+    config.titleMarquee = false;
+    config.translucent = false;
+    return create(parent, config);
+}
+
+HeaderBar* HeaderBar::create(lv_obj_t* parent, const HeaderBarConfig& config) {
     HeaderBar* hb = new HeaderBar();
 
     // Contenedor principal del Header
     hb->container = lv_obj_create(parent);
     lv_obj_set_width(hb->container, lv_pct(100));
     lv_obj_set_height(hb->container, 44);
-    DefaultTheme::applyRaisedCard(hb->container, 14);
+
+    if (config.translucent) {
+        lv_obj_set_style_bg_color(hb->container, lv_color_hex(0x0F172A), 0);
+        lv_obj_set_style_bg_opa(hb->container, LV_OPA_70, 0);
+        lv_obj_set_style_border_color(hb->container, lv_color_hex(0x334155), 0);
+        lv_obj_set_style_border_width(hb->container, 1, 0);
+        lv_obj_set_style_radius(hb->container, 14, 0);
+    } else {
+        DefaultTheme::applyRaisedCard(hb->container, 14);
+    }
     DefaultTheme::disableScroll(hb->container);
     lv_obj_set_style_pad_all(hb->container, 0, 0);
 
     // Botón de Volver (si está habilitado)
-    if (showBackButton) {
+    if (config.showBackButton) {
         hb->backButton = lv_button_create(hb->container);
         lv_obj_set_size(hb->backButton, 84, 30);
         lv_obj_align(hb->backButton, LV_ALIGN_LEFT_MID, 8, 0);
@@ -41,27 +62,11 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackB
         lv_obj_center(backLbl);
     }
 
-    // Título de la pantalla
-    if (title && strlen(title) > 0) {
-        hb->titleLabel = lv_label_create(hb->container);
-        lv_label_set_text(hb->titleLabel, title);
-        lv_obj_set_style_text_color(hb->titleLabel, DefaultTheme::getTextColor(), 0);
-        lv_obj_set_style_text_font(hb->titleLabel, &lv_font_montserrat_16, 0);
-        
-        if (showBackButton) {
-            // Alinear al centro si hay botón de volver
-            lv_obj_align(hb->titleLabel, LV_ALIGN_CENTER, 0, 0);
-        } else {
-            // Alinear a la izquierda si no hay botón de volver
-            lv_obj_align(hb->titleLabel, LV_ALIGN_LEFT_MID, 12, 0);
-        }
-    }
-
     // Componentes del Carrito
-    if (showCartButton) {
+    if (config.showCartButton) {
         hb->cartButton = lv_button_create(hb->container);
         lv_obj_set_size(hb->cartButton, 44, 30);
-        lv_obj_align(hb->cartButton, LV_ALIGN_RIGHT_MID, showStatus ? -150 : -8, 0);
+        lv_obj_align(hb->cartButton, LV_ALIGN_RIGHT_MID, (config.showWifi || config.showTime) ? -150 : -8, 0);
         DefaultTheme::applyButton(hb->cartButton, 10);
         lv_obj_add_event_cb(hb->cartButton, cart_btn_cb, LV_EVENT_CLICKED, nullptr);
 
@@ -89,9 +94,8 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackB
         hb->updateCart(0);
     }
 
-    // Componentes de Estado (Wi-Fi, Batería, Hora)
-    if (showStatus) {
-        // Contenedor de señal Wi-Fi (Derecha al borde)
+    // Componentes de Estado (Wi-Fi)
+    if (config.showWifi) {
         hb->signalContainer = lv_obj_create(hb->container);
         lv_obj_set_size(hb->signalContainer, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_align(hb->signalContainer, LV_ALIGN_RIGHT_MID, -12, 0);
@@ -112,19 +116,51 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackB
         lv_obj_set_style_text_font(hb->signalBadge, &lv_font_montserrat_12, 0);
         lv_obj_set_style_text_color(hb->signalBadge, lv_color_hex(0xEF4444), 0);
         lv_obj_add_flag(hb->signalBadge, LV_OBJ_FLAG_HIDDEN);
+    }
 
-        // Reloj (Centro) - Al tocar abre el Modal de Diagnóstico
+    // Reloj (Centro)
+    if (config.showTime) {
         hb->timeLabel = lv_label_create(hb->container);
         lv_label_set_text(hb->timeLabel, "--:--");
         lv_obj_align(hb->timeLabel, LV_ALIGN_CENTER, 0, 0);
         lv_obj_set_style_text_color(hb->timeLabel, DefaultTheme::getTextColor(), 0);
         lv_obj_set_style_text_font(hb->timeLabel, &lv_font_montserrat_16, 0);
         lv_obj_add_flag(hb->timeLabel, LV_OBJ_FLAG_CLICKABLE);
-        // Cargar los últimos valores guardados
         hb->updateTime(lastTimeStr);
-        hb->updateSignal(lastSignalStrength);
-        setActiveHeader(hb);
     }
+
+    // Título de la pantalla (o Marquesina)
+    if (config.title && strlen(config.title) > 0) {
+        hb->titleLabel = lv_label_create(hb->container);
+        lv_label_set_text(hb->titleLabel, config.title);
+        lv_obj_set_style_text_color(hb->titleLabel, DefaultTheme::getTextColor(), 0);
+        lv_obj_set_style_text_font(hb->titleLabel, &lv_font_montserrat_16, 0);
+        
+        if (config.titleMarquee) {
+            lv_label_set_long_mode(hb->titleLabel, LV_LABEL_LONG_SCROLL_CIRCULAR);
+            if (config.showBackButton) {
+                // Alinear exactamente DESPUÉS del botón de volver (offset 100px a la derecha)
+                lv_obj_align(hb->titleLabel, LV_ALIGN_LEFT_MID, 100, 0);
+                int rightMargin = (config.showWifi || config.showTime || config.showCartButton) ? 150 : 300;
+                lv_obj_set_width(hb->titleLabel, rightMargin - 100);
+            } else {
+                lv_obj_align(hb->titleLabel, LV_ALIGN_LEFT_MID, 12, 0);
+                lv_obj_set_width(hb->titleLabel, 290);
+            }
+        } else {
+            if (config.showBackButton) {
+                lv_obj_align(hb->titleLabel, LV_ALIGN_CENTER, 0, 0);
+            } else {
+                lv_obj_align(hb->titleLabel, LV_ALIGN_LEFT_MID, 12, 0);
+            }
+        }
+    }
+
+    if (config.showWifi) {
+        hb->updateSignal(lastSignalStrength);
+    }
+    setActiveHeader(hb);
+
     return hb;
 }
 

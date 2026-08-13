@@ -31,6 +31,7 @@ class MenuView {
 public:
     static lv_obj_t* create();
     static HeaderBar* getHeaderBar() { return headerBar; }
+    static std::string resolveSdidxPath(const std::string& path);
     
     // Versión activa del catálogo en RAM
     static std::string getCurrentCatalogVersion() { return currentCatalogVersion; }
@@ -86,6 +87,5 @@ private:
     static void prev_btn_cb(lv_event_t* e);
     static void next_btn_cb(lv_event_t* e);
     static void showProductModal(const MenuItem& item);
-    static std::string resolveSdidxPath(const std::string& path);
     static void showFullScreenImage(const std::string& path);
 };

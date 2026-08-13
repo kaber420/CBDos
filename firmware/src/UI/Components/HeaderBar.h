@@ -1,9 +1,20 @@
 #pragma once
 #include <lvgl.h>
 
+struct HeaderBarConfig {
+    const char* title = nullptr;
+    bool showBackButton = true;
+    bool showTime = true;
+    bool showWifi = true;
+    bool showCartButton = false;
+    bool titleMarquee = false;
+    bool translucent = false;
+};
+
 class HeaderBar {
 public:
     // Crea una barra de cabecera en el contenedor 'parent'
+    static HeaderBar* create(lv_obj_t* parent, const HeaderBarConfig& config);
     static HeaderBar* create(lv_obj_t* parent, const char* title, bool showBackButton, bool showStatus, bool showCartButton = false);
     ~HeaderBar();
 

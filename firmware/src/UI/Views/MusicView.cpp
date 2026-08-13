@@ -18,6 +18,8 @@ lv_obj_t* MusicView::playBtn        = nullptr;
 lv_obj_t* MusicView::playBtnLabel   = nullptr;
 lv_obj_t* MusicView::titleLabel     = nullptr;
 lv_obj_t* MusicView::statusLabel    = nullptr;
+lv_obj_t* MusicView::navHeaderBtn   = nullptr;
+lv_obj_t* MusicView::navHeaderLbl   = nullptr;
 
 void MusicView::scanAudioFilesSD() {
     playlist.clear();
@@ -76,8 +78,29 @@ lv_obj_t* MusicView::create() {
     lv_obj_t* scr = lv_obj_create(NULL);
     DefaultTheme::applyFlatBg(scr);
 
-    headerBar = HeaderBar::create(scr, "Reproductor de Musica", true, true);
+    HeaderBarConfig cfg;
+    cfg.title = "Música";
+    cfg.showBackButton = true;
+    cfg.showTime = true;
+    cfg.showWifi = false; // Sin icono de Wi-Fi en Música
+    cfg.showCartButton = false;
+    cfg.titleMarquee = false;
+    cfg.translucent = false;
+
+    headerBar = HeaderBar::create(scr, cfg);
     HeaderBar::setActiveHeader(headerBar);
+
+    // Botón de navegación dinámica en la cabecera (Lista <-> Reproductor)
+    navHeaderBtn = lv_button_create(scr);
+    lv_obj_set_size(navHeaderBtn, 95, 30);
+    lv_obj_align(navHeaderBtn, LV_ALIGN_TOP_RIGHT, -8, 7);
+    DefaultTheme::applyButton(navHeaderBtn, 10);
+    lv_obj_add_event_cb(navHeaderBtn, nav_header_cb, LV_EVENT_CLICKED, nullptr);
+
+    navHeaderLbl = lv_label_create(navHeaderBtn);
+    lv_obj_set_style_text_font(navHeaderLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(navHeaderLbl, DefaultTheme::getPrimaryAccent(), 0);
+    lv_obj_center(navHeaderLbl);
 
     // Contenedor principal de la lista (con scroll)
     listContainer = lv_obj_create(scr);
@@ -176,6 +199,8 @@ lv_obj_t* MusicView::create() {
     lv_label_set_text(nextLbl, LV_SYMBOL_NEXT);
     lv_obj_center(nextLbl);
 
+    updateNavHeaderBtn();
+
     return scr;
 }
 
@@ -212,7 +237,16 @@ void MusicView::renderPlaylist(lv_obj_t* parent) {
     }
 }
 
-void MusicView::showPlayerScreen(int index) {
+void MusicView::updateNavHeaderBtn() {
+    if (!navHeaderLbl || !playerCard) return;
+    if (lv_obj_has_flag(playerCard, LV_OBJ_FLAG_HIDDEN)) {
+        lv_label_set_text(navHeaderLbl, LV_SYMBOL_AUDIO " Player");
+    } else {
+        lv_label_set_text(navHeaderLbl, LV_SYMBOL_LIST " Lista");
+    }
+}
+
+void MusicView::startTrack(int index) {
     if (index < 0 || index >= (int)playlist.size()) return;
     currentTrackIndex = index;
 
@@ -223,19 +257,32 @@ void MusicView::showPlayerScreen(int index) {
     NativeAudioDriver::getInstance().playMP3(playlist[index].path.c_str());
     isPlaying = true;
 
+    showPlayerScreen();
+}
+
+void MusicView::showPlayerScreen() {
+    if (currentTrackIndex >= 0 && currentTrackIndex < (int)playlist.size()) {
+        lv_label_set_text(titleLabel, playlist[currentTrackIndex].name.c_str());
+    } else {
+        lv_label_set_text(titleLabel, "Selecciona una cancion");
+        lv_label_set_text(statusLabel, "Listo");
+    }
+
     lv_obj_add_flag(listContainer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(playerCard, LV_OBJ_FLAG_HIDDEN);
+    updateNavHeaderBtn();
 }
 
 void MusicView::showListScreen() {
     lv_obj_add_flag(playerCard, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(listContainer, LV_OBJ_FLAG_HIDDEN);
+    updateNavHeaderBtn();
 }
 
 void MusicView::track_click_cb(lv_event_t* e) {
     lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
     int index = (int)(intptr_t)lv_obj_get_user_data(btn);
-    showPlayerScreen(index);
+    startTrack(index);
 }
 
 void MusicView::play_pause_cb(lv_event_t* e) {
@@ -257,15 +304,26 @@ void MusicView::prev_track_cb(lv_event_t* e) {
     if (playlist.empty()) return;
     int prevIdx = currentTrackIndex - 1;
     if (prevIdx < 0) prevIdx = playlist.size() - 1;
-    showPlayerScreen(prevIdx);
+    startTrack(prevIdx);
 }
 
 void MusicView::next_track_cb(lv_event_t* e) {
     if (playlist.empty()) return;
     int nextIdx = (currentTrackIndex + 1) % playlist.size();
-    showPlayerScreen(nextIdx);
+    startTrack(nextIdx);
 }
 
 void MusicView::back_to_list_cb(lv_event_t* e) {
     showListScreen();
+}
+
+void MusicView::nav_header_cb(lv_event_t* e) {
+    if (lv_obj_has_flag(playerCard, LV_OBJ_FLAG_HIDDEN)) {
+        if (currentTrackIndex < 0 && !playlist.empty()) {
+            currentTrackIndex = 0;
+        }
+        showPlayerScreen();
+    } else {
+        showListScreen();
+    }
 }
