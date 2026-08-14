@@ -1,8 +1,8 @@
 // ==========================================================================
-// doomgeneric_sound_esp32.c — Driver de Sonido I2S con DMA para DOOM (ESP32-S3)
+// doomgeneric_sound_esp32.c — Driver de Sonido I2S con FreeRTOS en Core 0
 //
-// Mezclador de 8 canales con resampler de punto fijo (16.16) y sincronización
-// exacta a 35 FPS a 22.050 Hz para velocidad de audio 100% auténtica y natural.
+// Mezclador de audio continuo e independiente en el Núcleo 0 (Core 0) a 22.050 Hz.
+// Pacing por hardware DMA: velocidad 100% real, 0ms retardo, sin eco ni lentitud.
 // ==========================================================================
 
 #include <stdio.h>
@@ -15,6 +15,8 @@
 #include "w_wad.h"
 #include "z_zone.h"
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <driver/i2s.h>
 #include <esp_err.h>
 
@@ -31,12 +33,9 @@
 #define I2S_DOUT 41
 #endif
 
-// Frecuencia I2S estándar (22.050 Hz con divisor de reloj exacto en ESP32-S3)
-#define I2S_SAMPLE_RATE    22050
-
-// DOOM corre a 35 ticks por segundo: 22050 / 35 = exactamente 630 muestras por tick
-#define SAMPLES_PER_TICK   (I2S_SAMPLE_RATE / 35)
-#define MAX_CHANNELS       8
+#define I2S_SAMPLE_RATE     22050
+#define AUDIO_BLOCK_SAMPLES 256
+#define MAX_CHANNELS        8
 
 // ─── Cabecera de sonido original de DOOM en WAD ──────────────────────────
 #pragma pack(push, 1)
@@ -52,14 +51,14 @@ typedef struct {
     const uint8_t* data;
     uint32_t length;
     uint32_t pos_fixed;  // Posición en punto fijo 16.16
-    uint32_t step;       // Incremento por muestra de salida en punto fijo 16.16
+    uint32_t step;       // Incremento por muestra (16.16)
     int volume;
-    boolean active;
+    volatile boolean active;
 } mixer_channel_t;
 
 static mixer_channel_t s_channels[MAX_CHANNELS];
-static int16_t s_mixBuffer[SAMPLES_PER_TICK * 2]; // Estéreo (L + R)
-static boolean s_soundInitialized = false;
+static volatile boolean s_soundRunning = false;
+static TaskHandle_t s_audioTaskHandle = NULL;
 
 // ─── Lista de Dispositivos Soportados ────────────────────────────────────
 static snddevice_t s_soundDevices[] = {
@@ -74,12 +73,71 @@ static snddevice_t s_soundDevices[] = {
     SNDDEVICE_PCSPEAKER
 };
 
+// ─── Tarea de Audio en Núcleo 0 (Core 0) ──────────────────────────────────
+static void doom_audio_task(void *param) {
+    (void)param;
+    int16_t mixBuf[AUDIO_BLOCK_SAMPLES * 2]; // Estéreo 16-bit
+
+    printf("[Audio DOOM] Tarea de audio iniciada en Core %d con prioridad %d\n",
+           xPortGetCoreID(), (int)uxTaskPriorityGet(NULL));
+
+    while (s_soundRunning) {
+        memset(mixBuf, 0, sizeof(mixBuf));
+
+        for (int ch = 0; ch < MAX_CHANNELS; ch++) {
+            if (!s_channels[ch].active || !s_channels[ch].data) continue;
+
+            int vol = s_channels[ch].volume; // 0 a 127
+            uint32_t pos_fixed = s_channels[ch].pos_fixed;
+            uint32_t step = s_channels[ch].step;
+            uint32_t len = s_channels[ch].length;
+            const uint8_t* src = s_channels[ch].data;
+
+            for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+                uint32_t pos = pos_fixed >> 16;
+                if (pos >= len) {
+                    s_channels[ch].active = false;
+                    break;
+                }
+
+                // Convertir 8-bit unsigned (0..255, centro 128) a 16-bit signed
+                int32_t sample = ((int32_t)src[pos] - 128) << 8;
+                sample = (sample * vol) / 127;
+
+                // Mezclar a canal izquierdo y derecho
+                int32_t left = (int32_t)mixBuf[i * 2] + sample;
+                int32_t right = (int32_t)mixBuf[i * 2 + 1] + sample;
+
+                // Clipping
+                if (left > 32767) left = 32767;
+                else if (left < -32768) left = -32768;
+
+                if (right > 32767) right = 32767;
+                else if (right < -32768) right = -32768;
+
+                mixBuf[i * 2] = (int16_t)left;
+                mixBuf[i * 2 + 1] = (int16_t)right;
+
+                pos_fixed += step;
+            }
+            s_channels[ch].pos_fixed = pos_fixed;
+        }
+
+        size_t bytes_written = 0;
+        // i2s_write con portMAX_DELAY hace que el hardware DMA marque el reloj
+        // exacto de 22.050 Hz de forma continua sin que la CPU consuma recursos.
+        i2s_write(I2S_NUM_0, mixBuf, sizeof(mixBuf), &bytes_written, portMAX_DELAY);
+    }
+
+    vTaskDelete(NULL);
+}
+
 // ─── Funciones del Módulo de Sonido ──────────────────────────────────────
 
 static boolean DG_Sound_Init(boolean use_sfx_prefix) {
     (void)use_sfx_prefix;
-    printf("[Audio DOOM] Inicializando driver I2S (BCLK=%d, LRC=%d, DOUT=%d) a %d Hz (%d samples/frame)...\n",
-           I2S_BCLK, I2S_LRC, I2S_DOUT, I2S_SAMPLE_RATE, SAMPLES_PER_TICK);
+    printf("[Audio DOOM] Inicializando driver I2S (BCLK=%d, LRC=%d, DOUT=%d) a %d Hz...\n",
+           I2S_BCLK, I2S_LRC, I2S_DOUT, I2S_SAMPLE_RATE);
 
     i2s_driver_uninstall(I2S_NUM_0);
 
@@ -90,8 +148,8 @@ static boolean DG_Sound_Init(boolean use_sfx_prefix) {
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = 0,
-        .dma_buf_count = 8,
-        .dma_buf_len = SAMPLES_PER_TICK,
+        .dma_buf_count = 6,
+        .dma_buf_len = AUDIO_BLOCK_SAMPLES,
         .use_apll = false,
         .tx_desc_auto_clear = true,
         .fixed_mclk = 0
@@ -117,19 +175,36 @@ static boolean DG_Sound_Init(boolean use_sfx_prefix) {
     }
 
     i2s_zero_dma_buffer(I2S_NUM_0);
-    printf("[Audio DOOM] Driver I2S DMA instalado correctamente a 22050 Hz\n");
-
     memset(s_channels, 0, sizeof(s_channels));
-    s_soundInitialized = true;
+
+    // Iniciar tarea de audio en Core 0 con prioridad 5
+    s_soundRunning = true;
+    BaseType_t res = xTaskCreatePinnedToCore(
+        doom_audio_task,
+        "doom_audio",
+        4096,
+        NULL,
+        5,
+        &s_audioTaskHandle,
+        0 // Core 0 dedicado
+    );
+
+    if (res != pdPASS) {
+        printf("[Audio DOOM] Error al crear tarea de audio FreeRTOS en Core 0!\n");
+        return false;
+    }
+
+    printf("[Audio DOOM] Driver y tarea de audio Core 0 listos.\n");
     return true;
 }
 
 static void DG_Sound_Shutdown(void) {
-    if (s_soundInitialized) {
+    if (s_soundRunning) {
+        s_soundRunning = false;
+        vTaskDelay(pdMS_TO_TICKS(50));
         i2s_zero_dma_buffer(I2S_NUM_0);
         i2s_driver_uninstall(I2S_NUM_0);
-        s_soundInitialized = false;
-        printf("[Audio DOOM] Driver I2S desinstalado.\n");
+        printf("[Audio DOOM] Driver de audio desinstalado.\n");
     }
 }
 
@@ -152,7 +227,6 @@ static int DG_Sound_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep
         return -1;
     }
 
-    // Obtener lump number si aún no está asignado
     if (sfxinfo->lumpnum < 0) {
         sfxinfo->lumpnum = DG_Sound_GetSfxLumpNum(sfxinfo);
         if (sfxinfo->lumpnum < 0) {
@@ -160,7 +234,6 @@ static int DG_Sound_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep
         }
     }
 
-    // Cargar sonido bajo demanda (Lazy Loading)
     if (!sfxinfo->driver_data) {
         sfxinfo->driver_data = W_CacheLumpNum(sfxinfo->lumpnum, PU_STATIC);
     }
@@ -181,11 +254,10 @@ static int DG_Sound_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep
         srate = 11025;
     }
 
-    // Los datos PCM de 8 bits empiezan tras la cabecera (byte 8)
+    s_channels[channel].active = false; // pausa atómica momentánea
     s_channels[channel].data = raw + 8;
     s_channels[channel].length = (uint32_t)(lumplen - 8);
     s_channels[channel].pos_fixed = 0;
-    // Paso de avance en punto fijo 16.16: (sample_rate_origen << 16) / I2S_SAMPLE_RATE
     s_channels[channel].step = (srate << 16) / I2S_SAMPLE_RATE;
     s_channels[channel].volume = vol;
     s_channels[channel].active = true;
@@ -206,60 +278,14 @@ static boolean DG_Sound_SoundIsPlaying(int channel) {
     return false;
 }
 
-// Carga bajo demanda: no bloqueamos la memoria cargando los 110 sonidos de golpe al inicio
 static void DG_Sound_CacheSounds(sfxinfo_t *sounds, int num_sounds) {
     (void)sounds;
     (void)num_sounds;
 }
 
-// ─── Mezclador de Audio ejecutado en cada Frame (35 FPS) ──────────────────
+// La mezcla ahora corre continuamente en Core 0, UpdateSound es un tick de sincronización ligero
 static void DG_Sound_Update(void) {
-    if (!s_soundInitialized) return;
-
-    memset(s_mixBuffer, 0, sizeof(s_mixBuffer));
-
-    for (int ch = 0; ch < MAX_CHANNELS; ch++) {
-        if (!s_channels[ch].active || !s_channels[ch].data) continue;
-
-        int vol = s_channels[ch].volume; // 0 a 127
-        uint32_t pos_fixed = s_channels[ch].pos_fixed;
-        uint32_t step = s_channels[ch].step;
-        uint32_t len = s_channels[ch].length;
-        const uint8_t* src = s_channels[ch].data;
-
-        for (int i = 0; i < SAMPLES_PER_TICK; i++) {
-            uint32_t pos = pos_fixed >> 16;
-            if (pos >= len) {
-                s_channels[ch].active = false;
-                break;
-            }
-
-            // Convertir 8-bit unsigned (0..255, centro 128) a 16-bit signed
-            int32_t sample = ((int32_t)src[pos] - 128) << 8;
-            sample = (sample * vol) / 127;
-
-            // Sumar a canal izquierdo y derecho
-            int32_t left = (int32_t)s_mixBuffer[i * 2] + sample;
-            int32_t right = (int32_t)s_mixBuffer[i * 2 + 1] + sample;
-
-            // Clipping a 16-bit signed
-            if (left > 32767) left = 32767;
-            else if (left < -32768) left = -32768;
-
-            if (right > 32767) right = 32767;
-            else if (right < -32768) right = -32768;
-
-            s_mixBuffer[i * 2] = (int16_t)left;
-            s_mixBuffer[i * 2 + 1] = (int16_t)right;
-
-            pos_fixed += step;
-        }
-        s_channels[ch].pos_fixed = pos_fixed;
-    }
-
-    size_t bytes_written = 0;
-    // Transmitir al buffer DMA el frame de 630 muestras exactas
-    i2s_write(I2S_NUM_0, s_mixBuffer, sizeof(s_mixBuffer), &bytes_written, 0);
+    // No-op: la tarea doom_audio_task en Core 0 alimenta continuamente el DMA
 }
 
 // ─── Variables para compatibilidad con i_sound.c ─────────────────────────
