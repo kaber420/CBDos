@@ -25,6 +25,7 @@ public:
     void loadMusicPlayer();
     void loadImageViewer(const std::string& imagePath, const std::string& imageName);
     void loadWallpaperConfig();
+    void loadUtilities();
     void loadDoom();
 
     void resetInactivityTimer() {}
