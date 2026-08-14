@@ -1,6 +1,7 @@
 #include "DashboardView.h"
 #include "../UIManager.h"
 #include "../Themes/DefaultTheme.h"
+#include "../WallpaperManager.h"
 #include <cstdio>
 
 HeaderBar* DashboardView::headerBar = nullptr;
@@ -90,6 +91,9 @@ lv_obj_t* DashboardView::create() {
     lv_obj_t* screen = lv_obj_create(NULL);
     DefaultTheme::applyFlatBg(screen);
     DefaultTheme::disableScroll(screen);
+
+    // Aplicar fondo de pantalla (Flash default o SD JPG)
+    WallpaperManager::getInstance().applyWallpaper(screen);
 
     lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(screen, 12, 0);

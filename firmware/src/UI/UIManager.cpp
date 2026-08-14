@@ -92,6 +92,7 @@ void UIManager::loadTlvBrowser() {
 #include "Views/GatewayConfigView.h"
 #include "Views/MusicView.h"
 #include "Views/GalleryView.h"
+#include "Views/WallpaperConfigView.h"
 #include "Views/DoomView.h"
 
 void UIManager::loadMusicPlayer() {
@@ -103,6 +104,12 @@ void UIManager::loadMusicPlayer() {
 void UIManager::loadImageViewer(const std::string& imagePath, const std::string& imageName) {
     destroyTransient();
     currentTransientScreen = GalleryView::create(imagePath, imageName);
+    lv_screen_load(currentTransientScreen);
+}
+
+void UIManager::loadWallpaperConfig() {
+    destroyTransient();
+    currentTransientScreen = WallpaperConfigView::create();
     lv_screen_load(currentTransientScreen);
 }
 

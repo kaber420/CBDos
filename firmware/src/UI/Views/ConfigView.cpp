@@ -23,8 +23,10 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
         } else if (id == 4) {
             UIManager::getInstance().loadGatewayConfig();
         } else if (id == 5) {
-            DiagnosticsModal::show(lv_screen_active(), getSystemDiagnostics());
+            UIManager::getInstance().loadWallpaperConfig();
         } else if (id == 6) {
+            DiagnosticsModal::show(lv_screen_active(), getSystemDiagnostics());
+        } else if (id == 7) {
             ConfigManager::getInstance().clearAllNvs();
             UIManager::showToast("NVS borrado completamente");
         }
@@ -64,11 +66,12 @@ lv_obj_t* ConfigView::create() {
         {"LoRa (900MHz)", "Parametros de radio largo alcance", 2},
         {"FLRC (2.4GHz)", "Parametros de alta velocidad", 3},
         {"Gateways", "Servidores y ruteo TLV", 4},
-        {"Sistema", "Diagnostico de hardware y memoria", 5},
-        {"Resetear NVS", "Borrar todas las configuraciones de NVS", 6}
+        {"Fondo de Pantalla", "Elegir wallpaper de SD o Flash", 5},
+        {"Sistema", "Diagnostico de hardware y memoria", 6},
+        {"Resetear NVS", "Borrar todas las configuraciones de NVS", 7}
     };
 
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 7; i++) {
         lv_obj_t* card = lv_button_create(content);
         lv_obj_set_width(card, lv_pct(100));
         lv_obj_set_height(card, 60);

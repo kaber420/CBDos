@@ -17,13 +17,13 @@ void DefaultTheme::applyFlatBg(lv_obj_t* obj) {
 void DefaultTheme::applyRaisedCard(lv_obj_t* obj, int32_t radius) {
     disableScroll(obj);
     
-    // Fondo oscuro sólido y plano (Dark Mode Flat)
+    // Fondo translúcido con efecto acrílico (Glassmorphism)
     lv_obj_set_style_bg_color(obj, lv_color_hex(0x1B1E29), 0);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_70, 0);
     lv_obj_set_style_radius(obj, radius, 0);
     
-    // Borde muy sutil para dar separación sin usar sombras o biseles
-    lv_obj_set_style_border_color(obj, lv_color_hex(0x2E3444), 0);
+    // Borde nítido para resaltar los bordes sobre el wallpaper
+    lv_obj_set_style_border_color(obj, lv_color_hex(0x3B4252), 0);
     lv_obj_set_style_border_width(obj, 1, 0);
     lv_obj_set_style_border_opa(obj, LV_OPA_COVER, 0);
 }
@@ -31,25 +31,27 @@ void DefaultTheme::applyRaisedCard(lv_obj_t* obj, int32_t radius) {
 void DefaultTheme::applySunkenCard(lv_obj_t* obj, int32_t radius) {
     disableScroll(obj);
     
-    // Tono hendido/hundido en la superficie
+    // Tono hendido translúcido
     lv_obj_set_style_bg_color(obj, lv_color_hex(0x11131A), 0);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_60, 0);
     lv_obj_set_style_radius(obj, radius, 0);
     
-    // Bisel interno cavado
-    lv_obj_set_style_border_color(obj, lv_color_hex(0x0B0C11), 0);
+    // Bisel interno nítido
+    lv_obj_set_style_border_color(obj, lv_color_hex(0x2E3444), 0);
     lv_obj_set_style_border_width(obj, 1, 0);
     lv_obj_set_style_border_opa(obj, LV_OPA_COVER, 0);
 
     lv_obj_set_style_bg_color(obj, lv_color_hex(0x11131A), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_80, LV_STATE_PRESSED);
 }
 
 void DefaultTheme::applyButton(lv_obj_t* obj, int32_t radius) {
     applyRaisedCard(obj, radius);
 
-    // Mantenemos idéntico al inactivo
-    lv_obj_set_style_bg_color(obj, lv_color_hex(0x1B1E29), LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(obj, lv_color_hex(0x2E3444), LV_STATE_PRESSED);
+    // Estado presionado con feedback visual luminoso
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0x242838), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_90, LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(obj, lv_color_hex(0x00F5D4), LV_STATE_PRESSED);
     lv_obj_set_style_border_width(obj, 1, LV_STATE_PRESSED);
     lv_obj_set_style_border_opa(obj, LV_OPA_COVER, LV_STATE_PRESSED);
 }

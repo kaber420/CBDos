@@ -3,6 +3,7 @@
 #include "UI/Views/DashboardView.h"
 #include "UI/Components/HeaderBar.h"
 #include "UI/Themes/DefaultTheme.h"
+#include "UI/WallpaperManager.h"
 #include "Network/ConfigManager.h"
 #include "Network/DiscoveryService.h"
 #include "Network/MQTTService.h"
@@ -309,6 +310,7 @@ void setup() {
 
     Serial.println("[..] Loading config...");
     ConfigManager::getInstance().init();
+    WallpaperManager::getInstance().init();
     g_hasWifi = ConfigManager::getInstance().loadWiFi(g_wifiConfig);
     g_hasGateway = ConfigManager::getInstance().loadActiveGateway(g_activeGateway);
     g_isConfigured = g_hasWifi && g_hasGateway;
