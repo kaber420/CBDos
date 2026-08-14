@@ -1,9 +1,8 @@
 // ==========================================================================
-// GBCLauncher.cpp — Cartucho Game Boy & Game Boy Color (Selector Visual de ROMs)
+// GBCLauncher.cpp — Cartucho Game Boy & Game Boy Color (Arquitectura DOOM)
 //
-// 1. Selector táctil de juegos (.gb / .gbc) con soporte de paginación
-// 2. Renderizado acelerado 60 FPS (flushGameArea 320x288)
-// 3. Audio I2S DMA en pines 42, 2, 41
+// CORE 0: Tarea de Audio I2S DMA continua e independiente a 22.050 Hz (0% lag)
+// CORE 1: Emulación CPU/PPU a 60 FPS puros con refresco rápido QSPI (320x288)
 // ==========================================================================
 
 #include <Arduino.h>
@@ -15,6 +14,8 @@
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
 #include <driver/i2s.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #define ENABLE_LCD 1
 #define ENABLE_SOUND 1
@@ -60,7 +61,10 @@ static bool     s_cartRamDirty = false;
 
 static struct gb_s            s_gb;
 static struct minigb_apu_ctx  s_apu;
-static int16_t                s_audioBuffer[AUDIO_SAMPLES * 2];
+
+// ─── Control de Audio Autónomo en Core 0 (Modelo DOOM) ──────────────────────
+static volatile bool          s_soundRunning = false;
+static TaskHandle_t           s_audioTaskHandle = nullptr;
 
 // ─── Paleta clásica Game Boy monocromático (RGB565) ─────────────────────────
 static const uint16_t s_palette[4] = {
@@ -161,8 +165,27 @@ extern "C" void audio_write(const uint_fast16_t addr, const uint8_t val) {
     minigb_apu_audio_write(&s_apu, addr, val);
 }
 
+// ─── Tarea de Audio Autónoma en Core 0 (Afinación y Tempo Exactos) ──────────
+static void gbc_audio_task(void *param) {
+    (void)param;
+    int16_t audioStream[AUDIO_SAMPLES_TOTAL];
+    size_t bytesWritten = 0;
+
+    Serial.printf("[GBC Audio] Tarea de audio iniciada en Core %d a %d Hz con afinacion original\n",
+                  xPortGetCoreID(), AUDIO_SAMPLE_RATE);
+
+    while (s_soundRunning) {
+        minigb_apu_audio_callback(&s_apu, audioStream);
+        i2s_write(I2S_NUM_0, (const char*)audioStream, sizeof(audioStream), &bytesWritten, portMAX_DELAY);
+    }
+
+    vTaskDelete(NULL);
+}
+
 // ─── Inicialización de I2S para Audio DMA ───────────────────────────────────
 static bool initI2S() {
+    i2s_driver_uninstall(I2S_NUM_0);
+
     i2s_config_t cfg = {
         .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
         .sample_rate          = (uint32_t)AUDIO_SAMPLE_RATE,
@@ -170,8 +193,8 @@ static bool initI2S() {
         .channel_format       = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count        = 4,
-        .dma_buf_len          = 256,
+        .dma_buf_count        = 6,
+        .dma_buf_len          = AUDIO_SAMPLES,
         .use_apll             = false,
         .tx_desc_auto_clear   = true,
         .fixed_mclk           = 0
@@ -192,7 +215,8 @@ static bool initI2S() {
         Serial.println("[GBC Audio] Error al configurar pines I2S");
         return false;
     }
-    Serial.printf("[GBC Audio] I2S listo a %d Hz (BCLK=42, LRC=2, DOUT=41)\n", AUDIO_SAMPLE_RATE);
+    i2s_zero_dma_buffer(I2S_NUM_0);
+    Serial.printf("[GBC Audio] Driver I2S listo (42, 2, 41) a %d Hz\n", AUDIO_SAMPLE_RATE);
     return true;
 }
 
@@ -255,7 +279,7 @@ static void scanDir(const String& path, std::vector<String>& roms) {
                 if (!exists) roms.push_back(fullPath);
             }
         }
-        f.close(); // Cierra el descriptor para no saturar el driver FatFS
+        f.close(); // Cierra el descriptor inmediatamente
         f = dir.openNextFile();
     }
     dir.close();
@@ -279,7 +303,7 @@ static std::vector<String> scanROMs() {
     return roms;
 }
 
-// ─── Selector Visual de Juegos Táctil (Siempre Visible) ─────────────────────
+// ─── Selector Visual de Juegos Táctil ───────────────────────────────────────
 static String selectROM(const std::vector<String>& roms) {
     if (roms.empty()) return "";
 
@@ -290,12 +314,12 @@ static String selectROM(const std::vector<String>& roms) {
 
     while (true) {
         // 1. Dibujar Interfaz de Selección
-        s_fastCanvas->fillScreen(0x10A2); // Fondo azul oscuro retro
+        s_fastCanvas->fillScreen(0x10A2);
 
         // Encabezado
         s_fastCanvas->fillRect(0, 0, 320, 48, 0x0188);
         s_fastCanvas->setTextSize(2);
-        s_fastCanvas->setTextColor(0xFFE0); // Amarillo arcade
+        s_fastCanvas->setTextColor(0xFFE0);
         s_fastCanvas->setCursor(16, 14);
         s_fastCanvas->println("SELECCIONA JUEGO");
 
@@ -313,25 +337,21 @@ static String selectROM(const std::vector<String>& roms) {
             int y = 60 + (i * 68);
 
             if (idx < (int)roms.size()) {
-                // Tarjeta de juego
                 s_fastCanvas->fillRoundRect(12, y, 296, 56, 8, 0x2124);
                 s_fastCanvas->drawRoundRect(12, y, 296, 56, 8, 0x4A69);
 
-                // Nombre limpio del archivo
                 String displayName = roms[idx];
                 int lastSlash = displayName.lastIndexOf('/');
                 if (lastSlash >= 0) displayName = displayName.substring(lastSlash + 1);
                 if (displayName.length() > 24) displayName = displayName.substring(0, 22) + "..";
 
-                // Icono CGB / DMG
-                bool isCGB = displayName.endsWith(".gbc") || displayName.endsWith(".GBC");
+                bool isCGB = displayName.endsWith(".gbc") || displayName.endsWith(".GBC") || displayName.endsWith(".cgb");
                 s_fastCanvas->fillRoundRect(22, y + 10, 40, 36, 4, isCGB ? 0xA01F : 0x05E0);
                 s_fastCanvas->setTextSize(1);
                 s_fastCanvas->setTextColor(0xFFFF);
                 s_fastCanvas->setCursor(26, y + 24);
                 s_fastCanvas->println(isCGB ? "CGB" : "DMG");
 
-                // Texto del título
                 s_fastCanvas->setTextSize(1);
                 s_fastCanvas->setTextColor(0xFFFF);
                 s_fastCanvas->setCursor(70, y + 22);
@@ -369,32 +389,27 @@ static String selectROM(const std::vector<String>& roms) {
         while (true) {
             TouchPoint p;
             if (s_touch.read(p)) {
-                // Tocar botón Salir
                 if (p.x >= 230 && p.x <= 320 && p.y >= 0 && p.y <= 50) {
                     CartridgeGamepad::exitToOS();
                     return "";
                 }
 
-                // Tocar botón Anterior
                 if (page > 0 && p.x >= 10 && p.x <= 110 && p.y >= 420 && p.y <= 480) {
                     page--;
                     delay(200);
                     break;
                 }
 
-                // Tocar botón Siguiente
                 if (page < totalPages - 1 && p.x >= 210 && p.x <= 310 && p.y >= 420 && p.y <= 480) {
                     page++;
                     delay(200);
                     break;
                 }
 
-                // Tocar alguna fila de juego
                 for (int i = 0; i < itemsPerPage; i++) {
                     int idx = startIdx + i;
                     int y = 60 + (i * 68);
                     if (idx < (int)roms.size() && p.x >= 10 && p.x <= 310 && p.y >= y && p.y <= (y + 56)) {
-                        // Feedback visual de selección
                         s_fastCanvas->fillRoundRect(12, y, 296, 56, 8, 0x07E0);
                         s_display.flush();
                         delay(150);
@@ -442,7 +457,7 @@ void setup() {
     Serial.begin(115200);
     delay(200);
     Serial.println("\n==========================================");
-    Serial.println("  Game Boy & Game Boy Color (Con Selector) ");
+    Serial.println("  Game Boy & Game Boy Color (Arquitectura DOOM) ");
     Serial.printf("  CPU: %u MHz | PSRAM: %u KB              \n", 
                   (unsigned)getCpuFrequencyMhz(), (unsigned)(ESP.getFreePsram() / 1024));
     Serial.println("==========================================");
@@ -528,9 +543,21 @@ void setup() {
     s_cartRam = (uint8_t*)heap_caps_calloc(1, s_cartRamSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     loadSaveFile(romPath);
 
-    // 7. Inicializar Audio I2S y APU
+    // 7. Inicializar Audio I2S y APU a 22.050 Hz
     initI2S();
     minigb_apu_audio_init(&s_apu);
+
+    // Iniciar tarea autónoma de audio en Core 0 (prioridad 5)
+    s_soundRunning = true;
+    xTaskCreatePinnedToCore(
+        gbc_audio_task,
+        "GBCAudioTask",
+        4096,
+        NULL,
+        5,
+        &s_audioTaskHandle,
+        0 // NÚCLEO 0
+    );
 
     // 8. Inicializar Walnut-CGB
     enum gb_init_error_e gb_err = gb_init(
@@ -566,10 +593,10 @@ void setup() {
     s_gamepad.draw(true);
     s_display.flush();
 
-    Serial.println("[GBC] Motor listo. Arrancando emulacion a 60 FPS...");
+    Serial.println("[GBC] Motor listo en Core 1. Arrancando emulacion a 60 FPS...");
 }
 
-// ─── LOOP PRINCIPAL ULTRA OPTIMIZADO (60 FPS) ───────────────────────────────
+// ─── LOOP PRINCIPAL ULTRA OPTIMIZADO (CORE 1 100% LIBERADO) ─────────────────
 void loop() {
     // 1. Leer Controles Táctiles cada 2 frames
     static uint8_t s_touchDiv = 0;
@@ -577,6 +604,7 @@ void loop() {
         s_touchDiv = 0;
         uint16_t btns = s_gamepad.read();
         if (s_gamepad.handleExit()) {
+            s_soundRunning = false;
             saveGame();
             CartridgeGamepad::exitToOS();
             return;
@@ -594,15 +622,10 @@ void loop() {
         s_gb.direct.joypad = joypad;
     }
 
-    // 2. Ejecutar 1 Frame de emulación
+    // 2. Ejecutar 1 Frame de emulación de CPU / PPU (Core 1 a tope)
     gb_run_frame_dualfetch(&s_gb);
 
-    // 3. Sintetizar y enviar Audio I2S DMA
-    minigb_apu_audio_callback(&s_apu, s_audioBuffer);
-    size_t written = 0;
-    i2s_write(I2S_NUM_0, (const char*)s_audioBuffer, sizeof(s_audioBuffer), &written, 0);
-
-    // 4. Refrescar ÚNICAMENTE el área de juego (320x288) para máxima velocidad
+    // 3. Refrescar ÚNICAMENTE el área de juego (320x288) a máxima velocidad
     if (s_fastCanvas) {
         s_fastCanvas->flushGameArea();
     } else {
