@@ -92,6 +92,7 @@ void UIManager::loadTlvBrowser() {
 #include "Views/GatewayConfigView.h"
 #include "Views/MusicView.h"
 #include "Views/GalleryView.h"
+#include "Views/DoomView.h"
 
 void UIManager::loadMusicPlayer() {
     destroyTransient();
@@ -133,6 +134,14 @@ void UIManager::loadGatewayConfig() {
     destroyTransient();
     currentTransientScreen = GatewayConfigView::create();
     lv_screen_load(currentTransientScreen);
+}
+
+void UIManager::loadDoom() {
+    destroyTransient();
+    currentTransientScreen = DoomView::create();
+    if (currentTransientScreen) {
+        lv_screen_load(currentTransientScreen);
+    }
 }
 
 void UIManager::showToast(const char* message) {

@@ -24,6 +24,7 @@ public:
     void loadGatewayConfig();
     void loadMusicPlayer();
     void loadImageViewer(const std::string& imagePath, const std::string& imageName);
+    void loadDoom();
 
     void resetInactivityTimer() {}
     static void showToast(const char* message);

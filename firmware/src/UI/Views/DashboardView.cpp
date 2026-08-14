@@ -13,6 +13,7 @@ static void launchGallery()     { UIManager::getInstance().loadMediaGallery(); }
 static void launchMusic()       { UIManager::getInstance().loadMusicPlayer(); }
 static void launchConfig()      { UIManager::getInstance().loadConfigView(); }
 static void launchTlvBrowser()  { UIManager::getInstance().loadTlvBrowser(); }
+static void launchDoom()        { UIManager::getInstance().loadDoom(); }
 
 static const AppDescriptor kApps[] = {
     {1, "Mesh Chat",     LV_SYMBOL_WIFI,     0x00F5D4, launchMeshChat},
@@ -20,6 +21,7 @@ static const AppDescriptor kApps[] = {
     {3, "Musica",        LV_SYMBOL_AUDIO,    0xFFB800, launchMusic},
     {4, "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD, launchConfig},
     {5, "Navegador",     LV_SYMBOL_EYE_OPEN, 0x00B4D8, launchTlvBrowser},
+    {6, "DOOM",          LV_SYMBOL_PLAY,     0xE50000, launchDoom},
 };
 
 void DashboardView::btn_event_cb(lv_event_t * e) {

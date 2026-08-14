@@ -37,13 +37,18 @@ Cuando ocurra un reinicio no deseado (Kernel Panic / Guru Meditation Error):
 
 ---
 
-## 🛠️ Reglas del Proyecto
+## 🛠️ Reglas del Proyecto y Política de Comunicación Estricta
+
 1. **Target de Hardware:** ESP32-S3 (AMOLED/LCD QSPI, Touch GT911/AXS15231B).
 2. **UI Framework:** LVGL v9 con el tema base `DefaultTheme`.
-3. **Control de Ejecución (Zero Presumption):** El usuario es quien dirige y planea; la IA es quien ejecuta. Queda **ESTRICTAMENTE PROHIBIDO** editar código fuente, crear archivos o flashear sin la previa solicitud y autorización explícita del usuario.
+3. **Control de Ejecución Estricto (Zero Presumption & Zero Acciones Silenciosas):**
+   - **El usuario dirige y autoriza; la IA propone y ejecuta únicamente con aprobación.**
+   - **PROHIBIDO** editar código fuente, crear archivos, borrar ficheros o flashear sin la previa propuesta, explicación y **autorización explícita** del usuario.
+   - **PROHIBIDO** ejecutar comandos ocultos, descargas o bucles de herramientas en silencio. El asistente NUNCA debe hacer que el usuario tenga que adivinar qué está haciendo; siempre debe explicar brevemente qué se va a hacer antes de tocar nada.
+   - Ante cualquier falla o diagnóstico, la IA debe presentar el diagnóstico al usuario, explicar la causa y la solución propuesta, y **esperar a que el usuario dé la orden de aplicar los cambios**.
 
+4. **Uso de OpenCode (Modelos externos):**
+   - Usar `opencode run "<instrucción>"` para ahorrar tokens de contexto.
+   - **Selección de modelo:** Para usar modelos específicos (como deepseek o mimo), indicarlo con `-m` (ej. `opencode run -m opencode/deepseek-v4-flash-free "<instrucción>"`).
 
-
-`opencode run "<instrucción>"` para ahorrar tokens de contexto.
-    *   **Selección de modelo:** Para usar modelos específicos (como deepseek o mimo), debes indicarlo siempre con el flag `-m` (ej. `-m opencode/deepseek-v4-flash-free` o `-m opencode/mimo-v2.5-free`)  ejemplo:  `opencode run -m opencode/deepseek-v4-flash-free run "<instrucción>"`
     
