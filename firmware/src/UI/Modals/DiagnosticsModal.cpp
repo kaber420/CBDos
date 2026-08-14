@@ -18,9 +18,9 @@ void DiagnosticsModal::hide() {
 void DiagnosticsModal::show(lv_obj_t* parent, const SystemDiagnostics& diag) {
     hide(); // Limpiar previo si existe
 
-    modalMask = lv_obj_create(parent ? parent : lv_screen_active());
-    lv_obj_add_flag(modalMask, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    modalMask = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modalMask, 320, 480);
+    lv_obj_set_pos(modalMask, 0, 0);
     lv_obj_set_style_bg_color(modalMask, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(modalMask, LV_OPA_80, 0);
     lv_obj_set_style_border_width(modalMask, 0, 0);

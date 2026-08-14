@@ -161,10 +161,7 @@ void UIManager::showToast(const char* message) {
         toastTimer = nullptr;
     }
 
-    lv_obj_t* activeScr = lv_screen_active();
-    if (!activeScr) return;
-
-    toastObj = lv_obj_create(activeScr);
+    toastObj = lv_obj_create(lv_layer_top());
     DefaultTheme::applyRaisedCard(toastObj, 20);
     lv_obj_set_size(toastObj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_align(toastObj, LV_ALIGN_BOTTOM_MID, 0, -30);

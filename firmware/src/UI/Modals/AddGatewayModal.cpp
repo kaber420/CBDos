@@ -63,9 +63,9 @@ void AddGatewayModal::import_cb(lv_event_t* e) {
 }
 
 void AddGatewayModal::show(lv_obj_t* parent) {
-    maskObj = lv_obj_create(parent);
-    lv_obj_add_flag(maskObj, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    maskObj = lv_obj_create(lv_layer_top());
     lv_obj_set_size(maskObj, 320, 480);
+    lv_obj_set_pos(maskObj, 0, 0);
     lv_obj_set_style_bg_color(maskObj, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(maskObj, LV_OPA_80, 0);
     lv_obj_set_style_border_width(maskObj, 0, 0);
