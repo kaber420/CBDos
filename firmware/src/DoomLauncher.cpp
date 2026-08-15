@@ -169,12 +169,21 @@ void setup() {
     }
 
     Serial.println("[DOOM] Iniciando motor Doom Generic...");
+    static char s_iwad_path_buf[64];
+    static char* s_doom_argv[4];
+
     if (iwad_path != NULL) {
-        char* doom_argv[] = {(char*)"doom", (char*)"-iwad", (char*)iwad_path, NULL};
-        doomgeneric_Create(3, doom_argv);
+        strncpy(s_iwad_path_buf, iwad_path, sizeof(s_iwad_path_buf) - 1);
+        s_iwad_path_buf[sizeof(s_iwad_path_buf) - 1] = '\0';
+        s_doom_argv[0] = (char*)"doom";
+        s_doom_argv[1] = (char*)"-iwad";
+        s_doom_argv[2] = s_iwad_path_buf;
+        s_doom_argv[3] = NULL;
+        doomgeneric_Create(3, s_doom_argv);
     } else {
-        char* doom_argv[] = {(char*)"doom", NULL};
-        doomgeneric_Create(1, doom_argv);
+        s_doom_argv[0] = (char*)"doom";
+        s_doom_argv[1] = NULL;
+        doomgeneric_Create(1, s_doom_argv);
     }
     Serial.println("[DOOM] doomgeneric_Create completado.");
 
