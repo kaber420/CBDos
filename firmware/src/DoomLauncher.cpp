@@ -17,7 +17,6 @@
 #include "doomgeneric.h"
 #include "doomkeys.h"
 #include "CartridgeGamepad.h"
-#include "BTGamepadDriver.h"
 
 // ─── Variables globales compartidas con doomgeneric_esp32.c ──────────────
 uint16_t* g_doomCanvasBuf = nullptr;
@@ -28,9 +27,6 @@ volatile bool g_doomRunning = true;
 static JC3248W535_Display s_display;
 static JC3248W535_Touch   s_touch;
 static CartridgeGamepad   s_gamepad;
-static BTGamepadDriver    s_btDriver;
-
-extern "C" void Doom_QueueKey(int pressed, unsigned char key);
 
 // ─── Función para reportar errores en pantalla y serial ───────────────────
 extern "C" void Doom_ReportError(const char* msg) {
@@ -60,10 +56,6 @@ void setup() {
     Serial.println("\n=================================");
     Serial.println("  DOOM Cartridge — espOS32 (app1)  ");
     Serial.println("=================================");
-
-    // 0. Inicializar Bluetooth PRIMERO (reserva canales DMA antes de la memoria de pantalla)
-    s_btDriver.begin("espOS32-Doom");
-
     Serial.printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
     Serial.printf("Free PSRAM: %u bytes\n", ESP.getFreePsram());
 
@@ -202,30 +194,12 @@ void setup() {
 
 // ─── Loop ─────────────────────────────────────────────────────────────────
 void loop() {
-    // 1. Actualizar conexión y leer Controles Bluetooth
-    s_btDriver.update();
-    uint16_t touchBtns = s_gamepad.read();
-    uint16_t btBtns    = s_btDriver.readButtons();
-    uint16_t btns      = touchBtns | btBtns;
-
+    // 1. Leer Controles Táctiles mediante CartridgeGamepad
+    uint16_t btns = s_gamepad.read();
     if (s_gamepad.handleExit()) {
         return;
     }
 
-    // 2. Cambio de Arma en DOOM (Botón X)
-    static uint8_t s_activeWeapon = 2; // 2=Pistol/Shotgun
-    static bool s_prevWeaponNext = false;
-    bool curWeaponNext = (btns & PAD_WEAPON_NEXT);
-    if (curWeaponNext && !s_prevWeaponNext) {
-        s_activeWeapon++;
-        if (s_activeWeapon > 7) s_activeWeapon = 1;
-        Doom_QueueKey(1, '0' + s_activeWeapon);
-        Doom_QueueKey(0, '0' + s_activeWeapon);
-        Serial.printf("[DOOM] Cambiando a arma %d ('%c')\n", s_activeWeapon, '0' + s_activeWeapon);
-    }
-    s_prevWeaponNext = curWeaponNext;
-
-    // 3. Mapear botones a zonas de DOOM
     uint16_t zones = 0;
     if (btns & PAD_STRAFE_L) zones |= (1 << 0);  // bit 0 = Strafe Izquierda
     if (btns & PAD_UP)       zones |= (1 << 1);  // bit 1 = Adelante (Up)
@@ -241,15 +215,26 @@ void loop() {
 
     g_doomZoneBits = zones;
 
-    // 4. Ejecuta un tick del motor de juego
+    // 2. Ejecuta un tick del motor de juego
     doomgeneric_Tick();
 
-    // 5. Dibujar el canvas de DOOM (320x200) en la parte superior (0, 0)
+    // 3. Dibujar el canvas de DOOM (320x200) en la parte superior (0, 0)
     if (s_display.getCanvas() && g_doomCanvasBuf) {
         s_display.getCanvas()->draw16bitRGBBitmap(0, 0, g_doomCanvasBuf, DOOMGENERIC_RESX, DOOMGENERIC_RESY);
         s_display.flush();
     }
 
-    // Ceder CPU a FreeRTOS para alimentar el Watchdog Timer y evitar reinicios
-    delay(1);
+    // 4. Sincronización precisa a 35 FPS (28 ms por frame original de DOOM)
+    // Evita la hipervelocidad y le da tiempo libre a FreeRTOS para el Watchdog
+    static uint32_t s_lastFrameMs = 0;
+    uint32_t now = millis();
+    if (s_lastFrameMs != 0) {
+        uint32_t elapsed = now - s_lastFrameMs;
+        if (elapsed < 28) {
+            delay(28 - elapsed);
+        }
+    } else {
+        delay(1);
+    }
+    s_lastFrameMs = millis();
 }

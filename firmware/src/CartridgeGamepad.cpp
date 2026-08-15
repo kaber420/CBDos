@@ -205,9 +205,6 @@ void CartridgeGamepad::drawPortraitDoom() {
     c->setCursor(252, 214);
     c->print("SALIR");
 
-    // Indicador inicial de Bluetooth
-    drawBTStatus(false, true);
-
     // 3. D-Pad (Cruceta izquierda: cx=70, cy=335)
     c->fillRect(53, 275, 34, 120, 0x2104);
     c->fillRect(10, 318, 120, 34, 0x2104);

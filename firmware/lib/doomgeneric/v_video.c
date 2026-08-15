@@ -41,9 +41,7 @@
 #include <png.h>
 #endif
 
-// TODO: There are separate RANGECHECK defines for different games, but this
-// is common code. Fix this.
-#define RANGECHECK
+// #define RANGECHECK
 
 // Blending table used for fuzzpatch, etc.
 // Only used in Heretic/Hexen
