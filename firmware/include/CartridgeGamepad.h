@@ -40,10 +40,10 @@ public:
     // Lee los toques del panel táctil y devuelve la máscara de bits de botones presionados
     uint16_t read();
 
-    // Comprueba si se presionó el botón SALIR y maneja el reinicio a espOS32 (app0)
+    // Comprueba si se presionó el botón SALIR y maneja el reinicio a CBDos (app0)
     bool handleExit();
 
-    // Salir inmediatamente a espOS32 (app0)
+    // Salir inmediatamente a CBDos (app0)
     static void exitToOS();
 
 private:

@@ -7,8 +7,8 @@ import (
 	"log"
 	"net"
 
-	"espos32/router/pkg/mesh"
-	"espos32/router/pkg/transport"
+	"cbdos/router/pkg/mesh"
+	"cbdos/router/pkg/transport"
 )
 
 // RouterEngine coordina la tabla de ruteo, listeners y el reenvio de tramas

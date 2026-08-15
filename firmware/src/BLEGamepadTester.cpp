@@ -255,11 +255,11 @@ void setup() {
     Serial.begin(115200);
     delay(500);
     Serial.println("\n=============================================");
-    Serial.println("   espOS32 — BLE Gamepad Sniffer & Tester    ");
+    Serial.println("   CBDos — BLE Gamepad Sniffer & Tester    ");
     Serial.println("=============================================");
 
     // 1. Inicializar NimBLE PRIMERO (reserva memoria DMA para la radio antes de la pantalla)
-    NimBLEDevice::init("espOS32-Sniffer");
+    NimBLEDevice::init("CBDos-Sniffer");
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Máxima potencia de transmisión BLE
     NimBLEDevice::setSecurityAuth(true, true, true);
 

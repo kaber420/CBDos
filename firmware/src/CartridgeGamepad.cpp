@@ -18,7 +18,7 @@ void CartridgeGamepad::begin(JC3248W535_Display* display, JC3248W535_Touch* touc
 }
 
 void CartridgeGamepad::exitToOS() {
-    Serial.println("[CartridgeGamepad] Saliendo... Configurando arranque en espOS32 (app0)");
+    Serial.println("[CartridgeGamepad] Saliendo... Configurando arranque en CBDos (app0)");
     const esp_partition_t* os_partition = esp_partition_find_first(
         ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
 

@@ -58,12 +58,12 @@ void MQTTService::update() {
                         provDoc["gateway_name"] = gwConfig.name;
                         provDoc["auth_token"] = gwConfig.authToken;
                         provDoc["ip"] = WiFi.localIP().toString();
-                        provDoc["type"] = "esp32OS";
+                        provDoc["type"] = "CBDos";
 
                         char provBuf[256];
                         serializeJson(provDoc, provBuf);
-                        client.publish("esp32os/device/provision", provBuf);
-                        Serial.println("[MQTT] Paquete de Aprovisionamiento enviado a esp32os/device/provision");
+                        client.publish("cbdos/device/provision", provBuf);
+                        Serial.println("[MQTT] Paquete de Aprovisionamiento enviado a cbdos/device/provision");
                     }
 
                     // 2. Enviar telemetría inicial de estado
@@ -77,7 +77,7 @@ void MQTTService::update() {
 
                     char statusBuf[256];
                     serializeJson(statusDoc, statusBuf);
-                    String statusTopic = "esp32os/device/" + macAddress + "/status";
+                    String statusTopic = "cbdos/device/" + macAddress + "/status";
                     client.publish(statusTopic.c_str(), statusBuf);
                 }
             }

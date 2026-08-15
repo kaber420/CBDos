@@ -438,7 +438,7 @@ static void showErrorMessage(const char* title, const char* msg) {
 
     s_fastCanvas->setCursor(20, 240);
     s_fastCanvas->setTextColor(0x07E0);
-    s_fastCanvas->println("Toca [SALIR] para volver a espOS32");
+    s_fastCanvas->println("Toca [SALIR] para volver a CBDos");
 
     s_gamepad.draw(true);
     s_display.flush();

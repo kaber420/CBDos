@@ -104,7 +104,7 @@ lv_obj_t* DashboardView::create() {
     lv_obj_set_style_pad_row(screen, 10, 0);
 
     // --- Header Bar ---
-    headerBar = HeaderBar::create(screen, "ESP32OS", false, true);
+    headerBar = HeaderBar::create(screen, "CBDos", false, true);
     HeaderBar::setActiveHeader(headerBar);
 
     // --- Dashboard Grid (dinámico + scroll) ---

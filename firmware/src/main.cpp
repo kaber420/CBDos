@@ -213,7 +213,7 @@ void setup() {
 #ifdef ARDUINO
     Serial.begin(115200);
     delay(500); // Dar tiempo al Serial para conectar
-    Serial.println("\n=== ESP32OS Firmware Booting ===");
+    Serial.println("\n=== CBDos Firmware Booting ===");
     Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
     Serial.printf("PSRAM size: %u bytes\n", ESP.getPsramSize());
     Serial.printf("Free PSRAM: %u bytes\n", ESP.getFreePsram());

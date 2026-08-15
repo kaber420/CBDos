@@ -83,7 +83,7 @@ void TodoApp::loadFromStorage() {
 
         TodoList tareas;
         tareas.name = "Tareas";
-        tareas.items.push_back({"Revisar codigo espOS32", false});
+        tareas.items.push_back({"Revisar codigo CBDos", false});
         tareas.items.push_back({"Flashear firmware a ESP32-S3", false});
         s_todoLists.push_back(tareas);
     }

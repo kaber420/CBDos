@@ -1,3 +1,3 @@
-module espos32/router
+module cbdos/router
 
 go 1.22

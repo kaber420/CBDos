@@ -7,17 +7,17 @@ import (
 	"os/signal"
 	"syscall"
 
-	"espos32/router/pkg/router"
+	"cbdos/router/pkg/router"
 )
 
 func main() {
 	tcpAddr := flag.String("tcp", ":8765", "Dirección y puerto TCP para escuchar nodos Mesh / ESP32")
-	unixSock := flag.String("unix", "/tmp/espos32_router.sock", "Ruta del socket Unix para servicios locales (Hosting/Proxy)")
+	unixSock := flag.String("unix", "/tmp/cbdos_router.sock", "Ruta del socket Unix para servicios locales (Hosting/Proxy)")
 	hostingBackend := flag.String("hosting", "127.0.0.1:8766", "Dirección TCP del backend de Hosting (tlvgl_server.py)")
 	flag.Parse()
 
 	log.Println("=====================================================")
-	log.Println("           espOS32 Mesh Router (Go)                  ")
+	log.Println("           CBDos Mesh Router (Go)                    ")
 	log.Println("=====================================================")
 
 	engine := router.NewRouterEngine()

@@ -44,7 +44,7 @@ extern "C" void Doom_ReportError(const char* msg) {
         
         s_display.getCanvas()->setCursor(20, 200);
         s_display.getCanvas()->setTextColor(0x07E0); // Verde
-        s_display.getCanvas()->println("Toca cualquier parte para volver a espOS32");
+        s_display.getCanvas()->println("Toca cualquier parte para volver a CBDos");
         s_display.flush();
     }
 }
@@ -54,7 +54,7 @@ void setup() {
     Serial.begin(115200);
     delay(500);
     Serial.println("\n=================================");
-    Serial.println("  DOOM Cartridge — espOS32 (app1)  ");
+    Serial.println("  DOOM Cartridge — CBDos (app1)  ");
     Serial.println("=================================");
     Serial.printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
     Serial.printf("Free PSRAM: %u bytes\n", ESP.getFreePsram());
@@ -127,7 +127,7 @@ void setup() {
             s_display.getCanvas()->println("Verifica que este insertada y formateada en FAT32.");
             s_display.getCanvas()->setCursor(20, 160);
             s_display.getCanvas()->setTextColor(0x07E0);
-            s_display.getCanvas()->println("Toca la pantalla para volver a espOS32");
+            s_display.getCanvas()->println("Toca la pantalla para volver a CBDos");
             s_gamepad.draw(true);
             s_display.flush();
         }

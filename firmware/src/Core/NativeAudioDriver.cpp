@@ -428,7 +428,7 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     }
 
     // Enviar petición HTTP
-    client.printf("GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: espOS32-Radio/1.0\r\nAccept: */*\r\nIcy-MetaData: 0\r\nConnection: close\r\n\r\n",
+    client.printf("GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: CBDos-Radio/1.0\r\nAccept: */*\r\nIcy-MetaData: 0\r\nConnection: close\r\n\r\n",
                   path.c_str(), host.c_str());
 
     // Leer cabeceras HTTP

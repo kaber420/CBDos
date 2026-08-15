@@ -1,4 +1,4 @@
-# Reglas del Proyecto y Guía de Compilación (espOS32)
+# Reglas del Proyecto y Guía de Compilación (CBDos)
 
 ## 📌 Entorno de Compilación y Flasheo (ESP32-S3 Directo)
 - **SIEMPRE** compilar y flashear utilizando el entorno `-e esp32`.

@@ -31,7 +31,7 @@ public:
     BTGamepadDriver();
 
     // Inicializa la radio NimBLE
-    bool begin(const char* deviceName = "espOS32-Doom");
+    bool begin(const char* deviceName = "CBDos-Doom");
 
     // Activar o desactivar Bluetooth en tiempo de ejecución
     void setEnabled(bool enable);

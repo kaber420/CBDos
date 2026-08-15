@@ -1,11 +1,11 @@
 // ==========================================================================
-// doomgeneric_esp32.c — HAL de integración DOOM ↔ espOS32 (ESP32-S3)
+// doomgeneric_esp32.c — HAL de integración DOOM ↔ CBDos (ESP32-S3)
 //
 // Implementa las 5+1 funciones callback que doomgeneric necesita:
 //   DG_Init, DG_DrawFrame, DG_SleepMs, DG_GetTicksMs, DG_GetKey,
 //   DG_SetWindowTitle
 //
-// Copyright 2024 espOS32 project — Motor DOOM bajo GPL2
+// Copyright 2024 CBDos project — Motor DOOM bajo GPL2
 // ==========================================================================
 
 #include "doomgeneric.h"

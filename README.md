@@ -1,6 +1,6 @@
-# espOS32 — Ecosistema Mesh & Navegador TLVGL / CBML
+# CBDos — Ecosistema Mesh & Navegador TLVGL / CBML
 
-**espOS32** es una plataforma completa de micro-hosting, ruteo Mesh y navegador binario para microcontroladores ESP32-S3 con pantalla táctil (AMOLED/LCD QSPI). 
+**CBDos** es una plataforma completa de micro-hosting, ruteo Mesh y navegador binario para microcontroladores ESP32-S3 con pantalla táctil (AMOLED/LCD QSPI). 
 
 Permite maquetar y servir aplicaciones e interfaces gráficas dinámicas usando un lenguaje declarativo súper ligero (**CBML / PseudoHTML**) que se compila en tiempo real a bytecode binario **TLVGL**, ofreciendo experiencias aceleradas por hardware a 60 FPS sobre redes de radio de bajo ancho de banda.
 
@@ -78,4 +78,4 @@ python3 gateway/tlvgl/tlvgl_preview_server.py --port 8766
 ---
 
 ## 📄 Licencia
-Proyecto desarrollado para el ecosistema **espOS32**.
+Proyecto desarrollado para el ecosistema **CBDos**.

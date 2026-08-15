@@ -1,15 +1,15 @@
-# espOS32 — Estado del Proyecto
+# CBDos — Estado del Proyecto
 
 **Fecha:** 2026-08-11
-**Sistema:** Navegador TLVGL en ESP32-S3 (JC3248W535) + Router Mesh en Go (`espOS32-router`) + Servidor de Hosting Python + Red Mesh (Protocolo Unificado 3 Capas)
+**Sistema:** Navegador TLVGL en ESP32-S3 (JC3248W535) + Router Mesh en Go (`cbdos-router`) + Servidor de Hosting Python + Red Mesh (Protocolo Unificado 3 Capas)
 
 ---
 
 ## 1. QUÉ FUNCIONA HOY (verificado en vivo)
 
-### Router Mesh en Go (`espOS32-router`) + Servidor TLVGL (E2E Verificado) ✅
+### Router Mesh en Go (`cbdos-router`) + Servidor TLVGL (E2E Verificado) ✅
 
-El Router en Go (`gateway/router-go/build/router`) está **implementado, compilado y funcionando en vivo en TCP :8765** y Unix Socket `/tmp/espos32_router.sock`:
+El Router en Go (`gateway/router-go/build/router`) está **implementado, compilado y funcionando en vivo en TCP :8765** y Unix Socket `/tmp/cbdos_router.sock`:
 
 ```
 ESP32 (192.168.66.248) / Cliente Test
