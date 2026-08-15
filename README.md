@@ -45,6 +45,12 @@ Para superar los límites de memoria y garantizar el máximo rendimiento sin sac
 └── 0xE10000 (nvs / data):  Almacenamiento de Sistema y Configuraciones
 ```
 
+### 🚀 Comandos de Despliegue (PlatformIO)
+Dado el sistema de particiones, cada entorno debe compilarse y flashearse de manera independiente:
+* `pio run -e esp32 -t upload` *(CBDos - OS Principal)*
+* `pio run -e doom -t upload` *(Cartucho DOOM)*
+* `pio run -e gbc -t upload` *(Cartucho Game Boy)*
+
 * **Control Táctil Universal (`CartridgeGamepad`):** Overlay virtual acelerado por hardware con respuesta inmediata, multitouch GT911 y botón físico/táctil `[SALIR]` que conmuta la partición OTA para reiniciar de vuelta a CBDos sin pérdida de estado.
 * **Soporte Mandos BLE:** Conexión inalámbrica a mandos Bluetooth (ej. iPega, DualShock, mandos genéricos HID).
 

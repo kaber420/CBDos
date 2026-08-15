@@ -1,20 +1,20 @@
 # Reglas del Proyecto y Guía de Compilación (CBDos)
 
-## 📌 Entorno de Compilación y Flasheo (ESP32-S3 Directo)
-- **SIEMPRE** compilar y flashear utilizando el entorno `-e esp32`.
+## 📌 Entornos de Compilación y Flasheo (ESP32-S3 Directo)
+El proyecto usa un esquema multi-firmware OTA con entornos separados en `platformio.ini`:
+
+- **Sistema Base (CBDos):** `pio run -e esp32 -t upload`
+- **Cartucho DOOM:** `pio run -e doom -t upload` (Flashea en la partición 0x610000)
+- **Cartucho Game Boy (GBC):** `pio run -e gbc -t upload` (Flashea en la partición 0x790000)
+
 - **NUNCA** usar el entorno `emulator` ya que está en desuso y no cuenta con compatibilidad con `<Arduino.h>`.
 - El archivo `platformio.ini` reside dentro del directorio `firmware/`.
 
-### 🚀 ComandosEstándar:
+### 🚀 Comandos Estándar (Ejemplo para CBDos):
 - **Compilar Firmware:**
   ```bash
   cd firmware
   pio run -e esp32
-  ```
-- **Flashear a la Placa (ESP32-S3):**
-  ```bash
-  cd firmware
-  pio run -e esp32 -t upload
   ```
 - **Monitorear Puerto Serie (Serial Monitor Básico):**
   ```bash
