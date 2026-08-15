@@ -29,8 +29,8 @@
 // Canvas RGB565 en PSRAM (escrito por DG_DrawFrame, leído por LVGL)
 extern uint16_t* g_doomCanvasBuf;
 
-// Bitmask de zonas táctiles (escrito por DoomView touch handler)
-extern volatile uint8_t g_doomZoneBits;
+// Bitmask de zonas táctiles (escrito por el gamepad handler)
+extern volatile uint16_t g_doomZoneBits;
 
 // Flag de ejecución (false → la tarea de render sale del loop)
 extern volatile bool g_doomRunning;
@@ -57,10 +57,10 @@ static void pushKey(int pressed, unsigned char key) {
 }
 
 // Estado anterior de zonas (para detectar press/release)
-static uint8_t s_prevZoneBits = 0;
+static uint16_t s_prevZoneBits = 0;
 
 // Mapeo de bits de zona a keycodes DOOM
-static const unsigned char s_zoneToKey[8] = {
+static const unsigned char s_zoneToKey[11] = {
     KEY_STRAFE_L,    // bit 0 = Strafe Izquierda
     KEY_UPARROW,     // bit 1 = Adelante (Arriba en menú)
     KEY_STRAFE_R,    // bit 2 = Strafe Derecha
@@ -69,15 +69,18 @@ static const unsigned char s_zoneToKey[8] = {
     KEY_RIGHTARROW,  // bit 5 = Girar Derecha
     KEY_ENTER,       // bit 6 = ENTER (Entrar a New Game / Menú)
     KEY_USE,         // bit 7 = USAR / ABRIR PUERTAS (Spacebar)
+    KEY_DOWNARROW,   // bit 8 = Atrás (Abajo en menú)
+    KEY_ESCAPE,      // bit 9 = ESCAPE / Menú Principal de DOOM
+    KEY_RSHIFT       // bit 10 = Run / Speed (Shift)
 };
 
 // Procesa los cambios en g_doomZoneBits y genera eventos press/release
 static void processZoneBits(void) {
-    uint8_t current = g_doomZoneBits;
-    uint8_t changed = current ^ s_prevZoneBits;
+    uint16_t current = g_doomZoneBits;
+    uint16_t changed = current ^ s_prevZoneBits;
 
-    for (int i = 0; i < 8; i++) {
-        uint8_t mask = (1 << i);
+    for (int i = 0; i < 11; i++) {
+        uint16_t mask = (1 << i);
         if (changed & mask) {
             pushKey((current & mask) ? 1 : 0, s_zoneToKey[i]);
         }

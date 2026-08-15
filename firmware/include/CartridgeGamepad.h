@@ -6,20 +6,24 @@
 
 // ─── Máscaras de bits para botones estándar de Gamepad ──────────────────────
 enum GamepadButtons : uint16_t {
-    PAD_NONE   = 0,
-    PAD_UP     = 1 << 0,
-    PAD_DOWN   = 1 << 1,
-    PAD_LEFT   = 1 << 2,
-    PAD_RIGHT  = 1 << 3,
-    PAD_A      = 1 << 4,
-    PAD_B      = 1 << 5,
-    PAD_START  = 1 << 6,
-    PAD_SELECT = 1 << 7,
-    PAD_EXIT   = 1 << 8
+    PAD_NONE     = 0,
+    PAD_UP       = 1 << 0,
+    PAD_DOWN     = 1 << 1,
+    PAD_LEFT     = 1 << 2,
+    PAD_RIGHT    = 1 << 3,
+    PAD_A        = 1 << 4,
+    PAD_B        = 1 << 5,
+    PAD_START    = 1 << 6,
+    PAD_SELECT   = 1 << 7,
+    PAD_EXIT     = 1 << 8,
+    PAD_STRAFE_L = 1 << 9,
+    PAD_STRAFE_R = 1 << 10,
+    PAD_RUN      = 1 << 11
 };
 
 enum GamepadLayout {
     LAYOUT_PORTRAIT_GBC,  // Portrait 320x480 (Juego arriba 320x288, Controles abajo Y=288..480)
+    LAYOUT_PORTRAIT_DOOM, // Portrait 320x480 (Juego arriba 320x200, Controles abajo Y=200..480)
     LAYOUT_LANDSCAPE_DOOM // Landscape 480x320 (Controles en márgenes laterales)
 };
 
@@ -50,7 +54,9 @@ private:
     bool                m_drawn;
 
     void drawPortraitGBC();
+    void drawPortraitDoom();
     void drawLandscapeDoom();
     uint16_t readPortraitGBC(int16_t x, int16_t y);
+    uint16_t readPortraitDoom(int16_t x, int16_t y);
     uint16_t readLandscapeDoom(int16_t x, int16_t y);
 };

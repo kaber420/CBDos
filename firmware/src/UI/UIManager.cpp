@@ -91,6 +91,7 @@ void UIManager::loadTlvBrowser() {
 #include "Views/FLRCConfigView.h"
 #include "Views/GatewayConfigView.h"
 #include "Views/MusicView.h"
+#include "Views/RadioView.h"
 #include "Views/GalleryView.h"
 #include "Views/WallpaperConfigView.h"
 #include "Views/UtilitiesView.h"
@@ -99,6 +100,12 @@ void UIManager::loadTlvBrowser() {
 void UIManager::loadMusicPlayer() {
     destroyTransient();
     currentTransientScreen = MusicView::create();
+    lv_screen_load(currentTransientScreen);
+}
+
+void UIManager::loadRadioPlayer() {
+    destroyTransient();
+    currentTransientScreen = RadioView::create();
     lv_screen_load(currentTransientScreen);
 }
 

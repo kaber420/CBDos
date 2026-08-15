@@ -26,6 +26,7 @@ private:
     static lv_obj_t* playBtnLabel;
     static lv_obj_t* titleLabel;
     static lv_obj_t* statusLabel;
+    static lv_obj_t* mainIconLabel;
 
     static lv_obj_t* navHeaderBtn;
     static lv_obj_t* navHeaderLbl;
@@ -41,6 +42,6 @@ private:
     static void play_pause_cb(lv_event_t* e);
     static void prev_track_cb(lv_event_t* e);
     static void next_track_cb(lv_event_t* e);
-    static void back_to_list_cb(lv_event_t* e);
     static void nav_header_cb(lv_event_t* e);
 };
+

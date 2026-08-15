@@ -23,6 +23,7 @@ public:
     void loadFLRCConfig();
     void loadGatewayConfig();
     void loadMusicPlayer();
+    void loadRadioPlayer();
     void loadImageViewer(const std::string& imagePath, const std::string& imageName);
     void loadWallpaperConfig();
     void loadUtilities();

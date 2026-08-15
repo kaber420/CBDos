@@ -22,9 +22,9 @@ Este documento recopila la propuesta y arquitectura para las aplicaciones de uti
 2. **Métricas de Rendimiento del Servidor y del ESP32:**
    * **Servidor:** Uso de CPU, RAM del host, temperatura, almacenamiento en disco.
    * **ESP32 Local:** Free Heap, Free PSRAM, temperatura del chip (`temperatureRead()`), espacio libre en tarjeta SD.
-3. **Gestión de Red Local:**
+3. **Gestión de Red del servidorl:**
    * Conmutador táctil entre **DHCP** e **IP Estática**.
-   * Modificación de configuración de red guardada en NVS / SD.
+   * Modificación de configuración de red guardada en el servidor
 4. **Control Multimedia del Servidor:**
    * Mandar comandos de reproducción (Play / Pause / Next / Volume) a servicios de música del servidor (Spotify daemon, MPD, etc.).
 

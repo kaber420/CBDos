@@ -12,14 +12,15 @@ std::vector<TrackItem>  MusicView::playlist;
 int                     MusicView::currentTrackIndex = -1;
 bool                    MusicView::isPlaying         = false;
 
-lv_obj_t* MusicView::listContainer = nullptr;
-lv_obj_t* MusicView::playerCard     = nullptr;
-lv_obj_t* MusicView::playBtn        = nullptr;
-lv_obj_t* MusicView::playBtnLabel   = nullptr;
-lv_obj_t* MusicView::titleLabel     = nullptr;
-lv_obj_t* MusicView::statusLabel    = nullptr;
-lv_obj_t* MusicView::navHeaderBtn   = nullptr;
-lv_obj_t* MusicView::navHeaderLbl   = nullptr;
+lv_obj_t* MusicView::listContainer  = nullptr;
+lv_obj_t* MusicView::playerCard      = nullptr;
+lv_obj_t* MusicView::playBtn         = nullptr;
+lv_obj_t* MusicView::playBtnLabel    = nullptr;
+lv_obj_t* MusicView::titleLabel      = nullptr;
+lv_obj_t* MusicView::statusLabel     = nullptr;
+lv_obj_t* MusicView::mainIconLabel   = nullptr;
+lv_obj_t* MusicView::navHeaderBtn    = nullptr;
+lv_obj_t* MusicView::navHeaderLbl    = nullptr;
 
 void MusicView::scanAudioFilesSD() {
     playlist.clear();
@@ -79,10 +80,10 @@ lv_obj_t* MusicView::create() {
     DefaultTheme::applyFlatBg(scr);
 
     HeaderBarConfig cfg;
-    cfg.title = "Música";
+    cfg.title = "Musica SD";
     cfg.showBackButton = true;
     cfg.showTime = true;
-    cfg.showWifi = false; // Sin icono de Wi-Fi en Música
+    cfg.showWifi = false;
     cfg.showCartButton = false;
     cfg.titleMarquee = false;
     cfg.translucent = false;
@@ -90,7 +91,7 @@ lv_obj_t* MusicView::create() {
     headerBar = HeaderBar::create(scr, cfg);
     HeaderBar::setActiveHeader(headerBar);
 
-    // Botón de navegación dinámica en la cabecera (Lista <-> Reproductor)
+    // Botón de navegación en la cabecera (Lista SD <-> Reproductor)
     navHeaderBtn = lv_button_create(scr);
     lv_obj_set_size(navHeaderBtn, 95, 30);
     lv_obj_align(navHeaderBtn, LV_ALIGN_TOP_RIGHT, -8, 7);
@@ -102,7 +103,7 @@ lv_obj_t* MusicView::create() {
     lv_obj_set_style_text_color(navHeaderLbl, DefaultTheme::getPrimaryAccent(), 0);
     lv_obj_center(navHeaderLbl);
 
-    // Contenedor principal de la lista (con scroll)
+    // Contenedor principal de la lista SD (con scroll)
     listContainer = lv_obj_create(scr);
     lv_obj_set_size(listContainer, LV_PCT(92), LV_PCT(78));
     lv_obj_align(listContainer, LV_ALIGN_CENTER, 0, 15);
@@ -125,29 +126,11 @@ lv_obj_t* MusicView::create() {
     lv_obj_set_flex_align(playerCard, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_add_flag(playerCard, LV_OBJ_FLAG_HIDDEN);
 
-    // ── Elementos del Reproductor ──
-    lv_obj_t* topRow = lv_obj_create(playerCard);
-    lv_obj_set_size(topRow, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(topRow, 0, 0);
-    lv_obj_set_style_border_width(topRow, 0, 0);
-    lv_obj_set_style_pad_all(topRow, 0, 0);
-
-    lv_obj_t* backListBtn = lv_button_create(topRow);
-    lv_obj_set_size(backListBtn, 90, 32);
-    lv_obj_align(backListBtn, LV_ALIGN_LEFT_MID, 0, 0);
-    DefaultTheme::applyButton(backListBtn, 10);
-    lv_obj_add_event_cb(backListBtn, back_to_list_cb, LV_EVENT_CLICKED, nullptr);
-
-    lv_obj_t* backLbl = lv_label_create(backListBtn);
-    lv_label_set_text(backLbl, LV_SYMBOL_LIST " Lista");
-    lv_obj_set_style_text_font(backLbl, &lv_font_montserrat_12, 0);
-    lv_obj_center(backLbl);
-
     // Icono grande de música
-    lv_obj_t* iconLbl = lv_label_create(playerCard);
-    lv_label_set_text(iconLbl, LV_SYMBOL_AUDIO);
-    lv_obj_set_style_text_font(iconLbl, &lv_font_montserrat_32, 0);
-    lv_obj_set_style_text_color(iconLbl, DefaultTheme::getPrimaryAccent(), 0);
+    mainIconLabel = lv_label_create(playerCard);
+    lv_label_set_text(mainIconLabel, LV_SYMBOL_AUDIO);
+    lv_obj_set_style_text_font(mainIconLabel, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_color(mainIconLabel, DefaultTheme::getPrimaryAccent(), 0);
 
     // Título de la canción
     titleLabel = lv_label_create(playerCard);
@@ -218,7 +201,7 @@ void MusicView::renderPlaylist(lv_obj_t* parent) {
         lv_obj_set_size(itemBtn, LV_PCT(100), 45);
         DefaultTheme::applyButton(itemBtn, 10);
         lv_obj_set_user_data(itemBtn, (void*)(intptr_t)i);
-        lv_obj_add_flag(itemBtn, LV_OBJ_FLAG_EVENT_BUBBLE); // propaga el arrastre al padre para scroll
+        lv_obj_add_flag(itemBtn, LV_OBJ_FLAG_EVENT_BUBBLE);
         lv_obj_add_event_cb(itemBtn, track_click_cb, LV_EVENT_CLICKED, nullptr);
 
         lv_obj_set_flex_flow(itemBtn, LV_FLEX_FLOW_ROW);
@@ -251,7 +234,8 @@ void MusicView::startTrack(int index) {
     currentTrackIndex = index;
 
     lv_label_set_text(titleLabel, playlist[index].name.c_str());
-    lv_label_set_text(statusLabel, "Reproduciendo...");
+    lv_label_set_text(statusLabel, "Reproduciendo desde SD...");
+    if (mainIconLabel) lv_label_set_text(mainIconLabel, LV_SYMBOL_AUDIO);
     lv_label_set_text(playBtnLabel, LV_SYMBOL_PAUSE);
 
     NativeAudioDriver::getInstance().playMP3(playlist[index].path.c_str());
@@ -311,10 +295,6 @@ void MusicView::next_track_cb(lv_event_t* e) {
     if (playlist.empty()) return;
     int nextIdx = (currentTrackIndex + 1) % playlist.size();
     startTrack(nextIdx);
-}
-
-void MusicView::back_to_list_cb(lv_event_t* e) {
-    showListScreen();
 }
 
 void MusicView::nav_header_cb(lv_event_t* e) {

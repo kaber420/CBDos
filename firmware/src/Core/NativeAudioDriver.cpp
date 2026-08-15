@@ -147,11 +147,15 @@ static bool installI2S(int bclk, int lrck, int dout, int sampleRate) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+#include <WiFi.h>
+#include <WiFiClient.h>
+
 void NativeAudioDriver::playMP3(const char* filePath) {
     if (!initialized) begin();
     stop();
 
     currentFilePath = String(filePath);
+    _isStream = false;
     playing = true;
 
     xTaskCreatePinnedToCore(
@@ -162,6 +166,25 @@ void NativeAudioDriver::playMP3(const char* filePath) {
         2,
         &audioTaskHandle,
         0  // Core 0 — LVGL corre en Core 1
+    );
+}
+
+void NativeAudioDriver::playStream(const char* url) {
+    if (!initialized) begin();
+    stop();
+
+    currentFilePath = String(url);
+    _isStream = true;
+    playing = true;
+
+    xTaskCreatePinnedToCore(
+        streamAudioTask,
+        "StreamTask",
+        20480,
+        this,
+        2,
+        &audioTaskHandle,
+        0  // Core 0
     );
 }
 
@@ -340,6 +363,203 @@ void NativeAudioDriver::audioTask(void* param) {
     lv_fs_spi_unlock();
     driver->playing = false;
     Serial.println("[Audio] Reproduccion finalizada");
+    esp_task_wdt_delete(NULL);
+    vTaskDelete(NULL);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Streaming de Radio Online por HTTP MP3 (Icecast / Shoutcast)
+// ─────────────────────────────────────────────────────────────────────
+#define STREAM_BUF_SIZE 49152 // 48KB en PSRAM para absorber jitter de red
+
+void NativeAudioDriver::streamAudioTask(void* param) {
+    NativeAudioDriver* driver = (NativeAudioDriver*)param;
+    esp_task_wdt_add(NULL);
+
+    String url = driver->currentFilePath;
+    Serial.printf("[AudioStream] Iniciando stream: %s\n", url.c_str());
+
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[AudioStream] ERROR: WiFi no conectado");
+        driver->playing = false;
+        esp_task_wdt_delete(NULL);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Parsear URL
+    String host = "";
+    int port = 80;
+    String path = "/";
+
+    if (url.startsWith("http://")) {
+        url = url.substring(7);
+    } else if (url.startsWith("https://")) {
+        url = url.substring(8);
+        port = 443;
+    }
+
+    int slashIdx = url.indexOf('/');
+    if (slashIdx > 0) {
+        host = url.substring(0, slashIdx);
+        path = url.substring(slashIdx);
+    } else {
+        host = url;
+        path = "/";
+    }
+
+    int colonIdx = host.indexOf(':');
+    if (colonIdx > 0) {
+        port = host.substring(colonIdx + 1).toInt();
+        host = host.substring(0, colonIdx);
+    }
+
+    Serial.printf("[AudioStream] Conectando a %s:%d %s\n", host.c_str(), port, path.c_str());
+
+    WiFiClient client;
+    client.setTimeout(5000);
+
+    if (!client.connect(host.c_str(), port)) {
+        Serial.printf("[AudioStream] ERROR: No se pudo conectar a %s:%d\n", host.c_str(), port);
+        driver->playing = false;
+        esp_task_wdt_delete(NULL);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Enviar petición HTTP
+    client.printf("GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: espOS32-Radio/1.0\r\nAccept: */*\r\nIcy-MetaData: 0\r\nConnection: close\r\n\r\n",
+                  path.c_str(), host.c_str());
+
+    // Leer cabeceras HTTP
+    bool inHeader = true;
+    uint32_t headerTimeout = millis();
+    while (client.connected() && inHeader && (millis() - headerTimeout < 6000)) {
+        esp_task_wdt_reset();
+        String line = client.readStringUntil('\n');
+        line.trim();
+        if (line.length() == 0) {
+            inHeader = false;
+            break;
+        }
+    }
+
+    if (inHeader) {
+        Serial.println("[AudioStream] Timeout leyendo cabeceras HTTP");
+        client.stop();
+        driver->playing = false;
+        esp_task_wdt_delete(NULL);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    Serial.println("[AudioStream] Cabeceras recibidas. Pre-buferizando stream...");
+
+    uint8_t* streamBuf = (uint8_t*)ps_malloc(STREAM_BUF_SIZE);
+    int16_t* pcmBuf    = (int16_t*)ps_malloc(PCM_BUF_SAMPLES * sizeof(int16_t));
+
+    if (!streamBuf || !pcmBuf) {
+        Serial.println("[AudioStream] ERROR: ps_malloc fallo");
+        if (streamBuf) free(streamBuf);
+        if (pcmBuf) free(pcmBuf);
+        client.stop();
+        driver->playing = false;
+        esp_task_wdt_delete(NULL);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    uint8_t* readPtr = streamBuf;
+    int bytesLeft = 0;
+    size_t written = 0;
+
+    // Pre-buferizar 16KB para arranque suave
+    while (driver->playing && client.connected() && bytesLeft < 16384) {
+        esp_task_wdt_reset();
+        int avail = client.available();
+        if (avail > 0) {
+            int toRead = min(avail, (int)(STREAM_BUF_SIZE - bytesLeft));
+            int got = client.read(streamBuf + bytesLeft, toRead);
+            if (got > 0) bytesLeft += got;
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(15));
+        }
+    }
+
+    // Detectar frecuencia de muestreo del stream
+    int sampRate = 44100;
+    int probeOffset = MP3FindSyncWord(streamBuf, bytesLeft);
+    if (probeOffset >= 0) {
+        uint8_t* tmpPtr = streamBuf + probeOffset;
+        int tmpLeft = bytesLeft - probeOffset;
+        int err = MP3Decode(hMP3Decoder, &tmpPtr, &tmpLeft, pcmBuf, 0);
+        if (err == ERR_MP3_NONE) {
+            MP3FrameInfo info;
+            MP3GetLastFrameInfo(hMP3Decoder, &info);
+            if (info.samprate > 0) sampRate = info.samprate;
+        }
+    }
+
+    if (!installI2S(driver->_bclk, driver->_lrck, driver->_dout, sampRate)) {
+        free(streamBuf);
+        free(pcmBuf);
+        client.stop();
+        driver->playing = false;
+        esp_task_wdt_delete(NULL);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    Serial.printf("[AudioStream] Streaming activo a %d Hz\n", sampRate);
+
+    // Bucle principal de decodificación de stream
+    while (driver->playing && client.connected()) {
+        esp_task_wdt_reset();
+
+        // Rellenar streamBuf desde la red si hay espacio
+        if (bytesLeft < STREAM_BUF_SIZE / 2) {
+            memmove(streamBuf, readPtr, bytesLeft);
+            readPtr = streamBuf;
+
+            int avail = client.available();
+            if (avail > 0) {
+                int toRead = min(avail, (int)(STREAM_BUF_SIZE - bytesLeft));
+                int got = client.read(streamBuf + bytesLeft, toRead);
+                if (got > 0) bytesLeft += got;
+            }
+        }
+
+        // Si no hay suficientes datos para decodificar, esperar un poco
+        if (bytesLeft < 2048) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+
+        int offset = MP3FindSyncWord(readPtr, bytesLeft);
+        if (offset < 0) {
+            bytesLeft = 0;
+            continue;
+        }
+        readPtr += offset;
+        bytesLeft -= offset;
+
+        int err = MP3Decode(hMP3Decoder, &readPtr, &bytesLeft, pcmBuf, 0);
+        if (err == ERR_MP3_NONE) {
+            MP3FrameInfo info;
+            MP3GetLastFrameInfo(hMP3Decoder, &info);
+            int pcmBytes = info.outputSamps * sizeof(int16_t);
+            i2s_write(I2S_NUM_0, (const char*)pcmBuf, pcmBytes, &written, pdMS_TO_TICKS(200));
+        }
+
+        taskYIELD();
+    }
+
+    i2s_zero_dma_buffer(I2S_NUM_0);
+    free(streamBuf);
+    free(pcmBuf);
+    client.stop();
+    driver->playing = false;
+    Serial.println("[AudioStream] Stream finalizado");
     esp_task_wdt_delete(NULL);
     vTaskDelete(NULL);
 }

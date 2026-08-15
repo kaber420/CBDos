@@ -3,6 +3,7 @@
 //
 // Se compila exclusivamente en [env:doom] y no carga LVGL ni WiFi.
 // Dedica el 100% de la CPU y memoria al motor del juego.
+// Modo Vertical (Portrait 320x480) estilo Game Boy con CartridgeGamepad.
 // ==========================================================================
 
 #include <Arduino.h>
@@ -15,15 +16,17 @@
 
 #include "doomgeneric.h"
 #include "doomkeys.h"
+#include "CartridgeGamepad.h"
 
 // ─── Variables globales compartidas con doomgeneric_esp32.c ──────────────
 uint16_t* g_doomCanvasBuf = nullptr;
-volatile uint8_t g_doomZoneBits = 0;
+volatile uint16_t g_doomZoneBits = 0;
 volatile bool g_doomRunning = true;
 
-// ─── Drivers de Pantalla y Touch ──────────────────────────────────────────
+// ─── Drivers de Pantalla, Touch y Gamepad ─────────────────────────────────
 static JC3248W535_Display s_display;
-static JC3248W535_Touch s_touch;
+static JC3248W535_Touch   s_touch;
+static CartridgeGamepad   s_gamepad;
 
 // ─── Función para reportar errores en pantalla y serial ───────────────────
 extern "C" void Doom_ReportError(const char* msg) {
@@ -43,151 +46,6 @@ extern "C" void Doom_ReportError(const char* msg) {
         s_display.getCanvas()->setTextColor(0x07E0); // Verde
         s_display.getCanvas()->println("Toca cualquier parte para volver a espOS32");
         s_display.flush();
-    }
-}
-
-// ─── Función para salir de DOOM y volver al Sistema Operativo (app0) ──────
-static void exitToOperatingSystem() {
-    Serial.println("[DOOM] Saliendo del juego... Configurando arranque en espOS32 (app0)");
-    const esp_partition_t* os_partition = esp_partition_find_first(
-        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
-
-    if (os_partition != NULL) {
-        esp_ota_set_boot_partition(os_partition);
-        delay(200);
-        esp_restart();
-    } else {
-        Serial.println("[DOOM] ERROR: No se encontró la partición del OS (app0)");
-        esp_restart();
-    }
-}
-
-// ─── Dibujar controles táctiles visibles en pantalla ──────────────────────
-static void drawTouchOverlay() {
-    Arduino_Canvas* c = s_display.getCanvas();
-    if (!c) return;
-
-    // 1. Botón SALIR (Top Right: 420x5, W:55, H:38)
-    c->fillRect(420, 5, 55, 38, 0xF800); // Fondo Rojo
-    c->drawRect(420, 5, 55, 38, 0xFFFF); // Borde Blanco
-    c->setTextSize(1);
-    c->setTextColor(0xFFFF);
-    c->setCursor(430, 20);
-    c->print("SALIR");
-
-    // 2. Botón ENTER / MENU (Top Center: 160x5, W:160, H:38)
-    c->fillRect(160, 5, 160, 38, 0x03E0); // Fondo Verde oscuro
-    c->drawRect(160, 5, 160, 38, 0x07E0); // Borde Verde brillante
-    c->setTextSize(2);
-    c->setTextColor(0xFFFF);
-    c->setCursor(185, 16);
-    c->print("ENTER / OK");
-
-    // 3. Botón ABRIR / USE (Bottom Center: 160x275, W:160, H:38)
-    c->fillRect(160, 275, 160, 38, 0x001F); // Fondo Azul
-    c->drawRect(160, 275, 160, 38, 0x07FF); // Borde Cian
-    c->setTextSize(2);
-    c->setTextColor(0xFFFF);
-    c->setCursor(170, 286);
-    c->print("ABRIR / USE");
-
-    // 4. Cruceta Izquierda (D-Pad Movimiento)
-    // Arriba (Adelante)
-    c->fillRect(15, 65, 50, 40, 0x2104);
-    c->drawRect(15, 65, 50, 40, 0xCE79);
-    c->setTextSize(2);
-    c->setTextColor(0xFFFF);
-    c->setCursor(33, 76);
-    c->print("^");
-
-    // Abajo
-    c->fillRect(15, 205, 50, 40, 0x2104);
-    c->drawRect(15, 205, 50, 40, 0xCE79);
-    c->setCursor(33, 216);
-    c->print("v");
-
-    // Izq (Strafe L)
-    c->fillRect(5, 125, 33, 60, 0x2104);
-    c->drawRect(5, 125, 33, 60, 0xCE79);
-    c->setCursor(12, 146);
-    c->print("<");
-
-    // Der (Strafe R)
-    c->fillRect(42, 125, 33, 60, 0x2104);
-    c->drawRect(42, 125, 33, 60, 0xCE79);
-    c->setCursor(50, 146);
-    c->print(">");
-
-    // 5. Panel Derecho (Giro y Disparo)
-    // Giro Izq
-    c->fillRect(405, 65, 33, 50, 0x2104);
-    c->drawRect(405, 65, 33, 50, 0xCE79);
-    c->setCursor(412, 80);
-    c->print("L");
-
-    // Giro Der
-    c->fillRect(442, 65, 33, 50, 0x2104);
-    c->drawRect(442, 65, 33, 50, 0xCE79);
-    c->setCursor(450, 80);
-    c->print("R");
-
-    // Botón FUEGO
-    c->fillRect(405, 135, 70, 120, 0xC800); // Rojo anaranjado
-    c->drawRect(405, 135, 70, 120, 0xF800);
-    c->setTextSize(2);
-    c->setTextColor(0xFFFF);
-    c->setCursor(415, 185);
-    c->print("FIRE");
-}
-
-// ─── Mapeo Táctil a Controles de Doom ────────────────────────────────────
-static void updateTouchControls() {
-    TouchPoint tp;
-    if (s_touch.read(tp) && tp.touched) {
-        // En rotación Landscape (480x320)
-        int16_t x = tp.x;
-        int16_t y = tp.y;
-
-        // 1. Botón de salida (Esquina superior derecha: X >= 415, Y <= 48)
-        if (x >= 415 && y <= 48) {
-            exitToOperatingSystem();
-            return;
-        }
-
-        uint8_t zones = 0;
-
-        // 2. Botón ENTER / MENU (Barra superior central)
-        if (x >= 140 && x <= 340 && y <= 55) {
-            zones |= (1 << 6); // bit 6 = KEY_ENTER
-        }
-        // 3. Botón ABRIR / USE (Barra inferior central)
-        else if (x >= 140 && x <= 340 && y >= 265) {
-            zones |= (1 << 7); // bit 7 = KEY_USE
-        }
-        // 4. Panel Izquierdo (Cruceta de Movimiento)
-        else if (x < 100) {
-            if (y < 115) {
-                zones |= (1 << 1); // Adelante (UP)
-            } else if (y > 195) {
-                zones |= (1 << 1); // También movimiento
-            } else {
-                if (x < 40) zones |= (1 << 0); // Strafe Izquierda
-                else zones |= (1 << 2);        // Strafe Derecha
-            }
-        }
-        // 5. Panel Derecho (Giro y Disparo)
-        else if (x > 380) {
-            if (y >= 125) {
-                zones |= (1 << 4); // Disparo / FIRE (Ctrl)
-            } else {
-                if (x < 440) zones |= (1 << 3); // Giro Izquierda
-                else zones |= (1 << 5);         // Giro Derecha
-            }
-        }
-
-        g_doomZoneBits = zones;
-    } else {
-        g_doomZoneBits = 0;
     }
 }
 
@@ -211,25 +69,27 @@ void setup() {
         while (1) delay(1000);
     }
 
-    // 2. Inicializar Pantalla AMOLED JC3248W535
+    // 2. Inicializar Pantalla AMOLED en Portrait 320x480
     if (!s_display.begin()) {
         Serial.println("[DOOM] Error al inicializar display!");
         while (1) delay(1000);
     }
-    s_display.setRotation(ROTATION_90); // Landscape 480x320
+    s_display.setRotation(ROTATION_0); // Portrait 320x480
     s_display.backlightOn();
 
-    // 3. Inicializar Panel Táctil
+    // 3. Inicializar Panel Táctil y CartridgeGamepad en Portrait DOOM
     s_touch.begin();
     s_display.setTouchRotation(&s_touch);
+    s_gamepad.begin(&s_display, &s_touch, LAYOUT_PORTRAIT_DOOM);
 
     // Limpiar pantalla inicial
     if (s_display.getCanvas()) {
         s_display.getCanvas()->fillScreen(0x0000);
         s_display.getCanvas()->setTextSize(2);
         s_display.getCanvas()->setTextColor(0xFFFF);
-        s_display.getCanvas()->setCursor(140, 150);
+        s_display.getCanvas()->setCursor(60, 80);
         s_display.getCanvas()->print("Cargando DOOM...");
+        s_gamepad.draw(true);
         s_display.flush();
     }
 
@@ -251,14 +111,6 @@ void setup() {
 
     if (sdMounted) {
         Serial.println("[DOOM] MicroSD montada correctamente en /sd");
-        File root = SD.open("/");
-        if (root) {
-            File f = root.openNextFile();
-            while (f) {
-                Serial.printf("[SD FILE] %s (tamano: %lu bytes)\n", f.name(), (unsigned long)f.size());
-                f = root.openNextFile();
-            }
-        }
     } else {
         Serial.println("[DOOM] MicroSD no detectada!");
         if (s_display.getCanvas()) {
@@ -276,12 +128,16 @@ void setup() {
             s_display.getCanvas()->setCursor(20, 160);
             s_display.getCanvas()->setTextColor(0x07E0);
             s_display.getCanvas()->println("Toca la pantalla para volver a espOS32");
+            s_gamepad.draw(true);
             s_display.flush();
         }
         while (1) {
+            s_gamepad.read();
+            if (s_gamepad.handleExit()) return;
             TouchPoint tp;
             if (s_touch.read(tp) && tp.touched) {
-                exitToOperatingSystem();
+                CartridgeGamepad::exitToOS();
+                return;
             }
             delay(50);
         }
@@ -321,24 +177,41 @@ void setup() {
         doomgeneric_Create(1, doom_argv);
     }
     Serial.println("[DOOM] doomgeneric_Create completado.");
+
+    // Redibujar Gamepad inferior completo
+    s_gamepad.draw(true);
+    s_display.flush();
 }
 
 // ─── Loop ─────────────────────────────────────────────────────────────────
 void loop() {
-    updateTouchControls();
+    // 1. Leer Controles Táctiles mediante CartridgeGamepad
+    uint16_t btns = s_gamepad.read();
+    if (s_gamepad.handleExit()) {
+        return;
+    }
 
-    // Ejecuta un tick del motor de juego
+    uint16_t zones = 0;
+    if (btns & PAD_STRAFE_L) zones |= (1 << 0);  // bit 0 = Strafe Izquierda
+    if (btns & PAD_UP)       zones |= (1 << 1);  // bit 1 = Adelante (Up)
+    if (btns & PAD_STRAFE_R) zones |= (1 << 2);  // bit 2 = Strafe Derecha
+    if (btns & PAD_LEFT)     zones |= (1 << 3);  // bit 3 = Girar Izquierda
+    if (btns & PAD_A)        zones |= (1 << 4);  // bit 4 = Disparo (Ctrl)
+    if (btns & PAD_RIGHT)    zones |= (1 << 5);  // bit 5 = Girar Derecha
+    if (btns & PAD_START)    zones |= (1 << 6);  // bit 6 = ENTER (Entrar / OK)
+    if (btns & PAD_B)        zones |= (1 << 7);  // bit 7 = USAR / ABRIR PUERTAS (Spacebar)
+    if (btns & PAD_DOWN)     zones |= (1 << 8);  // bit 8 = Atrás (Down)
+    if (btns & PAD_SELECT)   zones |= (1 << 9);  // bit 9 = ESCAPE / Menú
+    if (btns & PAD_RUN)      zones |= (1 << 10); // bit 10 = Run / Speed (Shift)
+
+    g_doomZoneBits = zones;
+
+    // 2. Ejecuta un tick del motor de juego
     doomgeneric_Tick();
 
-    // Dibujar el canvas de DOOM (320x200) centrado en la pantalla (480x320)
-    // Offset X = (480 - 320) / 2 = 80
-    // Offset Y = (320 - 200) / 2 = 60
+    // 3. Dibujar el canvas de DOOM (320x200) en la parte superior (0, 0)
     if (s_display.getCanvas() && g_doomCanvasBuf) {
-        s_display.getCanvas()->draw16bitRGBBitmap(80, 60, g_doomCanvasBuf, DOOMGENERIC_RESX, DOOMGENERIC_RESY);
-        
-        // Dibujar botones y controles táctiles visibles
-        drawTouchOverlay();
-
+        s_display.getCanvas()->draw16bitRGBBitmap(0, 0, g_doomCanvasBuf, DOOMGENERIC_RESX, DOOMGENERIC_RESY);
         s_display.flush();
     }
 

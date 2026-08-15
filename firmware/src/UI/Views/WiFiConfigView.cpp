@@ -10,10 +10,20 @@ HeaderBar* WiFiConfigView::headerBar = nullptr;
 WiFiConfig WiFiConfigView::currentCfg;
 lv_obj_t* WiFiConfigView::taSsid = nullptr;
 lv_obj_t* WiFiConfigView::taPass = nullptr;
+lv_obj_t* WiFiConfigView::btnTogglePass = nullptr;
+lv_obj_t* WiFiConfigView::lblTogglePass = nullptr;
+bool WiFiConfigView::passVisible = false;
 lv_obj_t* WiFiConfigView::taIp = nullptr;
 lv_obj_t* WiFiConfigView::taGw = nullptr;
 lv_obj_t* WiFiConfigView::swStatic = nullptr;
 lv_obj_t* WiFiConfigView::staticContainer = nullptr;
+
+void WiFiConfigView::toggle_pass_event_cb(lv_event_t* e) {
+    if (!taPass || !lblTogglePass) return;
+    passVisible = !passVisible;
+    lv_textarea_set_password_mode(taPass, !passVisible);
+    lv_label_set_text(lblTogglePass, passVisible ? LV_SYMBOL_EYE_CLOSE : LV_SYMBOL_EYE_OPEN);
+}
 
 void WiFiConfigView::switch_event_cb(lv_event_t* e) {
     if (!swStatic || !staticContainer) return;
@@ -33,6 +43,22 @@ void WiFiConfigView::save_event_cb(lv_event_t* e) {
     if (taGw) currentCfg.gateway = lv_textarea_get_text(taGw);
 
     if (ConfigManager::getInstance().saveWiFi(currentCfg)) {
+#ifdef ARDUINO
+        if (currentCfg.ssid.length() > 0) {
+            WiFi.disconnect();
+            if (currentCfg.useStaticIp) {
+                IPAddress ip, gw, sub, dns1;
+                if (ip.fromString(currentCfg.staticIp.c_str()) && gw.fromString(currentCfg.gateway.c_str())) {
+                    sub.fromString(currentCfg.subnet.length() > 0 ? currentCfg.subnet.c_str() : "255.255.255.0");
+                    if (currentCfg.dns1.length() > 0) dns1.fromString(currentCfg.dns1.c_str());
+                    WiFi.config(ip, gw, sub, dns1);
+                }
+            } else {
+                WiFi.config(IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0));
+            }
+            WiFi.begin(currentCfg.ssid.c_str(), currentCfg.password.c_str());
+        }
+#endif
         UIManager::showToast("WiFi guardado correctamente");
         UIManager::getInstance().loadConfigView();
     } else {
@@ -79,13 +105,34 @@ lv_obj_t* WiFiConfigView::create() {
     lv_label_set_text(lblPass, "Password:");
     lv_obj_set_style_text_color(lblPass, DefaultTheme::getTextColor(), 0);
 
-    taPass = lv_textarea_create(content);
-    lv_obj_set_width(taPass, lv_pct(100));
+    lv_obj_t* passRow = lv_obj_create(content);
+    lv_obj_set_width(passRow, lv_pct(100));
+    lv_obj_set_height(passRow, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(passRow, 0, 0);
+    lv_obj_set_style_border_width(passRow, 0, 0);
+    lv_obj_set_style_pad_all(passRow, 0, 0);
+    lv_obj_set_style_pad_column(passRow, 8, 0);
+    lv_obj_set_flex_flow(passRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(passRow, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    DefaultTheme::disableScroll(passRow);
+
+    taPass = lv_textarea_create(passRow);
+    lv_obj_set_flex_grow(taPass, 1);
     lv_textarea_set_one_line(taPass, true);
+    passVisible = false;
     lv_textarea_set_password_mode(taPass, true);
     lv_textarea_set_text(taPass, currentCfg.password.c_str());
     DefaultTheme::applyRaisedCard(taPass, 10);
     UIManager::attachKeyboard(taPass);
+
+    btnTogglePass = lv_button_create(passRow);
+    lv_obj_set_size(btnTogglePass, 42, 42);
+    DefaultTheme::applyButton(btnTogglePass, 10);
+    lv_obj_add_event_cb(btnTogglePass, toggle_pass_event_cb, LV_EVENT_CLICKED, NULL);
+
+    lblTogglePass = lv_label_create(btnTogglePass);
+    lv_label_set_text(lblTogglePass, LV_SYMBOL_EYE_OPEN);
+    lv_obj_center(lblTogglePass);
 
     // IP Estatica Toggle
     lv_obj_t* rowSwitch = lv_obj_create(content);
