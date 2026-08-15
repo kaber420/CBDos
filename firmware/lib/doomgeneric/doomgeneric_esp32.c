@@ -56,6 +56,10 @@ static void pushKey(int pressed, unsigned char key) {
     s_keyQueueWrite = next;
 }
 
+void Doom_QueueKey(int pressed, unsigned char key) {
+    pushKey(pressed, key);
+}
+
 // Estado anterior de zonas (para detectar press/release)
 static uint16_t s_prevZoneBits = 0;
 

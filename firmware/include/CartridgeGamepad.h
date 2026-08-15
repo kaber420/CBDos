@@ -43,6 +43,9 @@ public:
     // Comprueba si se presionó el botón SALIR y maneja el reinicio a espOS32 (app0)
     bool handleExit();
 
+    // Dibuja el estado de Bluetooth (ON / OFF / CONECTADO)
+    void drawBTStatus(bool connected, bool enabled);
+
     // Salir inmediatamente a espOS32 (app0)
     static void exitToOS();
 

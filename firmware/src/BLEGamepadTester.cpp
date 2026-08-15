@@ -4,6 +4,7 @@
 // Diseñado para escanear, emparejar y analizar cualquier control Bluetooth
 // (Android HID, Xbox BLE, Switch, DualShock 4, Mandos chinos genéricos).
 // Muestra datos en tiempo real en Serial (115200 baud) y pantalla AMOLED JC3248W535.
+// Compatible con NimBLE-Arduino v2.x y Arduino ESP32 v3.x.
 // ==========================================================================
 
 #include <Arduino.h>
@@ -16,7 +17,7 @@ static JC3248W535_Display s_display;
 // ─── Estado Global ────────────────────────────────────────────────────────
 static bool s_doConnect = false;
 static bool s_connected = false;
-static NimBLEAdvertisedDevice* s_targetDevice = nullptr;
+static const NimBLEAdvertisedDevice* s_targetDevice = nullptr;
 static NimBLEClient* s_pClient = nullptr;
 
 static String s_statusMessage = "Iniciando BLE...";
@@ -85,7 +86,7 @@ void updateScreen() {
     canvas->setTextSize(1);
     canvas->setCursor(10, 130);
     canvas->setTextColor(0x07FF); // Cian
-    canvas->printf("Longitud: %d bytes\n", s_lastReportLen);
+    canvas->printf("Longitud: %d bytes\n", (int)s_lastReportLen);
 
     // Imprimir bytes en hexadecimal
     canvas->setCursor(10, 150);
@@ -112,9 +113,9 @@ void updateScreen() {
     canvas->println("Monitor Serie: 115200 baudios");
     canvas->setTextColor(0xFFFF);
     canvas->setCursor(10, 442);
-    canvas->println("Prueba HOME+X (Android), HOME+B (Xbox)");
+    canvas->println("Prueba los diferentes modos de tu mando");
     canvas->setCursor(10, 456);
-    canvas->println("o HOME+Y para cambiar el modo de tu mando");
+    canvas->println("(HOME + Boton) para ver los cambios");
 
     s_display.flush();
 }
@@ -127,7 +128,7 @@ static void notifyCallback(NimBLERemoteCharacteristic* pChar, uint8_t* pData, si
     s_needScreenRedraw = true;
 
     // Volcado completo y formateado por Monitor Serie
-    Serial.printf("\n[BT SNIFFER #%05lu] Len: %d | RAW HEX: ", (unsigned long)s_packetCount, length);
+    Serial.printf("\n[BT SNIFFER #%05lu] Len: %d | RAW HEX: ", (unsigned long)s_packetCount, (int)length);
     for (size_t i = 0; i < length; i++) {
         Serial.printf("%02X ", pData[i]);
     }
@@ -152,8 +153,8 @@ class ClientCallbacks : public NimBLEClientCallbacks {
         s_needScreenRedraw = true;
     }
 
-    void onDisconnect(NimBLEClient* pClient) override {
-        Serial.println("\n[BLE] *** CONTROL DESCONECTADO ***");
+    void onDisconnect(NimBLEClient* pClient, int reason) override {
+        Serial.printf("\n[BLE] *** CONTROL DESCONECTADO (motivo: %d) ***\n", reason);
         s_connected = false;
         s_doConnect = false;
         s_lastReportLen = 0;
@@ -164,8 +165,8 @@ class ClientCallbacks : public NimBLEClientCallbacks {
 };
 
 // ─── Callbacks de Escaneo ─────────────────────────────────────────────────
-class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
-    void onResult(NimBLEAdvertisedDevice* advertisedDevice) override {
+class ScanCallbacks : public NimBLEScanCallbacks {
+    void onDiscovered(const NimBLEAdvertisedDevice* advertisedDevice) override {
         String name = advertisedDevice->getName().c_str();
         String addr = advertisedDevice->getAddress().toString().c_str();
         bool hasHID = advertisedDevice->isAdvertisingService(HID_SERVICE_UUID);
@@ -216,30 +217,23 @@ bool connectToServer() {
     }
 
     Serial.println("[BLE] Buscando servicios...");
-    std::vector<NimBLERemoteService*>* services = s_pClient->getServices(true);
-    if (!services) {
-        Serial.println("[BLE ERROR] No se pudieron obtener los servicios.");
-        s_pClient->disconnect();
-        return false;
-    }
+    auto services = s_pClient->getServices(true);
 
     bool subscribed = false;
-    for (auto* pService : *services) {
+    for (auto* pService : services) {
         Serial.printf("[BLE] Servicio encontrado: UUID: %s\n", pService->getUUID().toString().c_str());
-        std::vector<NimBLERemoteCharacteristic*>* chars = pService->getCharacteristics(true);
-        if (chars) {
-            for (auto* pChar : *chars) {
-                Serial.printf("   -> Característica: UUID: %s | Notif:%s | Read:%s\n",
-                    pChar->getUUID().toString().c_str(),
-                    pChar->canNotify() ? "SI" : "NO",
-                    pChar->canRead() ? "SI" : "NO");
+        auto chars = pService->getCharacteristics(true);
+        for (auto* pChar : chars) {
+            Serial.printf("   -> Característica: UUID: %s | Notif:%s | Read:%s\n",
+                pChar->getUUID().toString().c_str(),
+                pChar->canNotify() ? "SI" : "NO",
+                pChar->canRead() ? "SI" : "NO");
 
-                // Suscribirse a notificaciones de características HID o de reporte
-                if (pChar->canNotify()) {
-                    if (pChar->subscribe(true, notifyCallback)) {
-                        Serial.printf("   [+] ¡Suscrito exitosamente a notificaciones de %s!\n", pChar->getUUID().toString().c_str());
-                        subscribed = true;
-                    }
+            // Suscribirse a notificaciones de características HID o de reporte
+            if (pChar->canNotify()) {
+                if (pChar->subscribe(true, notifyCallback)) {
+                    Serial.printf("   [+] ¡Suscrito exitosamente a notificaciones de %s!\n", pChar->getUUID().toString().c_str());
+                    subscribed = true;
                 }
             }
         }
@@ -264,7 +258,19 @@ void setup() {
     Serial.println("   espOS32 — BLE Gamepad Sniffer & Tester    ");
     Serial.println("=============================================");
 
-    // 1. Inicializar Pantalla AMOLED
+    // 1. Inicializar NimBLE PRIMERO (reserva memoria DMA para la radio antes de la pantalla)
+    NimBLEDevice::init("espOS32-Sniffer");
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Máxima potencia de transmisión BLE
+    NimBLEDevice::setSecurityAuth(true, true, true);
+
+    // 2. Configurar Escaneo
+    NimBLEScan* pScan = NimBLEDevice::getScan();
+    pScan->setScanCallbacks(new ScanCallbacks());
+    pScan->setInterval(45);
+    pScan->setWindow(15);
+    pScan->setActiveScan(true);
+
+    // 3. Inicializar Pantalla AMOLED
     if (s_display.begin()) {
         s_display.setRotation(ROTATION_0); // Portrait 320x480
         s_display.backlightOn();
@@ -272,18 +278,6 @@ void setup() {
     } else {
         Serial.println("[ERROR] No se pudo inicializar la pantalla AMOLED.");
     }
-
-    // 2. Inicializar NimBLE
-    NimBLEDevice::init("espOS32-Sniffer");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Máxima potencia de transmisión BLE
-    NimBLEDevice::setSecurityAuth(true, true, true);
-
-    // 3. Configurar Escaneo
-    NimBLEScan* pScan = NimBLEDevice::getScan();
-    pScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
-    pScan->setInterval(45);
-    pScan->setWindow(15);
-    pScan->setActiveScan(true);
 
     Serial.println("[BLE] Iniciando escaneo de mandos Bluetooth...");
     pScan->start(0, false);
