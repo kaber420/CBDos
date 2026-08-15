@@ -52,7 +52,11 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const HeaderBarConfig& config) {
         lv_obj_set_size(hb->backButton, 84, 30);
         lv_obj_align(hb->backButton, LV_ALIGN_LEFT_MID, 8, 0);
         DefaultTheme::applyButton(hb->backButton, 10);
-        lv_obj_add_event_cb(hb->backButton, back_event_cb, LV_EVENT_CLICKED, nullptr);
+        if (config.onBackClick) {
+            lv_obj_add_event_cb(hb->backButton, config.onBackClick, LV_EVENT_CLICKED, nullptr);
+        } else {
+            lv_obj_add_event_cb(hb->backButton, back_event_cb, LV_EVENT_CLICKED, nullptr);
+        }
 
         lv_obj_t * backLbl = lv_label_create(hb->backButton);
         lv_label_set_text(backLbl, LV_SYMBOL_LEFT " Volver");

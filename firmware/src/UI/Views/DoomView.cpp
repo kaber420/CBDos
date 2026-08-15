@@ -71,31 +71,36 @@ lv_obj_t* DoomView::create() {
 
     // ── Título ──
     lv_obj_t* title = lv_label_create(screen);
-    lv_label_set_text(title, "Centro de Juegos OTA");
+    lv_label_set_text(title, "Cargador de Juegos");
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 25);
 
     // ── Subtítulo ──
     lv_obj_t* sub = lv_label_create(screen);
-    lv_label_set_text(sub, "Selecciona un cartucho nativo para arrancar");
+    lv_label_set_text(sub, "Selecciona un cartucho para cargar");
     lv_obj_set_style_text_color(sub, lv_color_hex(0x888888), 0);
     lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
     lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 58);
 
     // ── Contenedor de Botones / Tarjetas ──
     lv_obj_t* container = lv_obj_create(screen);
-    lv_obj_set_size(container, 440, 210);
-    lv_obj_align(container, LV_ALIGN_CENTER, 0, 25);
+    lv_obj_set_width(container, LV_PCT(95));
+    lv_obj_set_height(container, LV_PCT(65));
+    lv_obj_align(container, LV_ALIGN_BOTTOM_MID, 0, -10);
     lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(container, 0, 0);
-    lv_obj_set_style_pad_all(container, 0, 0);
-    lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(container, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(container, 5, 0);
+    lv_obj_set_style_pad_column(container, 15, 0);
+    lv_obj_set_style_pad_row(container, 15, 0);
+    lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_scroll_dir(container, LV_DIR_VER);
 
     // 1. Tarjeta DOOM (app1)
     lv_obj_t* doomCard = lv_button_create(container);
-    lv_obj_set_size(doomCard, 195, 170);
+    lv_obj_set_width(doomCard, LV_PCT(46));
+    lv_obj_set_height(doomCard, 160);
     lv_obj_set_style_bg_color(doomCard, lv_color_hex(0x7A1A1A), 0);
     lv_obj_set_style_bg_grad_color(doomCard, lv_color_hex(0x3B0A0A), 0);
     lv_obj_set_style_bg_grad_dir(doomCard, LV_GRAD_DIR_VER, 0);
@@ -112,7 +117,8 @@ lv_obj_t* DoomView::create() {
 
     // 2. Tarjeta Game Boy Color (app2)
     lv_obj_t* gbcCard = lv_button_create(container);
-    lv_obj_set_size(gbcCard, 195, 170);
+    lv_obj_set_width(gbcCard, LV_PCT(46));
+    lv_obj_set_height(gbcCard, 160);
     lv_obj_set_style_bg_color(gbcCard, lv_color_hex(0x1B4D7E), 0);
     lv_obj_set_style_bg_grad_color(gbcCard, lv_color_hex(0x0C233C), 0);
     lv_obj_set_style_bg_grad_dir(gbcCard, LV_GRAD_DIR_VER, 0);

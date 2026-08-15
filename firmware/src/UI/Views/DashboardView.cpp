@@ -26,7 +26,7 @@ static const AppDescriptor kApps[] = {
     {5, "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD, launchConfig},
     {6, "Navegador",     LV_SYMBOL_EYE_OPEN, 0x00B4D8, launchTlvBrowser},
     {7, "Utilidades",    LV_SYMBOL_LIST,     0x00F5D4, launchUtilities},
-    {8, "DOOM",          LV_SYMBOL_PLAY,     0xE50000, launchDoom},
+    {8, "Cargador",      LV_SYMBOL_PLAY,     0xE50000, launchDoom},
 };
 
 void DashboardView::btn_event_cb(lv_event_t * e) {

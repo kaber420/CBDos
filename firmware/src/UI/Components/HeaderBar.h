@@ -9,6 +9,7 @@ struct HeaderBarConfig {
     bool showCartButton = false;
     bool titleMarquee = false;
     bool translucent = false;
+    lv_event_cb_t onBackClick = nullptr;
 };
 
 class HeaderBar {

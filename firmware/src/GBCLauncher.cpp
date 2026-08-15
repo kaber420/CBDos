@@ -65,6 +65,7 @@ static struct minigb_apu_ctx  s_apu;
 // ─── Control de Audio Autónomo en Core 0 (Modelo DOOM) ──────────────────────
 static volatile bool          s_soundRunning = false;
 static TaskHandle_t           s_audioTaskHandle = nullptr;
+static SemaphoreHandle_t      s_frameSync = nullptr;
 
 // ─── Paleta clásica Game Boy monocromático (RGB565) ─────────────────────────
 static const uint16_t s_palette[4] = {
@@ -177,6 +178,9 @@ static void gbc_audio_task(void *param) {
     while (s_soundRunning) {
         minigb_apu_audio_callback(&s_apu, audioStream);
         i2s_write(I2S_NUM_0, (const char*)audioStream, sizeof(audioStream), &bytesWritten, portMAX_DELAY);
+        
+        // Sincronizar el emulador: liberamos 1 frame (16.7ms)
+        if (s_frameSync) xSemaphoreGive(s_frameSync);
     }
 
     vTaskDelete(NULL);
@@ -584,6 +588,12 @@ void setup() {
         gb_init_lcd(&s_gb, lcd_draw_line_dmg);
     }
 
+    // Activar Frame Skip nativo para procesar lógica a 60 FPS pero dibujar a 30 FPS
+    s_gb.direct.frame_skip = 1;
+
+    // Crear semáforo de sincronización (máximo 2 frames de acumulación para evitar saltos locos)
+    s_frameSync = xSemaphoreCreateCounting(2, 0);
+
     s_gb.direct.joypad = 0xFF;
 
     Serial.printf("[GBC] Modo detectado: %s\n", s_gb.cgb.cgbMode ? "GAME BOY COLOR (CGB)" : "GAME BOY CLASICO (DMG)");
@@ -598,6 +608,12 @@ void setup() {
 
 // ─── LOOP PRINCIPAL ULTRA OPTIMIZADO (CORE 1 100% LIBERADO) ─────────────────
 void loop() {
+    // 0. Sincronización perfecta a 60 FPS regida por la tarea de Audio (Core 0)
+    // Esto asegura que el juego no vaya ni más rápido ni más lento que la música
+    if (s_frameSync) {
+        xSemaphoreTake(s_frameSync, portMAX_DELAY);
+    }
+
     // 1. Leer Controles Táctiles cada 2 frames
     static uint8_t s_touchDiv = 0;
     if (++s_touchDiv >= 2) {
@@ -626,9 +642,15 @@ void loop() {
     gb_run_frame_dualfetch(&s_gb);
 
     // 3. Refrescar ÚNICAMENTE el área de juego (320x288) a máxima velocidad
-    if (s_fastCanvas) {
-        s_fastCanvas->flushGameArea();
-    } else {
-        s_display.flush();
+    // Con Frame Skip nativo, el buffer de pantalla solo se actualiza la mitad de las veces
+    // Optimizamos el bus SPI refrescando la pantalla física solo 1 de cada 2 frames (30 FPS visuales)
+    static bool renderFrame = false;
+    renderFrame = !renderFrame;
+    if (renderFrame) {
+        if (s_fastCanvas) {
+            s_fastCanvas->flushGameArea();
+        } else {
+            s_display.flush();
+        }
     }
 }

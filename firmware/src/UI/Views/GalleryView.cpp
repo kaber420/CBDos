@@ -33,9 +33,24 @@ lv_obj_t* GalleryView::create(const std::string& imagePath, const std::string& i
     lv_obj_set_scroll_dir(container, LV_DIR_ALL);
     lv_obj_set_scrollbar_mode(container, LV_SCROLLBAR_MODE_AUTO);
 
-    // Imagen a tamaño real (LV_SIZE_CONTENT)
-    lv_obj_t* imgObj = lv_image_create(container);
-    lv_image_set_src(imgObj, resolvedPath.c_str());
+    std::string lowerResolved = resolvedPath;
+    for (auto &c : lowerResolved) c = tolower(c);
+    bool isGif = (lowerResolved.length() >= 4 && lowerResolved.substr(lowerResolved.length() - 4) == ".gif");
+
+    lv_obj_t* imgObj = nullptr;
+    if (isGif) {
+#if LV_USE_GIF
+        imgObj = lv_gif_create(container);
+        lv_gif_set_src(imgObj, resolvedPath.c_str());
+#else
+        imgObj = lv_image_create(container);
+        lv_image_set_src(imgObj, resolvedPath.c_str());
+#endif
+    } else {
+        imgObj = lv_image_create(container);
+        lv_image_set_src(imgObj, resolvedPath.c_str());
+    }
+
     lv_obj_set_size(imgObj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_center(imgObj);
 
@@ -48,6 +63,9 @@ lv_obj_t* GalleryView::create(const std::string& imagePath, const std::string& i
     cfg.showCartButton = false;
     cfg.titleMarquee = true;
     cfg.translucent = true;
+    cfg.onBackClick = [](lv_event_t* e) {
+        UIManager::getInstance().loadMediaGallery();
+    };
 
     headerBar = HeaderBar::create(scr, cfg);
     HeaderBar::setActiveHeader(headerBar);
