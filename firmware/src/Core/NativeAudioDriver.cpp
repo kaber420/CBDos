@@ -24,6 +24,26 @@
 static HMP3Decoder hMP3Decoder = nullptr;
 static HAACDecoder hAACDecoder = nullptr;
 
+// ─── Control de Volumen por Software ─────────────────────────────────
+volatile uint8_t NativeAudioDriver::_volumePercent = 80;
+
+void NativeAudioDriver::setVolume(uint8_t percent) {
+    _volumePercent = (percent > 100) ? 100 : percent;
+}
+
+uint8_t NativeAudioDriver::getVolume() {
+    return _volumePercent;
+}
+
+void NativeAudioDriver::applyGain(int16_t* buf, int samples) {
+    uint8_t vol = _volumePercent;
+    if (vol >= 100) return;
+    if (vol == 0) { memset(buf, 0, samples * sizeof(int16_t)); return; }
+    for (int i = 0; i < samples; i++) {
+        buf[i] = (int16_t)(((int32_t)buf[i] * vol) / 100);
+    }
+}
+
 // Helper: Calcular el tamaño total de la cabecera ID3v2 (incluyendo carátulas grandes)
 // y avanzar el puntero del archivo FÍSICAMENTE con f.seek() hasta el primer frame de audio MP3 real.
 static uint32_t getID3v2Size(File& f) {
@@ -351,6 +371,8 @@ void NativeAudioDriver::audioTask(void* param) {
             MP3FrameInfo info;
             MP3GetLastFrameInfo(hMP3Decoder, &info);
 
+            // Aplicar ganancia de volumen por software
+            applyGain(pcmBuf, info.outputSamps);
             // Escribir PCM al I2S. 200ms de timeout — nunca portMAX_DELAY
             int pcmBytes = info.outputSamps * sizeof(int16_t);
             i2s_write(I2S_NUM_0, (const char*)pcmBuf, pcmBytes, &written,
@@ -715,6 +737,7 @@ void NativeAudioDriver::streamAudioTask(void* param) {
                     Serial.printf("[AudioStream] AAC sample rate actualizado: %d Hz\n", currentSampleRate);
                 }
                 int pcmBytes = info.outputSamps * sizeof(int16_t);
+                applyGain(pcmBuf, info.outputSamps);
                 i2s_write(I2S_NUM_0, (const char*)pcmBuf, pcmBytes, &written, pdMS_TO_TICKS(200));
             } else if (err != ERR_AAC_INDATA_UNDERFLOW) {
                 readPtr++;
@@ -740,6 +763,7 @@ void NativeAudioDriver::streamAudioTask(void* param) {
                     Serial.printf("[AudioStream] MP3 sample rate actualizado: %d Hz\n", currentSampleRate);
                 }
                 int pcmBytes = info.outputSamps * sizeof(int16_t);
+                applyGain(pcmBuf, info.outputSamps);
                 i2s_write(I2S_NUM_0, (const char*)pcmBuf, pcmBytes, &written, pdMS_TO_TICKS(200));
             } else if (err != ERR_MP3_INDATA_UNDERFLOW) {
                 readPtr++;

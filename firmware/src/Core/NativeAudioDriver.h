@@ -18,7 +18,13 @@ public:
     bool isStream() const { return _isStream; }
     const String& getCurrentTarget() const { return currentFilePath; }
 
+    // Control de volumen por software (0-100%)
+    static void setVolume(uint8_t percent);
+    static uint8_t getVolume();
+
 private:
+    static volatile uint8_t _volumePercent;
+    static void applyGain(int16_t* buf, int samples);
     NativeAudioDriver() = default;
     ~NativeAudioDriver() = default;
 

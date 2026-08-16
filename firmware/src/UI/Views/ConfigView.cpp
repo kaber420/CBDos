@@ -7,6 +7,71 @@
 #include <cstdio>
 
 HeaderBar* ConfigView::headerBar = nullptr;
+lv_timer_t* ConfigView::s_nvsTimer = nullptr;
+uint32_t ConfigView::s_nvsStartTime = 0;
+lv_obj_t* ConfigView::s_nvsBar = nullptr;
+lv_obj_t* ConfigView::s_nvsSubLabel = nullptr;
+
+void ConfigView::cancel_nvs_reset() {
+    if (s_nvsTimer) {
+        lv_timer_delete(s_nvsTimer);
+        s_nvsTimer = nullptr;
+    }
+    s_nvsStartTime = 0;
+    if (s_nvsBar) {
+        lv_bar_set_value(s_nvsBar, 0, LV_ANIM_OFF);
+    }
+    if (s_nvsSubLabel) {
+        lv_label_set_text(s_nvsSubLabel, "Mantén presionado 3s para borrar");
+    }
+}
+
+void ConfigView::nvs_timer_cb(lv_timer_t* timer) {
+    (void)timer;
+    if (!s_nvsStartTime) return;
+    
+    uint32_t elapsed = lv_tick_elaps(s_nvsStartTime);
+    if (elapsed < 3000) {
+        int32_t progress = (elapsed * 100) / 3000;
+        if (s_nvsBar) {
+            lv_bar_set_value(s_nvsBar, progress, LV_ANIM_OFF);
+        }
+        if (s_nvsSubLabel) {
+            float rem = (3000.0f - (float)elapsed) / 1000.0f;
+            if (rem < 0.0f) rem = 0.0f;
+            char buf[48];
+            snprintf(buf, sizeof(buf), "Soltar para cancelar (%.1fs)", rem);
+            lv_label_set_text(s_nvsSubLabel, buf);
+        }
+    } else {
+        cancel_nvs_reset();
+        ConfigManager::getInstance().clearAllNvs();
+        UIManager::showToast("NVS borrado completamente");
+    }
+}
+
+void ConfigView::nvs_btn_event_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    
+    if (code == LV_EVENT_PRESSED) {
+        s_nvsStartTime = lv_tick_get();
+        if (s_nvsTimer) {
+            lv_timer_delete(s_nvsTimer);
+            s_nvsTimer = nullptr;
+        }
+        s_nvsTimer = lv_timer_create(nvs_timer_cb, 30, nullptr);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        cancel_nvs_reset();
+    } else if (code == LV_EVENT_DELETE) {
+        if (s_nvsTimer) {
+            lv_timer_delete(s_nvsTimer);
+            s_nvsTimer = nullptr;
+        }
+        s_nvsBar = nullptr;
+        s_nvsSubLabel = nullptr;
+        s_nvsStartTime = 0;
+    }
+}
 
 void ConfigView::btn_event_cb(lv_event_t * e) {
     lv_event_code_t code = lv_event_get_code(e);
@@ -26,9 +91,6 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
             UIManager::getInstance().loadWallpaperConfig();
         } else if (id == 6) {
             DiagnosticsModal::show(lv_screen_active(), getSystemDiagnostics());
-        } else if (id == 7) {
-            ConfigManager::getInstance().clearAllNvs();
-            UIManager::showToast("NVS borrado completamente");
         }
     }
 }
@@ -68,7 +130,7 @@ lv_obj_t* ConfigView::create() {
         {"Gateways", "Servidores y ruteo TLV", 4},
         {"Fondo de Pantalla", "Elegir wallpaper de SD o Flash", 5},
         {"Sistema", "Diagnostico de hardware y memoria", 6},
-        {"Resetear NVS", "Borrar todas las configuraciones de NVS", 7}
+        {"Resetear NVS", "Mantén presionado 3s para borrar", 7}
     };
 
     for (int i = 0; i < 7; i++) {
@@ -77,7 +139,12 @@ lv_obj_t* ConfigView::create() {
         lv_obj_set_height(card, 60);
         DefaultTheme::applyButton(card, 14);
         lv_obj_set_user_data(card, (void*)(intptr_t)options[i].id);
-        lv_obj_add_event_cb(card, btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+        if (options[i].id == 7) {
+            lv_obj_add_event_cb(card, nvs_btn_event_cb, LV_EVENT_ALL, NULL);
+        } else {
+            lv_obj_add_event_cb(card, btn_event_cb, LV_EVENT_CLICKED, NULL);
+        }
 
         lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -107,11 +174,37 @@ lv_obj_t* ConfigView::create() {
         lv_obj_set_style_text_color(subLbl, DefaultTheme::getMutedTextColor(), 0);
         lv_obj_set_style_text_font(subLbl, &lv_font_montserrat_12, 0);
 
-        // Flecha a la derecha alineada verticalmente al centro
-        lv_obj_t* arrow = lv_label_create(card);
-        lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
-        lv_obj_set_style_text_color(arrow, DefaultTheme::getMutedTextColor(), 0);
-        lv_obj_set_style_text_font(arrow, &lv_font_montserrat_14, 0);
+        // Icono a la derecha alineado verticalmente al centro
+        lv_obj_t* iconRight = lv_label_create(card);
+        if (options[i].id == 7) {
+            lv_label_set_text(iconRight, LV_SYMBOL_TRASH);
+            lv_obj_set_style_text_color(iconRight, lv_color_hex(0xEF4444), 0);
+        } else {
+            lv_label_set_text(iconRight, LV_SYMBOL_RIGHT);
+            lv_obj_set_style_text_color(iconRight, DefaultTheme::getMutedTextColor(), 0);
+        }
+        lv_obj_set_style_text_font(iconRight, &lv_font_montserrat_14, 0);
+
+        // Elementos específicos de Resetear NVS
+        if (options[i].id == 7) {
+            s_nvsSubLabel = subLbl;
+
+            // Barra de progreso de llenado en el borde inferior de la tarjeta
+            lv_obj_t* bar = lv_bar_create(card);
+            s_nvsBar = bar;
+            lv_obj_add_flag(bar, LV_OBJ_FLAG_FLOATING);
+            lv_bar_set_range(bar, 0, 100);
+            lv_bar_set_value(bar, 0, LV_ANIM_OFF);
+            lv_obj_set_size(bar, lv_pct(100), 4);
+            lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, 6);
+            lv_obj_set_style_bg_color(bar, lv_color_hex(0x2A2E3D), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(bar, lv_color_hex(0xEF4444), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_INDICATOR);
+            lv_obj_set_style_radius(bar, 2, LV_PART_MAIN);
+            lv_obj_set_style_radius(bar, 2, LV_PART_INDICATOR);
+            lv_obj_remove_flag(bar, LV_OBJ_FLAG_CLICKABLE);
+        }
     }
 
     return screen;

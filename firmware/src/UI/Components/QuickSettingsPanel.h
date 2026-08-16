@@ -12,4 +12,6 @@ private:
 
     static void mask_click_cb(lv_event_t* e);
     static void full_config_cb(lv_event_t* e);
+    static void volume_slider_cb(lv_event_t* e);
+    static void brightness_slider_cb(lv_event_t* e);
 };

@@ -130,6 +130,7 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const HeaderBarConfig& config) {
         lv_obj_set_style_text_color(hb->timeLabel, DefaultTheme::getTextColor(), 0);
         lv_obj_set_style_text_font(hb->timeLabel, &lv_font_montserrat_16, 0);
         lv_obj_add_flag(hb->timeLabel, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(hb->timeLabel, status_tap_cb, LV_EVENT_CLICKED, nullptr);
         hb->updateTime(lastTimeStr);
     }
 

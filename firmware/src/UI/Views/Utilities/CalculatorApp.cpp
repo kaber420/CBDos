@@ -21,13 +21,49 @@ void CalculatorApp::updateDisplay() {
     }
     if (s_calcMainLabel && lv_obj_is_valid(s_calcMainLabel)) {
         lv_label_set_text(s_calcMainLabel, s_calcInput.c_str());
+        size_t len = s_calcInput.length();
+        if (len <= 11) {
+            lv_obj_set_style_text_font(s_calcMainLabel, &lv_font_montserrat_24, 0);
+        } else if (len <= 15) {
+            lv_obj_set_style_text_font(s_calcMainLabel, &lv_font_montserrat_16, 0);
+        } else {
+            lv_obj_set_style_text_font(s_calcMainLabel, &lv_font_montserrat_14, 0);
+        }
     }
 }
 
 std::string CalculatorApp::formatNumber(double val) {
     if (std::isnan(val) || std::isinf(val)) return "Error";
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%.6g", val);
+    if (fabs(val) < 1e-15) return "0";
+
+    char buf[64];
+    double absVal = fabs(val);
+
+    // Entero exacto dentro de rango de 15 dígitos
+    if (fabs(val - std::round(val)) < 1e-11 && absVal < 1e15) {
+        snprintf(buf, sizeof(buf), "%.0f", std::round(val));
+        return std::string(buf);
+    }
+
+    // Decimales estándar de alta precisión (hasta 10 cifras decimales)
+    if (absVal < 1e15 && absVal >= 1e-6) {
+        snprintf(buf, sizeof(buf), "%.10f", val);
+        char* p = strchr(buf, '.');
+        if (p) {
+            char* end = buf + strlen(buf) - 1;
+            while (end > p && *end == '0') {
+                *end = '\0';
+                end--;
+            }
+            if (end == p) {
+                *p = '\0';
+            }
+        }
+        return std::string(buf);
+    }
+
+    // Para números extremos fuera de escala estándar
+    snprintf(buf, sizeof(buf), "%.10g", val);
     return std::string(buf);
 }
 
@@ -45,7 +81,7 @@ void CalculatorApp::btnEventCb(lv_event_t* e) {
             s_calcInput = txt;
             s_calcStartNew = false;
         } else {
-            if (s_calcInput.length() < 12) {
+            if (s_calcInput.length() < 18) {
                 s_calcInput += txt;
             }
         }
@@ -56,7 +92,9 @@ void CalculatorApp::btnEventCb(lv_event_t* e) {
             s_calcInput = "0.";
             s_calcStartNew = false;
         } else if (s_calcInput.find('.') == std::string::npos) {
-            s_calcInput += ".";
+            if (s_calcInput.length() < 18) {
+                s_calcInput += ".";
+            }
         }
     }
     // Clear (C)
