@@ -46,14 +46,11 @@
 #define LV_USE_DEMO_BENCHMARK 0
 #define LV_USE_DEMO_STRESS 0
 
-/* --- Custom Memory Allocator (PSRAM — 8MB externo en ESP32-S3) --- */
-#define LV_MEM_CUSTOM 1
-#if LV_MEM_CUSTOM
-    #define LV_MEM_CUSTOM_INCLUDE <esp_heap_caps.h>
-    #define LV_MEM_CUSTOM_ALLOC   ps_malloc
-    #define LV_MEM_CUSTOM_FREE    free
-    #define LV_MEM_CUSTOM_REALLOC ps_realloc
-#endif
+/* --- LVGL 9.5 Memory Pool Allocator (PSRAM 8MB en ESP32-S3) --- */
+#define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
+#define LV_MEM_SIZE          (1024 * 1024U) /* 1 MB de heap exclusivo para LVGL 9.5 en PSRAM */
+#define LV_MEM_POOL_INCLUDE  <esp_heap_caps.h>
+#define LV_MEM_POOL_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
 
 
 

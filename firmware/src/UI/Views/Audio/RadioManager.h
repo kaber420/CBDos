@@ -10,21 +10,21 @@
 #endif
 
 struct RadioStation {
-    std::string name;
-    std::string url;
-    std::string country;
-    std::string genre;
+    char name[64];
+    char url[192];
+    char country[32];
+    char genre[32];
     int bitrate = 128;
     bool isFavorite = false;
-};
 
-struct GenreTrio {
-    const char* label1;
-    const char* key1;
-    const char* label2;
-    const char* key2;
-    const char* label3;
-    const char* key3;
+    RadioStation() {
+        name[0] = '\0';
+        url[0] = '\0';
+        country[0] = '\0';
+        genre[0] = '\0';
+        bitrate = 128;
+        isFavorite = false;
+    }
 };
 
 class RadioManager {
@@ -42,12 +42,8 @@ public:
     void saveFavorites();
     void loadFavorites();
 
-    // Emisoras por categoría desde memoria pura
-    std::vector<RadioStation> getCategoryStations(const std::string& category);
-
-    // Catálogo de tríos de géneros
-    static size_t getTrioCount();
-    static GenreTrio getTrio(size_t index);
+    // Emisoras desde API radio-browser
+    std::vector<RadioStation> searchStations(const std::string& query, int offset, int limit);
 
 private:
     RadioManager() = default;

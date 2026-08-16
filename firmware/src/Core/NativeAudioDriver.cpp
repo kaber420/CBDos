@@ -1,6 +1,7 @@
 #include "NativeAudioDriver.h"
 #include <driver/i2s.h>
 #include <SD.h>
+#include <WiFiClientSecure.h>
 #include <esp_task_wdt.h>
 #include "libhelix-mp3/mp3dec.h"
 #include "../UI/UIManager.h"
@@ -391,12 +392,15 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     String host = "";
     int port = 80;
     String path = "/";
+    bool isHttps = false;
 
     if (url.startsWith("http://")) {
         url = url.substring(7);
+        isHttps = false;
     } else if (url.startsWith("https://")) {
         url = url.substring(8);
         port = 443;
+        isHttps = true;
     }
 
     int slashIdx = url.indexOf('/');
@@ -414,13 +418,26 @@ void NativeAudioDriver::streamAudioTask(void* param) {
         host = host.substring(0, colonIdx);
     }
 
-    Serial.printf("[AudioStream] Conectando a %s:%d %s\n", host.c_str(), port, path.c_str());
+    Serial.printf("[AudioStream] Conectando a %s:%d %s (HTTPS: %s)\n", host.c_str(), port, path.c_str(), isHttps ? "SI" : "NO");
 
-    WiFiClient client;
-    client.setTimeout(5000);
+    WiFiClient* client = nullptr;
+    WiFiClientSecure* secClient = nullptr;
+    WiFiClient* plainClient = nullptr;
 
-    if (!client.connect(host.c_str(), port)) {
+    if (isHttps || port == 443) {
+        secClient = new WiFiClientSecure();
+        secClient->setInsecure();
+        secClient->setTimeout(4000);
+        client = secClient;
+    } else {
+        plainClient = new WiFiClient();
+        plainClient->setTimeout(4000);
+        client = plainClient;
+    }
+
+    if (!client->connect(host.c_str(), port)) {
         Serial.printf("[AudioStream] ERROR: No se pudo conectar a %s:%d\n", host.c_str(), port);
+        delete client;
         driver->playing = false;
         esp_task_wdt_delete(NULL);
         vTaskDelete(NULL);
@@ -428,25 +445,30 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     }
 
     // Enviar petición HTTP
-    client.printf("GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: CBDos-Radio/1.0\r\nAccept: */*\r\nIcy-MetaData: 0\r\nConnection: close\r\n\r\n",
-                  path.c_str(), host.c_str());
+    client->printf("GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: CBDos-Radio/1.0\r\nAccept: */*\r\nIcy-MetaData: 0\r\nConnection: close\r\n\r\n",
+                   path.c_str(), host.c_str());
 
-    // Leer cabeceras HTTP
+    // Leer cabeceras HTTP de forma segura (sin bloquear el watchdog)
     bool inHeader = true;
     uint32_t headerTimeout = millis();
-    while (client.connected() && inHeader && (millis() - headerTimeout < 6000)) {
+    while (client->connected() && inHeader && (millis() - headerTimeout < 6000)) {
         esp_task_wdt_reset();
-        String line = client.readStringUntil('\n');
-        line.trim();
-        if (line.length() == 0) {
-            inHeader = false;
-            break;
+        if (client->available()) {
+            String line = client->readStringUntil('\n');
+            line.trim();
+            if (line.length() == 0) {
+                inHeader = false;
+                break;
+            }
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
     }
 
     if (inHeader) {
         Serial.println("[AudioStream] Timeout leyendo cabeceras HTTP");
-        client.stop();
+        client->stop();
+        delete client;
         driver->playing = false;
         esp_task_wdt_delete(NULL);
         vTaskDelete(NULL);
@@ -462,7 +484,8 @@ void NativeAudioDriver::streamAudioTask(void* param) {
         Serial.println("[AudioStream] ERROR: ps_malloc fallo");
         if (streamBuf) free(streamBuf);
         if (pcmBuf) free(pcmBuf);
-        client.stop();
+        client->stop();
+        delete client;
         driver->playing = false;
         esp_task_wdt_delete(NULL);
         vTaskDelete(NULL);
@@ -474,12 +497,13 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     size_t written = 0;
 
     // Pre-buferizar 16KB para arranque suave
-    while (driver->playing && client.connected() && bytesLeft < 16384) {
+    uint32_t bufferStart = millis();
+    while (driver->playing && client->connected() && bytesLeft < 16384 && (millis() - bufferStart < 8000)) {
         esp_task_wdt_reset();
-        int avail = client.available();
+        int avail = client->available();
         if (avail > 0) {
             int toRead = min(avail, (int)(STREAM_BUF_SIZE - bytesLeft));
-            int got = client.read(streamBuf + bytesLeft, toRead);
+            int got = client->read(streamBuf + bytesLeft, toRead);
             if (got > 0) bytesLeft += got;
         } else {
             vTaskDelay(pdMS_TO_TICKS(15));
@@ -503,7 +527,8 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     if (!installI2S(driver->_bclk, driver->_lrck, driver->_dout, sampRate)) {
         free(streamBuf);
         free(pcmBuf);
-        client.stop();
+        client->stop();
+        delete client;
         driver->playing = false;
         esp_task_wdt_delete(NULL);
         vTaskDelete(NULL);
@@ -513,7 +538,7 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     Serial.printf("[AudioStream] Streaming activo a %d Hz\n", sampRate);
 
     // Bucle principal de decodificación de stream
-    while (driver->playing && client.connected()) {
+    while (driver->playing && client->connected()) {
         esp_task_wdt_reset();
 
         // Rellenar streamBuf desde la red si hay espacio
@@ -521,10 +546,10 @@ void NativeAudioDriver::streamAudioTask(void* param) {
             memmove(streamBuf, readPtr, bytesLeft);
             readPtr = streamBuf;
 
-            int avail = client.available();
+            int avail = client->available();
             if (avail > 0) {
                 int toRead = min(avail, (int)(STREAM_BUF_SIZE - bytesLeft));
-                int got = client.read(streamBuf + bytesLeft, toRead);
+                int got = client->read(streamBuf + bytesLeft, toRead);
                 if (got > 0) bytesLeft += got;
             }
         }
@@ -538,6 +563,7 @@ void NativeAudioDriver::streamAudioTask(void* param) {
         int offset = MP3FindSyncWord(readPtr, bytesLeft);
         if (offset < 0) {
             bytesLeft = 0;
+            vTaskDelay(pdMS_TO_TICKS(5));
             continue;
         }
         readPtr += offset;
@@ -557,7 +583,8 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     i2s_zero_dma_buffer(I2S_NUM_0);
     free(streamBuf);
     free(pcmBuf);
-    client.stop();
+    client->stop();
+    delete client;
     driver->playing = false;
     Serial.println("[AudioStream] Stream finalizado");
     esp_task_wdt_delete(NULL);

@@ -7,24 +7,13 @@
 #ifdef ARDUINO
 #include <Arduino.h>
 #include <SD.h>
+#include <WiFi.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #endif
 
-static const GenreTrio kGenreTrios[] = {
-    {"Top", "topclick", "Rock", "rock", "Pop", "pop"},
-    {"Chill", "chillout", "Jazz", "jazz", "Reggae", "reggae"},
-    {"Metal", "metal", "Electro", "electro", "News", "news"},
-    {"Latin", "latin", "Ambient", "ambient", "Classical", "classical"}
-};
-
-size_t RadioManager::getTrioCount() {
-    return sizeof(kGenreTrios) / sizeof(kGenreTrios[0]);
-}
-
-GenreTrio RadioManager::getTrio(size_t index) {
-    if (index >= getTrioCount()) return kGenreTrios[0];
-    return kGenreTrios[index];
-}
+// Funciones estáticas de trios removidas
 
 void RadioManager::init() {
     loadFavorites();
@@ -77,13 +66,17 @@ void RadioManager::loadFavorites() {
                     JsonArray stationsArr = doc["stations"].as<JsonArray>();
                     for (JsonObject sObj : stationsArr) {
                         RadioStation st;
-                        st.name = sObj["name"].as<const char*>() ? sObj["name"].as<const char*>() : "Radio";
-                        st.url = sObj["url"].as<const char*>() ? sObj["url"].as<const char*>() : "";
-                        st.country = sObj["country"].as<const char*>() ? sObj["country"].as<const char*>() : "Global";
-                        st.genre = sObj["genre"].as<const char*>() ? sObj["genre"].as<const char*>() : "Varios";
-                        st.bitrate = sObj["bitrate"].as<int>() ? sObj["bitrate"].as<int>() : 128;
+                        const char* n = sObj["name"] | "Radio";
+                        const char* u = sObj["url"] | "";
+                        const char* c = sObj["country"] | "Global";
+                        const char* g = sObj["genre"] | "Varios";
+                        strncpy(st.name, n, sizeof(st.name) - 1);
+                        strncpy(st.url, u, sizeof(st.url) - 1);
+                        strncpy(st.country, c, sizeof(st.country) - 1);
+                        strncpy(st.genre, g, sizeof(st.genre) - 1);
+                        st.bitrate = sObj["bitrate"] | 128;
                         st.isFavorite = true;
-                        if (!st.url.empty()) {
+                        if (st.url[0] != '\0') {
                             favorites.push_back(st);
                         }
                     }
@@ -98,38 +91,21 @@ void RadioManager::loadFavorites() {
 #endif
 
     if (favorites.empty()) {
-        favorites.push_back({
-            "SomaFM Groove Salad",
-            "http://ice1.somafm.com/groovesalad-128-mp3",
-            "USA",
-            "Ambient / Chill",
-            128,
-            true
-        });
-        favorites.push_back({
-            "Ibiza Global Radio",
-            "http://listento.ibizaglobalradio.com:8024/stream",
-            "Espana",
-            "Electronic",
-            128,
-            true
-        });
-        favorites.push_back({
-            "Radio Paradise",
-            "http://stream.radioparadise.com/mp3-128",
-            "USA",
-            "Rock / Eclectic",
-            128,
-            true
-        });
-        favorites.push_back({
-            "SomaFM Secret Agent",
-            "http://ice1.somafm.com/secretagent-128-mp3",
-            "USA",
-            "Spy / Lounge",
-            128,
-            true
-        });
+        auto addDefault = [&](const char* name, const char* url, const char* country, const char* genre, int bitrate) {
+            RadioStation st;
+            strncpy(st.name, name, sizeof(st.name) - 1);
+            strncpy(st.url, url, sizeof(st.url) - 1);
+            strncpy(st.country, country, sizeof(st.country) - 1);
+            strncpy(st.genre, genre, sizeof(st.genre) - 1);
+            st.bitrate = bitrate;
+            st.isFavorite = true;
+            favorites.push_back(st);
+        };
+
+        addDefault("SomaFM Groove Salad", "http://ice1.somafm.com/groovesalad-128-mp3", "USA", "Ambient / Chill", 128);
+        addDefault("Ibiza Global Radio", "http://listento.ibizaglobalradio.com:8024/stream", "Espana", "Electronic", 128);
+        addDefault("Radio Paradise", "http://stream.radioparadise.com/mp3-128", "USA", "Rock / Eclectic", 128);
+        addDefault("SomaFM Secret Agent", "http://ice1.somafm.com/secretagent-128-mp3", "USA", "Spy / Lounge", 128);
     }
 }
 
@@ -146,10 +122,10 @@ void RadioManager::saveFavorites() {
             JsonArray stationsArr = doc["stations"].to<JsonArray>();
             for (const auto& st : favorites) {
                 JsonObject sObj = stationsArr.add<JsonObject>();
-                sObj["name"] = st.name.c_str();
-                sObj["url"] = st.url.c_str();
-                sObj["country"] = st.country.c_str();
-                sObj["genre"] = st.genre.c_str();
+                sObj["name"] = st.name;
+                sObj["url"] = st.url;
+                sObj["country"] = st.country;
+                sObj["genre"] = st.genre;
                 sObj["bitrate"] = st.bitrate;
             }
             serializeJson(doc, file);
@@ -160,58 +136,154 @@ void RadioManager::saveFavorites() {
 #endif
 }
 
-std::vector<RadioStation> RadioManager::getCategoryStations(const std::string& category) {
+#ifdef ARDUINO
+struct SpiRamJsonAllocator : ArduinoJson::Allocator {
+    void* allocate(size_t size) override {
+        return heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    void deallocate(void* pointer) override {
+        heap_caps_free(pointer);
+    }
+    void* reallocate(void* ptr, size_t new_size) override {
+        return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+};
+
+static SpiRamJsonAllocator s_spiRamJsonAllocator;
+
+static std::string urlEncodeQuery(const std::string& str) {
+    std::string encoded;
+    for (char c : str) {
+        if (isalnum((unsigned char)c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded += c;
+        } else if (c == ' ') {
+            encoded += "%20";
+        } else {
+            char buf[4];
+            snprintf(buf, sizeof(buf), "%%%02X", (unsigned char)c);
+            encoded += buf;
+        }
+    }
+    return encoded;
+}
+#endif
+
+std::vector<RadioStation> RadioManager::searchStations(const std::string& query, int offset, int limit) {
     std::vector<RadioStation> list;
 
-    if (category == "rock") {
-        list.push_back({"Radio Paradise Rock", "http://stream.radioparadise.com/rock-128", "USA", "Rock", 128, false});
-        list.push_back({"Rock Antenne Classic", "http://stream.rockantenne.de/classic-perlen/stream/mp3", "Alemania", "Classic Rock", 128, false});
-        list.push_back({"100hitz 90s Rock", "http://ghbr.streamguys1.com/90srock-mp3", "USA", "90s Rock", 128, false});
-        list.push_back({"SomaFM Indie Pop Rocks", "http://ice1.somafm.com/indiepop-128-mp3", "USA", "Indie Rock", 128, false});
-    } else if (category == "pop") {
-        list.push_back({"Capital FM UK", "http://media-the.musicradio.com/CapitalMP3", "UK", "Pop / Hits", 128, false});
-        list.push_back({"Hit Radio FFH", "http://mp3.ffh.de/radioffh/hqlivestream.mp3", "Alemania", "Pop", 128, false});
-        list.push_back({"100hitz Hot Hitz", "http://ghbr.streamguys1.com/hothitz-mp3", "USA", "Top 40 Pop", 128, false});
-    } else if (category == "chillout") {
-        list.push_back({"SomaFM Groove Salad", "http://ice1.somafm.com/groovesalad-128-mp3", "USA", "Ambient Chill", 128, false});
-        list.push_back({"SomaFM Drone Zone", "http://ice1.somafm.com/dronezone-128-mp3", "USA", "Atmospheric", 128, false});
-        list.push_back({"Chillsky Radio", "http://hyades.shoutca.st:8043/stream", "Global", "Lofi / Chill", 128, false});
-    } else if (category == "jazz") {
-        list.push_back({"Swiss Jazz", "http://stream.srg-ssr.ch/m/rjs/mp3_128", "Suiza", "Smooth Jazz", 128, false});
-        list.push_back({"SomaFM Sonic Universe", "http://ice1.somafm.com/sonicuniverse-128-mp3", "USA", "Nu Jazz", 128, false});
-    } else if (category == "reggae") {
-        list.push_back({"1.FM ReggaeTrade", "http://sc-reggae.1.fm:7034/stream", "Suiza", "Reggae / Roots", 128, false});
-        list.push_back({"Joint Radio Reggae", "http://reggae.jointil.net:8000/stream", "Israel", "Roots / Dub", 128, false});
-        list.push_back({"SomaFM Heavyweight Reggae", "http://ice1.somafm.com/reggae-128-mp3", "USA", "Reggae / Dub", 128, false});
-    } else if (category == "metal") {
-        list.push_back({"Metal Rock FM", "http://stream.metalrock.fm:8000/stream", "Global", "Heavy Metal", 128, false});
-        list.push_back({"Chroma Metal", "http://chromaradio.com:8006/stream", "Grecia", "Power / Thrash", 128, false});
-    } else if (category == "electro") {
-        list.push_back({"Ibiza Global Radio", "http://listento.ibizaglobalradio.com:8024/stream", "Espana", "Electronic", 128, false});
-        list.push_back({"Defected Radio", "http://icecast.defected.com/defected", "UK", "House / Club", 128, false});
-    } else if (category == "news") {
-        list.push_back({"BBC World Service", "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service", "UK", "News", 128, false});
-        list.push_back({"RNE Radio Nacional", "http://rtve.stream.flumotion.com/rtve/radio1.mp3", "Espana", "Noticias", 128, false});
-    } else if (category == "latin") {
-        list.push_back({"Fiesta Latina", "http://stream.fiestalatina.be:8000/stream", "Global", "Salsa / Bachata", 128, false});
-        list.push_back({"Radio Salsa", "http://stream.radiosalsa.cl:8000/stream", "Chile", "Salsa Clasica", 128, false});
-    } else if (category == "ambient") {
-        list.push_back({"SomaFM Deep Space One", "http://ice1.somafm.com/deepspaceone-128-mp3", "USA", "Deep Ambient", 128, false});
-        list.push_back({"SomaFM Space Station", "http://ice1.somafm.com/spacestation-128-mp3", "USA", "Space Ambient", 128, false});
-    } else if (category == "classical") {
-        list.push_back({"Swiss Classic", "http://stream.srg-ssr.ch/m/rsc_de/mp3_128", "Suiza", "Classical", 128, false});
-        list.push_back({"KUSC Classical", "http://kusc-live.streamguys1.com/kusc-128k-mp3", "USA", "Symphonic", 128, false});
-    } else { // topclick
-        list.push_back({"SomaFM Groove Salad", "http://ice1.somafm.com/groovesalad-128-mp3", "USA", "Chill / Beats", 128, false});
-        list.push_back({"Ibiza Global Radio", "http://listento.ibizaglobalradio.com:8024/stream", "Espana", "Electronic", 128, false});
-        list.push_back({"Radio Paradise", "http://stream.radioparadise.com/mp3-128", "USA", "Eclectic Rock", 128, false});
-        list.push_back({"SomaFM Secret Agent", "http://ice1.somafm.com/secretagent-128-mp3", "USA", "Spy Lounge", 128, false});
+#ifdef ARDUINO
+    WiFiClient client;
+    client.setTimeout(6000);
+
+    HTTPClient http;
+    http.setTimeout(6000);
+    http.setUserAgent("CBDos-Radio/1.0 (ESP32-S3)");
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+
+    std::string encodedQuery = urlEncodeQuery(query);
+    char url[320];
+
+    // Configurar filtro ArduinoJson para descartar campos irrelevantes y ahorrar RAM
+    JsonDocument filter;
+    filter[0]["name"] = true;
+    filter[0]["url"] = true;
+    filter[0]["url_resolved"] = true;
+    filter[0]["country"] = true;
+    filter[0]["tags"] = true;
+    filter[0]["bitrate"] = true;
+
+    // 1. Intentar búsqueda por nombre en HTTP plano (puerto 80 sin consumo de memoria SSL)
+    snprintf(url, sizeof(url), "http://de1.api.radio-browser.info/json/stations/byname/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
+    Serial.printf("[RadioSearch] Consultando API HTTP: %s\n", url);
+
+    if (http.begin(client, url)) {
+        int httpCode = http.GET();
+        Serial.printf("[RadioSearch] HTTP Code (Name Search): %d\n", httpCode);
+
+        if (httpCode == HTTP_CODE_OK) {
+            JsonDocument doc(&s_spiRamJsonAllocator);
+            DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+            
+            if (!err && doc.is<JsonArray>()) {
+                JsonArray arr = doc.as<JsonArray>();
+                for (JsonObject obj : arr) {
+                    RadioStation st;
+                    const char* n = obj["name"] | "Desconocida";
+                    const char* u = obj["url_resolved"] | (obj["url"] | "");
+                    const char* c = obj["country"] | "Global";
+                    const char* g = obj["tags"] | "Varios";
+
+                    strncpy(st.name, n, sizeof(st.name) - 1);
+                    st.name[sizeof(st.name) - 1] = '\0';
+                    strncpy(st.url, u, sizeof(st.url) - 1);
+                    st.url[sizeof(st.url) - 1] = '\0';
+                    strncpy(st.country, c, sizeof(st.country) - 1);
+                    st.country[sizeof(st.country) - 1] = '\0';
+                    strncpy(st.genre, g, sizeof(st.genre) - 1);
+                    st.genre[sizeof(st.genre) - 1] = '\0';
+                    st.bitrate = obj["bitrate"] | 128;
+                    st.isFavorite = false;
+                    
+                    if (st.url[0] != '\0') {
+                        list.push_back(st);
+                    }
+                }
+            } else if (err) {
+                Serial.printf("[RadioSearch] JSON Deserialization error: %s\n", err.c_str());
+            }
+        } else if (httpCode < 0) {
+            Serial.printf("[RadioSearch] HTTP Error: %s\n", http.errorToString(httpCode).c_str());
+        }
+        http.end();
     }
+
+    // 2. Si no encontró por nombre, intentar búsqueda por género/tag
+    if (list.empty() && offset == 0) {
+        snprintf(url, sizeof(url), "http://de1.api.radio-browser.info/json/stations/bytag/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
+        Serial.printf("[RadioSearch] Reintentando por Tag HTTP: %s\n", url);
+        if (http.begin(client, url)) {
+            int httpCode = http.GET();
+            Serial.printf("[RadioSearch] HTTP Code (Tag Search): %d\n", httpCode);
+            if (httpCode == HTTP_CODE_OK) {
+                JsonDocument doc(&s_spiRamJsonAllocator);
+                DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+                if (!err && doc.is<JsonArray>()) {
+                    JsonArray arr = doc.as<JsonArray>();
+                    for (JsonObject obj : arr) {
+                        RadioStation st;
+                        const char* n = obj["name"] | "Desconocida";
+                        const char* u = obj["url_resolved"] | (obj["url"] | "");
+                        const char* c = obj["country"] | "Global";
+                        const char* g = obj["tags"] | "Varios";
+
+                        strncpy(st.name, n, sizeof(st.name) - 1);
+                        st.name[sizeof(st.name) - 1] = '\0';
+                        strncpy(st.url, u, sizeof(st.url) - 1);
+                        st.url[sizeof(st.url) - 1] = '\0';
+                        strncpy(st.country, c, sizeof(st.country) - 1);
+                        st.country[sizeof(st.country) - 1] = '\0';
+                        strncpy(st.genre, g, sizeof(st.genre) - 1);
+                        st.genre[sizeof(st.genre) - 1] = '\0';
+                        st.bitrate = obj["bitrate"] | 128;
+                        st.isFavorite = false;
+                        
+                        if (st.url[0] != '\0') {
+                            list.push_back(st);
+                        }
+                    }
+                }
+            }
+            http.end();
+        }
+    }
+
+    Serial.printf("[RadioSearch] Total emisoras encontradas: %d\n", (int)list.size());
+#endif
 
     // Marcar favoritas
     for (auto& st : list) {
         for (const auto& fav : favorites) {
-            if (fav.url == st.url) {
+            if (strcmp(fav.url, st.url) == 0) {
                 st.isFavorite = true;
                 break;
             }
