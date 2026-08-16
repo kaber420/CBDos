@@ -9,6 +9,8 @@
 
 **CBDos** es un sistema operativo multitarea y ecosistema de aplicaciones diseñado específicamente para microcontroladores **ESP32-S3** con pantalla táctil capacitiva (AMOLED/LCD QSPI 320x480). 
 
+Utiliza **LVGL v9.5** como motor gráfico principal con gestión de memoria nativa optimizada en **PSRAM externa de 8MB** (`LV_MEM_POOL_ALLOC`), garantizando renderizado fluido a 60 FPS sin saturar la memoria interna SRAM del microcontrolador.
+
 Integra una suite completa de aplicaciones nativas para productividad, multimedia (streaming y local), emulación de videojuegos clásicos mediante arquitectura de cartuchos OTA, utilidades del sistema y un revolucionario **navegador binario hiperligero (TLVGL / CBML)** capaz de renderizar páginas dinámicas a 60 FPS sobre redes de radio de bajo ancho de banda (Mesh / LoRa / FLRC / WiFi).
 
 ---
@@ -19,8 +21,8 @@ Integra una suite completa de aplicaciones nativas para productividad, multimedi
 | :--- | :---: | :---: | :--- |
 | **Dashboard & Launcher** | 🟢 Estable | **100%** | Grid dinámico con scroll, barra de estado superior (`HeaderBar`), reloj, batería, RSSI y wallpapers. |
 | **Sistema de Fondos (Wallpaper)** | 🟢 Estable | **100%** | Selección híbrida de fondos de pantalla: predeterminados en Flash o imágenes JPG dinámicas desde MicroSD. |
-| **Radio Web Online** | 🟢 Estable | **95%** | Streaming HTTP de emisoras Shoutcast/Icecast con decodificación MP3 por hardware/software (`libhelix`) y reconexión automática. |
-| **Reproductor de Música** | 🟢 Estable | **90%** | Reproducción de archivos MP3 locales almacenados en la tarjeta MicroSD con barra de progreso y control de volumen. |
+| **Radio Web Online** | 🟢 Estable | **95%** | Streaming HTTP de emisoras Shoutcast/Icecast con decodificación MP3 y AAC por hardware/software (`libhelix`) y reconexión automática. |
+| **Reproductor de Música** | 🟢 Estable | **90%** | Reproducción de archivos MP3 locales almacenados en la tarjeta MicroSD. Incluye control de reproduccion.|
 | **Visor de Medios / Galería** | 🟢 Estable | **90%** | Explorador de archivos en MicroSD con decodificación y renderizado nativo en pantalla de imágenes JPG, PNG y BMP. |
 | **Cartucho DOOM (app1)** | 🟢 Estable | **95%** | Motor nativo `doomgeneric` optimizado en PSRAM con pad virtual táctil (`CartridgeGamepad`), soporte para mandos Bluetooth BLE y retorno seguro al OS. |
 | **Cartucho Game Boy Color (app2)** | 🟡 Beta | **75%** | Emulador nativo `Peanut-GB` con overlay clásico Game Boy y selector de ROMs (`.gb` / `.gbc`) desde MicroSD. |

@@ -37,10 +37,10 @@ Cuando ocurra un reinicio no deseado (Kernel Panic / Guru Meditation Error):
 
 ---
 
-## 🛠️ Reglas del Proyecto y Política de Comunicación Estricta
-
 1. **Target de Hardware:** ESP32-S3 (AMOLED/LCD QSPI, Touch GT911/AXS15231B).
-2. **UI Framework:** LVGL v9 con el tema base `DefaultTheme`.
+2. **UI Framework (LVGL v9.5 Estricto):** 
+   - El proyecto utiliza **LVGL v9.5** con el tema base `DefaultTheme` y gestión de memoria en PSRAM (`LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN` + `LV_MEM_POOL_ALLOC`).
+   - **ESTRICTAMENTE PROHIBIDO** usar macros, funciones o sintaxis obsoletas de **LVGL v8** (ej. `LV_MEM_CUSTOM`, `lv_scr_act()`, etc.). Usar código de v8 causa fallos silenciosos, uso indebido de memoria interna SRAM y panics de memoria. Todo componente debe usar las APIs oficiales de LVGL 9.5 (`lv_screen_active()`, `lv_button_create()`, `lv_image_create()`, etc.).
 3. **Control de Ejecución Estricto (Zero Presumption & Zero Acciones Silenciosas):**
    - **El usuario dirige y autoriza; la IA propone y ejecuta únicamente con aprobación.**
    - **PROHIBIDO** editar código fuente, crear archivos, borrar ficheros o flashear sin la previa propuesta, explicación y **autorización explícita** del usuario.

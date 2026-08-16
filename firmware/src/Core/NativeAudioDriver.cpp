@@ -4,6 +4,7 @@
 #include <WiFiClientSecure.h>
 #include <esp_task_wdt.h>
 #include "libhelix-mp3/mp3dec.h"
+#include "libhelix-aac/aacdec.h"
 #include "../UI/UIManager.h"
 #include "LVFS_Driver.h"
 
@@ -17,11 +18,11 @@
 // Buffer de lectura SD en PSRAM: 16KB minimiza los accesos al bus SPI
 #define READ_BUF_SIZE        16384
 
-// pcmBuf correcto: 2 granules × 2 canales × 576 muestras × 2 bytes = 4608 bytes
-// MAX_NGRAN=2, MAX_NCHAN=2, MAX_NSAMP=576 (de libhelix-mp3/mp3dec.h)
-#define PCM_BUF_SAMPLES      (MAX_NGRAN * MAX_NCHAN * MAX_NSAMP)
+// pcmBuf: Soporte para MP3 (2304 samples) y AAC/HE-AAC (hasta 4096 samples)
+#define PCM_BUF_SAMPLES      4096
 
 static HMP3Decoder hMP3Decoder = nullptr;
+static HAACDecoder hAACDecoder = nullptr;
 
 // Helper: Calcular el tamaño total de la cabecera ID3v2 (incluyendo carátulas grandes)
 // y avanzar el puntero del archivo FÍSICAMENTE con f.seek() hasta el primer frame de audio MP3 real.
@@ -98,8 +99,16 @@ bool NativeAudioDriver::begin(int bclk, int lrck, int dout, int sampleRate) {
         }
     }
 
+    if (!hAACDecoder) {
+        hAACDecoder = AACInitDecoder();
+        if (!hAACDecoder) {
+            Serial.println("[Audio] ERROR: AACInitDecoder fallo");
+            return false;
+        }
+    }
+
     initialized = true;
-    Serial.printf("[Audio] Decodificador Helix listo. Pins I2S: BCLK=%d LRCK=%d DOUT=%d\n",
+    Serial.printf("[Audio] Decodificadores Helix (MP3 + AAC) listos. Pins I2S: BCLK=%d LRCK=%d DOUT=%d\n",
                   bclk, lrck, dout);
     return true;
 }
@@ -377,8 +386,8 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     NativeAudioDriver* driver = (NativeAudioDriver*)param;
     esp_task_wdt_add(NULL);
 
-    String url = driver->currentFilePath;
-    Serial.printf("[AudioStream] Iniciando stream: %s\n", url.c_str());
+    String targetUrl = driver->currentFilePath;
+    Serial.printf("[AudioStream] Iniciando stream: %s\n", targetUrl.c_str());
 
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[AudioStream] ERROR: WiFi no conectado");
@@ -388,87 +397,173 @@ void NativeAudioDriver::streamAudioTask(void* param) {
         return;
     }
 
-    // Parsear URL
-    String host = "";
-    int port = 80;
-    String path = "/";
-    bool isHttps = false;
-
-    if (url.startsWith("http://")) {
-        url = url.substring(7);
-        isHttps = false;
-    } else if (url.startsWith("https://")) {
-        url = url.substring(8);
-        port = 443;
-        isHttps = true;
-    }
-
-    int slashIdx = url.indexOf('/');
-    if (slashIdx > 0) {
-        host = url.substring(0, slashIdx);
-        path = url.substring(slashIdx);
-    } else {
-        host = url;
-        path = "/";
-    }
-
-    int colonIdx = host.indexOf(':');
-    if (colonIdx > 0) {
-        port = host.substring(colonIdx + 1).toInt();
-        host = host.substring(0, colonIdx);
-    }
-
-    Serial.printf("[AudioStream] Conectando a %s:%d %s (HTTPS: %s)\n", host.c_str(), port, path.c_str(), isHttps ? "SI" : "NO");
-
     WiFiClient* client = nullptr;
     WiFiClientSecure* secClient = nullptr;
     WiFiClient* plainClient = nullptr;
+    bool isAacHeader = false;
 
-    if (isHttps || port == 443) {
-        secClient = new WiFiClientSecure();
-        secClient->setInsecure();
-        secClient->setTimeout(4000);
-        client = secClient;
-    } else {
-        plainClient = new WiFiClient();
-        plainClient->setTimeout(4000);
-        client = plainClient;
-    }
+    // Bucle de resolución de Redirecciones HTTP (301, 302, 307) y Playlists (.pls, .m3u)
+    int maxRedirects = 5;
+    bool streamConnected = false;
 
-    if (!client->connect(host.c_str(), port)) {
-        Serial.printf("[AudioStream] ERROR: No se pudo conectar a %s:%d\n", host.c_str(), port);
-        delete client;
-        driver->playing = false;
-        esp_task_wdt_delete(NULL);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    // Enviar petición HTTP
-    client->printf("GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: CBDos-Radio/1.0\r\nAccept: */*\r\nIcy-MetaData: 0\r\nConnection: close\r\n\r\n",
-                   path.c_str(), host.c_str());
-
-    // Leer cabeceras HTTP de forma segura (sin bloquear el watchdog)
-    bool inHeader = true;
-    uint32_t headerTimeout = millis();
-    while (client->connected() && inHeader && (millis() - headerTimeout < 6000)) {
+    for (int r = 0; r < maxRedirects && driver->playing; r++) {
         esp_task_wdt_reset();
-        if (client->available()) {
-            String line = client->readStringUntil('\n');
-            line.trim();
-            if (line.length() == 0) {
-                inHeader = false;
-                break;
-            }
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(10));
+        String host = "";
+        int port = 80;
+        String path = "/";
+        bool isHttps = false;
+
+        String currentUrl = targetUrl;
+        if (currentUrl.startsWith("http://")) {
+            currentUrl = currentUrl.substring(7);
+            isHttps = false;
+        } else if (currentUrl.startsWith("https://")) {
+            currentUrl = currentUrl.substring(8);
+            port = 443;
+            isHttps = true;
         }
+
+        int slashIdx = currentUrl.indexOf('/');
+        if (slashIdx > 0) {
+            host = currentUrl.substring(0, slashIdx);
+            path = currentUrl.substring(slashIdx);
+        } else {
+            host = currentUrl;
+            path = "/";
+        }
+
+        int colonIdx = host.indexOf(':');
+        if (colonIdx > 0) {
+            port = host.substring(colonIdx + 1).toInt();
+            host = host.substring(0, colonIdx);
+        }
+
+        Serial.printf("[AudioStream] Conectando a %s:%d %s (HTTPS: %s)\n",
+                      host.c_str(), port, path.c_str(), isHttps ? "SI" : "NO");
+
+        if (client) {
+            client->stop();
+            delete client;
+            client = nullptr;
+        }
+
+        if (isHttps || port == 443) {
+            secClient = new WiFiClientSecure();
+            secClient->setInsecure();
+            secClient->setTimeout(5000);
+            client = secClient;
+        } else {
+            plainClient = new WiFiClient();
+            plainClient->setTimeout(5000);
+            client = plainClient;
+        }
+
+        if (!client->connect(host.c_str(), port)) {
+            Serial.printf("[AudioStream] ERROR: No se pudo conectar a %s:%d\n", host.c_str(), port);
+            break;
+        }
+
+        // Enviar petición HTTP
+        client->printf("GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: CBDos-Radio/1.0\r\nAccept: */*\r\nIcy-MetaData: 0\r\nConnection: close\r\n\r\n",
+                       path.c_str(), host.c_str());
+
+        // Leer cabeceras HTTP
+        bool inHeader = true;
+        bool isRedirect = false;
+        bool isPlaylist = false;
+        String redirectUrl = "";
+        uint32_t headerTimeout = millis();
+
+        while (client->connected() && inHeader && (millis() - headerTimeout < 6000)) {
+            esp_task_wdt_reset();
+            if (client->available()) {
+                String line = client->readStringUntil('\n');
+                line.trim();
+
+                if (line.startsWith("HTTP/1.") || line.startsWith("ICY ")) {
+                    int sp1 = line.indexOf(' ');
+                    if (sp1 > 0) {
+                        int code = line.substring(sp1 + 1, sp1 + 4).toInt();
+                        if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                            isRedirect = true;
+                        }
+                    }
+                } else if (line.startsWith("Location:") || line.startsWith("location:")) {
+                    redirectUrl = line.substring(9);
+                    redirectUrl.trim();
+                    isRedirect = true;
+                } else if (line.startsWith("Content-Type:") || line.startsWith("content-type:")) {
+                    String cType = line.substring(13);
+                    cType.toLowerCase();
+                    if (cType.indexOf("aac") >= 0 || cType.indexOf("mp4") >= 0 || cType.indexOf("m4a") >= 0) {
+                        isAacHeader = true;
+                    }
+                    if (cType.indexOf("scpls") >= 0 || cType.indexOf("mpegurl") >= 0 || cType.indexOf("playlist") >= 0) {
+                        isPlaylist = true;
+                    }
+                }
+
+                if (line.length() == 0) {
+                    inHeader = false;
+                    break;
+                }
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+        }
+
+        if (inHeader) {
+            Serial.println("[AudioStream] Timeout leyendo cabeceras HTTP");
+            break;
+        }
+
+        // Si fue una redirección HTTP (Location: ...)
+        if (isRedirect && redirectUrl.length() > 0) {
+            Serial.printf("[AudioStream] Redireccion HTTP detectada -> %s\n", redirectUrl.c_str());
+            targetUrl = redirectUrl;
+            continue;
+        }
+
+        // Si fue una respuesta con playlist en el body (.pls o .m3u)
+        if (isPlaylist || targetUrl.endsWith(".pls") || targetUrl.endsWith(".m3u")) {
+            Serial.println("[AudioStream] Parseando archivo de playlist...");
+            String playlistStreamUrl = "";
+            uint32_t plStart = millis();
+            while (client->connected() && (millis() - plStart < 3000) && playlistStreamUrl.length() == 0) {
+                esp_task_wdt_reset();
+                if (client->available()) {
+                    String plLine = client->readStringUntil('\n');
+                    plLine.trim();
+                    if (plLine.startsWith("File1=") || plLine.startsWith("file1=")) {
+                        playlistStreamUrl = plLine.substring(6);
+                    } else if (plLine.startsWith("File2=") || plLine.startsWith("file2=")) {
+                        if (playlistStreamUrl.length() == 0) playlistStreamUrl = plLine.substring(6);
+                    } else if (plLine.startsWith("http://") || plLine.startsWith("https://")) {
+                        playlistStreamUrl = plLine;
+                    }
+                } else {
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                }
+            }
+            if (playlistStreamUrl.length() > 0) {
+                playlistStreamUrl.trim();
+                Serial.printf("[AudioStream] Stream real extraido de playlist -> %s\n", playlistStreamUrl.c_str());
+                targetUrl = playlistStreamUrl;
+                continue;
+            }
+        }
+
+        // Si llegamos aquí, la conexión directa al audio stream está establecida
+        streamConnected = true;
+        break;
     }
 
-    if (inHeader) {
-        Serial.println("[AudioStream] Timeout leyendo cabeceras HTTP");
-        client->stop();
-        delete client;
+    if (!streamConnected || !client || !client->connected()) {
+        Serial.println("[AudioStream] ERROR: No se pudo establecer conexion de stream final");
+        if (client) {
+            client->stop();
+            delete client;
+        }
         driver->playing = false;
         esp_task_wdt_delete(NULL);
         vTaskDelete(NULL);
@@ -510,18 +605,56 @@ void NativeAudioDriver::streamAudioTask(void* param) {
         }
     }
 
-    // Detectar frecuencia de muestreo del stream
+    // Detectar codec y frecuencia de muestreo del stream
+    enum StreamCodec {
+        CODEC_AUTO = 0,
+        CODEC_MP3,
+        CODEC_AAC
+    };
+    StreamCodec codec = CODEC_AUTO;
     int sampRate = 44100;
-    int probeOffset = MP3FindSyncWord(streamBuf, bytesLeft);
-    if (probeOffset >= 0) {
-        uint8_t* tmpPtr = streamBuf + probeOffset;
-        int tmpLeft = bytesLeft - probeOffset;
-        int err = MP3Decode(hMP3Decoder, &tmpPtr, &tmpLeft, pcmBuf, 0);
-        if (err == ERR_MP3_NONE) {
-            MP3FrameInfo info;
-            MP3GetLastFrameInfo(hMP3Decoder, &info);
-            if (info.samprate > 0) sampRate = info.samprate;
+
+    // 1. Probar AAC si la cabecera lo sugirió o si encontramos SyncWord de AAC
+    if (isAacHeader || AACFindSyncWord(streamBuf, bytesLeft) >= 0) {
+        int aacOffset = AACFindSyncWord(streamBuf, bytesLeft);
+        if (aacOffset >= 0) {
+            uint8_t* tmpPtr = streamBuf + aacOffset;
+            int tmpLeft = bytesLeft - aacOffset;
+            if (hAACDecoder) {
+                int err = AACDecode(hAACDecoder, &tmpPtr, &tmpLeft, pcmBuf);
+                if (err == ERR_AAC_NONE) {
+                    AACFrameInfo aInfo;
+                    AACGetLastFrameInfo(hAACDecoder, &aInfo);
+                    if (aInfo.sampRateOut > 0) sampRate = aInfo.sampRateOut;
+                    codec = CODEC_AAC;
+                    Serial.printf("[AudioStream] Detectado stream AAC/AAC+ a %d Hz, %d canales\n", sampRate, aInfo.nChans);
+                }
+            }
         }
+    }
+
+    // 2. Si no es AAC, probar MP3
+    if (codec == CODEC_AUTO) {
+        int mp3Offset = MP3FindSyncWord(streamBuf, bytesLeft);
+        if (mp3Offset >= 0) {
+            uint8_t* tmpPtr = streamBuf + mp3Offset;
+            int tmpLeft = bytesLeft - mp3Offset;
+            if (hMP3Decoder) {
+                int err = MP3Decode(hMP3Decoder, &tmpPtr, &tmpLeft, pcmBuf, 0);
+                if (err == ERR_MP3_NONE) {
+                    MP3FrameInfo mInfo;
+                    MP3GetLastFrameInfo(hMP3Decoder, &mInfo);
+                    if (mInfo.samprate > 0) sampRate = mInfo.samprate;
+                    codec = CODEC_MP3;
+                    Serial.printf("[AudioStream] Detectado stream MP3 a %d Hz, %d canales, %d kbps\n", sampRate, mInfo.nChans, mInfo.bitrate / 1000);
+                }
+            }
+        }
+    }
+
+    // 3. Fallback por defecto si no pudo determinarse antes
+    if (codec == CODEC_AUTO) {
+        codec = isAacHeader ? CODEC_AAC : CODEC_MP3;
     }
 
     if (!installI2S(driver->_bclk, driver->_lrck, driver->_dout, sampRate)) {
@@ -535,7 +668,9 @@ void NativeAudioDriver::streamAudioTask(void* param) {
         return;
     }
 
-    Serial.printf("[AudioStream] Streaming activo a %d Hz\n", sampRate);
+    int currentSampleRate = sampRate;
+    Serial.printf("[AudioStream] Streaming activo (%s) a %d Hz\n",
+                  (codec == CODEC_AAC) ? "AAC" : "MP3", currentSampleRate);
 
     // Bucle principal de decodificación de stream
     while (driver->playing && client->connected()) {
@@ -560,21 +695,56 @@ void NativeAudioDriver::streamAudioTask(void* param) {
             continue;
         }
 
-        int offset = MP3FindSyncWord(readPtr, bytesLeft);
-        if (offset < 0) {
-            bytesLeft = 0;
-            vTaskDelay(pdMS_TO_TICKS(5));
-            continue;
-        }
-        readPtr += offset;
-        bytesLeft -= offset;
+        if (codec == CODEC_AAC) {
+            int offset = AACFindSyncWord(readPtr, bytesLeft);
+            if (offset < 0) {
+                bytesLeft = 0;
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue;
+            }
+            readPtr += offset;
+            bytesLeft -= offset;
 
-        int err = MP3Decode(hMP3Decoder, &readPtr, &bytesLeft, pcmBuf, 0);
-        if (err == ERR_MP3_NONE) {
-            MP3FrameInfo info;
-            MP3GetLastFrameInfo(hMP3Decoder, &info);
-            int pcmBytes = info.outputSamps * sizeof(int16_t);
-            i2s_write(I2S_NUM_0, (const char*)pcmBuf, pcmBytes, &written, pdMS_TO_TICKS(200));
+            int err = AACDecode(hAACDecoder, &readPtr, &bytesLeft, pcmBuf);
+            if (err == ERR_AAC_NONE) {
+                AACFrameInfo info;
+                AACGetLastFrameInfo(hAACDecoder, &info);
+                if (info.sampRateOut > 0 && info.sampRateOut != currentSampleRate) {
+                    currentSampleRate = info.sampRateOut;
+                    i2s_set_sample_rates(I2S_NUM_0, currentSampleRate);
+                    Serial.printf("[AudioStream] AAC sample rate actualizado: %d Hz\n", currentSampleRate);
+                }
+                int pcmBytes = info.outputSamps * sizeof(int16_t);
+                i2s_write(I2S_NUM_0, (const char*)pcmBuf, pcmBytes, &written, pdMS_TO_TICKS(200));
+            } else if (err != ERR_AAC_INDATA_UNDERFLOW) {
+                readPtr++;
+                bytesLeft--;
+            }
+        } else { // CODEC_MP3
+            int offset = MP3FindSyncWord(readPtr, bytesLeft);
+            if (offset < 0) {
+                bytesLeft = 0;
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue;
+            }
+            readPtr += offset;
+            bytesLeft -= offset;
+
+            int err = MP3Decode(hMP3Decoder, &readPtr, &bytesLeft, pcmBuf, 0);
+            if (err == ERR_MP3_NONE) {
+                MP3FrameInfo info;
+                MP3GetLastFrameInfo(hMP3Decoder, &info);
+                if (info.samprate > 0 && info.samprate != currentSampleRate) {
+                    currentSampleRate = info.samprate;
+                    i2s_set_sample_rates(I2S_NUM_0, currentSampleRate);
+                    Serial.printf("[AudioStream] MP3 sample rate actualizado: %d Hz\n", currentSampleRate);
+                }
+                int pcmBytes = info.outputSamps * sizeof(int16_t);
+                i2s_write(I2S_NUM_0, (const char*)pcmBuf, pcmBytes, &written, pdMS_TO_TICKS(200));
+            } else if (err != ERR_MP3_INDATA_UNDERFLOW) {
+                readPtr++;
+                bytesLeft--;
+            }
         }
 
         taskYIELD();
