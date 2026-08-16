@@ -122,6 +122,10 @@ GENERADOR del `.enc` del lado servidor (ver §4).**
 | 6 | Router mesh real (BGP/OSPF/ARP) fuera de drafts, como server accesible | ⏳ prototipo | `drafts/.../gateway_router.py` |
 | 7 | Negociación de resolución ESP32→gateway | ❌ | firmware |
 | 8 | Pruebas automatizadas del modo binario | ⏳ manual | `test_server.py` |
+| 9 | **Compresión de Diccionarios SIMD** dentro de tags TLV (`0x11`) | ✅ Python listo, ⏳ C++ Pendiente | `gateway/tlvgl/simd_dict.py`, firmware |
+
+### Estado Actual del TLV (Estructura vs Carga Útil)
+Actualmente, la **Estructura TLV** (Tags 0x10 a 0x25, Length, Value) funciona perfectamente entre el Servidor Python y el ESP32. Sin embargo, la **Carga Útil (Payload)** de texto se envía en texto plano (`UTF-8 crudo`). El codificador Python para el Diccionario Híbrido SIMD (reducción de palabras a 1-3 bytes) ya fue creado (`simd_dict.py`), pero falta integrarlo en el compilador web y crear su contraparte decodificadora en C++ para el firmware.
 
 ---
 
