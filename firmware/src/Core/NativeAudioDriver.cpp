@@ -792,7 +792,32 @@ void NativeAudioDriver::playTonePattern(int patternId) {
     if (!initialized) begin();
     stop();
 
+    _toneFreq = 0.0f;
+    _toneDuration = 0;
     currentFilePath = String(patternId);
+    _isStream = false;
+    playing = true;
+
+    xTaskCreatePinnedToCore(
+        toneAudioTask,
+        "ToneTask",
+        4096,
+        this,
+        2,
+        &audioTaskHandle,
+        0
+    );
+}
+
+void NativeAudioDriver::playTone(float freq, int durationMs) {
+    if (!initialized) begin();
+    stop();
+
+    if (freq <= 0.0f || durationMs <= 0) return;
+
+    _toneFreq = freq;
+    _toneDuration = durationMs;
+    currentFilePath = "beep";
     _isStream = false;
     playing = true;
 
@@ -822,7 +847,7 @@ void NativeAudioDriver::toneAudioTask(void* param) {
         return;
     }
 
-    auto playTone = [&](float freq, int durationMs, float decay) {
+    auto playToneInternal = [&](float freq, int durationMs, float decay) {
         int totalSamples = (sampleRate * durationMs) / 1000;
         int generated = 0;
         float phase = 0.0f;
@@ -864,24 +889,26 @@ void NativeAudioDriver::toneAudioTask(void* param) {
         }
     };
 
-    if (pattern == 1) {
+    if (driver->_toneFreq > 0.0f && driver->_toneDuration > 0) {
+        playToneInternal(driver->_toneFreq, driver->_toneDuration, 0.0f);
+    } else if (pattern == 1) {
         // Zen / Campana suave (Acorde armónico C5 -> E5 -> G5)
-        playTone(523.25f, 180, 2.0f);
-        playTone(659.25f, 180, 2.0f);
-        playTone(783.99f, 500, 3.0f);
+        playToneInternal(523.25f, 180, 2.0f);
+        playToneInternal(659.25f, 180, 2.0f);
+        playToneInternal(783.99f, 500, 3.0f);
     } else if (pattern == 2) {
         // Chime / Arpegio Retro (Secuencia melódica C6 -> E6 -> G6 -> C7 con alta resonancia)
-        playTone(1046.50f, 90, 1.0f);
-        playTone(1318.51f, 90, 1.0f);
-        playTone(1567.98f, 100, 1.0f);
-        playTone(2093.00f, 260, 2.5f);
+        playToneInternal(1046.50f, 90, 1.0f);
+        playToneInternal(1318.51f, 90, 1.0f);
+        playToneInternal(1567.98f, 100, 1.0f);
+        playToneInternal(2093.00f, 260, 2.5f);
     } else if (pattern == 3) {
         // Estridente / Alerta insistente (Ráfagas rápidas 1760Hz - 2200Hz)
         for (int r = 0; r < 2 && driver->playing; r++) {
-            playTone(1760.0f, 65, 0.0f);
-            playTone(2200.0f, 65, 0.0f);
-            playTone(1760.0f, 65, 0.0f);
-            playTone(2200.0f, 65, 0.0f);
+            playToneInternal(1760.0f, 65, 0.0f);
+            playToneInternal(2200.0f, 65, 0.0f);
+            playToneInternal(1760.0f, 65, 0.0f);
+            playToneInternal(2200.0f, 65, 0.0f);
             playSilence(80);
         }
     }

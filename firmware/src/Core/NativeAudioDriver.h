@@ -14,6 +14,7 @@ public:
     void playMP3(const char* filePath);
     void playStream(const char* url);
     void playTonePattern(int patternId);
+    void playTone(float freq, int durationMs);
     void stop();
     bool isPlaying() const { return playing; }
     bool isStream() const { return _isStream; }
@@ -34,6 +35,8 @@ private:
     bool _isStream = false;
     TaskHandle_t audioTaskHandle = nullptr;
     String currentFilePath = "";
+    float _toneFreq = 0.0f;
+    int _toneDuration = 0;
     int _bclk = 42, _lrck = 2, _dout = 41;
 
     static void audioTask(void* param);

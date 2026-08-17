@@ -421,6 +421,9 @@ void FileManagerView::item_click_cb(lv_event_t* e) {
         } else if (ext == ".mp3" || ext == ".wav") {
             UIManager::showToast("Abriendo reproductor de música...");
             UIManager::getInstance().loadMusicPlayer();
+        } else if (ext == ".lua") {
+            UIManager::showToast("Abriendo en Lua Runner...");
+            UIManager::getInstance().loadLuaRunner(pInfo->path);
         } else if (ext == ".wad" || ext == ".gbc") {
             UIManager::showToast("Cartucho disponible en menú principal");
         } else {

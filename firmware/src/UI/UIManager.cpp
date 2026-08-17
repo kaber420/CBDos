@@ -97,6 +97,13 @@ void UIManager::loadTlvBrowser() {
 #include "Views/UtilitiesView.h"
 #include "Views/FileManagerView.h"
 #include "Views/DoomView.h"
+#include "Views/LuaRunnerView.h"
+
+void UIManager::loadLuaRunner(const std::string& scriptPath) {
+    destroyTransient();
+    currentTransientScreen = LuaRunnerView::create(scriptPath);
+    lv_screen_load(currentTransientScreen);
+}
 
 void UIManager::loadMusicPlayer() {
     destroyTransient();

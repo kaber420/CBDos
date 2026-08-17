@@ -29,6 +29,7 @@ public:
     void loadUtilities();
     void loadFileManager();
     void loadDoom();
+    void loadLuaRunner(const std::string& scriptPath = "");
 
     void resetInactivityTimer() {}
     static void showToast(const char* message);

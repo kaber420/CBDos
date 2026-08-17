@@ -10,6 +10,9 @@
 #include "Core/SystemDiagnostics.h"
 #include "Core/LVFS_Driver.h"
 #include "Core/StorageManager.h"
+#include "Core/LuaEngine.h"
+#include "Core/LuaBridge.h"
+#include "Core/LuaREPL.h"
 #include "Network/AssetManager.h"
 #include "Network/TlvNetworkClient.h"
 
@@ -317,6 +320,12 @@ void setup() {
     g_hasGateway = ConfigManager::getInstance().loadActiveGateway(g_activeGateway);
     g_isConfigured = g_hasWifi && g_hasGateway;
 
+    // Inicializar Motor Lua 5.4, Bindings de Hardware y Consola REPL
+    if (LuaEngine::getInstance().init(true)) {
+        LuaBridge::registerAll(LuaEngine::getInstance().getRawState());
+        LuaREPL::getInstance().init();
+    }
+
     startNormalBoot();
     lv_refr_now(NULL);
     Serial.println("=== Boot complete ===");
@@ -336,6 +345,7 @@ void loop() {
     uint32_t time_till_next = lv_timer_handler();
     UIManager::getInstance().update();
     TlvNetworkClient::loop();
+    LuaREPL::getInstance().update();
 
     static uint32_t lastBadgeCheck = 0;
     uint32_t now = millis();
