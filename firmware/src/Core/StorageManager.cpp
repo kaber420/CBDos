@@ -239,6 +239,84 @@ std::string StorageManager::readFilePreview(StorageType storage, const std::stri
     return content;
 }
 
+std::string StorageManager::readFile(StorageType storage, const std::string& path) {
+    std::string content = "";
+#ifdef ARDUINO
+    fs::FS* targetFS = nullptr;
+    bool isSD = (storage == StorageType::SD_CARD);
+
+    if (isSD) {
+        if (!isSdAvailable()) return "";
+        targetFS = &SD;
+        lv_fs_spi_lock();
+    } else {
+        if (!s_flashMounted) return "";
+        targetFS = &LittleFS;
+    }
+
+    File f = targetFS->open(path.c_str(), "r");
+    if (f) {
+        size_t fileSize = f.size();
+        if (fileSize > 0) {
+            content.resize(fileSize);
+            f.read((uint8_t*)&content[0], fileSize);
+        }
+        f.close();
+    }
+
+    if (isSD) {
+        lv_fs_spi_unlock();
+    }
+#else
+    content = "-- Archivo de ejemplo en simulacion\nprint('Hola CBDos!')\n";
+#endif
+    return content;
+}
+
+bool StorageManager::writeFile(StorageType storage, const std::string& path, const std::string& content) {
+#ifdef ARDUINO
+    fs::FS* targetFS = nullptr;
+    bool isSD = (storage == StorageType::SD_CARD);
+
+    if (isSD) {
+        if (!isSdAvailable()) return false;
+        targetFS = &SD;
+        lv_fs_spi_lock();
+    } else {
+        if (!s_flashMounted) return false;
+        targetFS = &LittleFS;
+    }
+
+    // Asegurar directorio padre si contiene subdirectorios
+    size_t lastSlash = path.rfind('/');
+    if (lastSlash != std::string::npos && lastSlash > 0) {
+        std::string dirPath = path.substr(0, lastSlash);
+        if (!targetFS->exists(dirPath.c_str())) {
+            targetFS->mkdir(dirPath.c_str());
+        }
+    }
+
+    File f = targetFS->open(path.c_str(), FILE_WRITE);
+    bool ok = false;
+    if (f) {
+        if (!content.empty()) {
+            size_t written = f.write((const uint8_t*)content.data(), content.size());
+            ok = (written == content.size());
+        } else {
+            ok = true;
+        }
+        f.close();
+    }
+
+    if (isSD) {
+        lv_fs_spi_unlock();
+    }
+    return ok;
+#else
+    return true;
+#endif
+}
+
 std::string StorageManager::formatBytes(uint64_t bytes) {
     char buf[32];
     if (bytes < 1024) {

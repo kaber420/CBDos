@@ -1,6 +1,7 @@
 #pragma once
 #include <lvgl.h>
 #include <string>
+#include "../Core/StorageManager.h"
 
 class UIManager {
 public:
@@ -30,6 +31,7 @@ public:
     void loadFileManager();
     void loadDoom();
     void loadLuaRunner(const std::string& scriptPath = "");
+    void loadTextEditor(const std::string& filePath = "", StorageType storage = StorageType::SD_CARD);
 
     void resetInactivityTimer() {}
     static void showToast(const char* message);

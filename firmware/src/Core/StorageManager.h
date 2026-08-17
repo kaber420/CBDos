@@ -31,5 +31,7 @@ public:
     static bool deleteFile(StorageType storage, const std::string& path);
     static bool deleteDirectory(StorageType storage, const std::string& path);
     static std::string readFilePreview(StorageType storage, const std::string& path, size_t maxBytes = 4096);
+    static std::string readFile(StorageType storage, const std::string& path);
+    static bool writeFile(StorageType storage, const std::string& path, const std::string& content);
     static std::string formatBytes(uint64_t bytes);
 };

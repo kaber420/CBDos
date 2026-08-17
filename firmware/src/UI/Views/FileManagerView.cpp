@@ -415,9 +415,9 @@ void FileManagerView::item_click_cb(lv_event_t* e) {
             } else {
                 UIManager::showToast("Visor disponible para imágenes en SD");
             }
-        } else if (ext == ".txt" || ext == ".json" || ext == ".enc" || ext == ".log" || ext == ".csv") {
-            std::string content = StorageManager::readFilePreview(currentStorage, pInfo->path, 2048);
-            showTextPreviewModal(pInfo->name, content);
+        } else if (ext == ".txt" || ext == ".json" || ext == ".ini" || ext == ".enc" || ext == ".log" || ext == ".csv") {
+            UIManager::showToast("Abriendo en Editor...");
+            UIManager::getInstance().loadTextEditor(pInfo->path, currentStorage);
         } else if (ext == ".mp3" || ext == ".wav") {
             UIManager::showToast("Abriendo reproductor de música...");
             UIManager::getInstance().loadMusicPlayer();

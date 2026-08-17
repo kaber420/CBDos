@@ -13,6 +13,7 @@ private:
     static void screen_delete_cb(lv_event_t* e);
     static void btn_run_cb(lv_event_t* e);
     static void btn_stop_cb(lv_event_t* e);
+    static void btn_edit_cb(lv_event_t* e);
     static void btn_sd_cb(lv_event_t* e);
     static void btn_clear_cb(lv_event_t* e);
     static void file_select_cb(lv_event_t* e);

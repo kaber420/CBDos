@@ -98,10 +98,17 @@ void UIManager::loadTlvBrowser() {
 #include "Views/FileManagerView.h"
 #include "Views/DoomView.h"
 #include "Views/LuaRunnerView.h"
+#include "Views/TextEditorView.h"
 
 void UIManager::loadLuaRunner(const std::string& scriptPath) {
     destroyTransient();
     currentTransientScreen = LuaRunnerView::create(scriptPath);
+    lv_screen_load(currentTransientScreen);
+}
+
+void UIManager::loadTextEditor(const std::string& filePath, StorageType storage) {
+    destroyTransient();
+    currentTransientScreen = TextEditorView::create(filePath, storage);
     lv_screen_load(currentTransientScreen);
 }
 

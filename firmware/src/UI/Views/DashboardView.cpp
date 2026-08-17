@@ -19,6 +19,7 @@ static void launchUtilities()   { UIManager::getInstance().loadUtilities(); }
 static void launchFileManager() { UIManager::getInstance().loadFileManager(); }
 static void launchDoom()        { UIManager::getInstance().loadDoom(); }
 static void launchLua()         { UIManager::getInstance().loadLuaRunner(); }
+static void launchEditor()      { UIManager::getInstance().loadTextEditor(); }
 
 static const AppDescriptor kApps[] = {
     {1, "Mesh Chat",     LV_SYMBOL_WIFI,      0x00F5D4, launchMeshChat},
@@ -31,6 +32,7 @@ static const AppDescriptor kApps[] = {
     {8, "Archivos",      LV_SYMBOL_DIRECTORY, 0xF77F00, launchFileManager},
     {9, "Cargador",      LV_SYMBOL_PLAY,      0xE50000, launchDoom},
     {10, "Lua Script",   LV_SYMBOL_FILE,      0x00E676, launchLua},
+    {11, "Editor",       LV_SYMBOL_EDIT,      0xFF6D00, launchEditor},
 };
 
 void DashboardView::btn_event_cb(lv_event_t * e) {

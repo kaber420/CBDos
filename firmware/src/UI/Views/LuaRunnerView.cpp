@@ -107,6 +107,14 @@ void LuaRunnerView::btn_stop_cb(lv_event_t* e) {
     updateStatusBadge();
 }
 
+void LuaRunnerView::btn_edit_cb(lv_event_t* e) {
+    if (activeScript.empty()) {
+        UIManager::getInstance().loadTextEditor();
+    } else {
+        UIManager::getInstance().loadTextEditor(activeScript, StorageType::SD_CARD);
+    }
+}
+
 void LuaRunnerView::btn_clear_cb(lv_event_t* e) {
     if (logContainer && lv_obj_is_valid(logContainer)) {
         lv_obj_clean(logContainer);
@@ -305,40 +313,50 @@ lv_obj_t* LuaRunnerView::create(const std::string& initialScript) {
 
     // Botón Run
     lv_obj_t* btnRun = lv_button_create(dock);
-    lv_obj_set_size(btnRun, 70, 44);
-    DefaultTheme::applyButton(btnRun, 10);
+    lv_obj_set_size(btnRun, 54, 44);
+    DefaultTheme::applyButton(btnRun, 8);
     lv_obj_set_style_bg_color(btnRun, lv_color_hex(0x1B5E20), 0); // Verde oscuro
     lv_obj_t* lblRun = lv_label_create(btnRun);
-    lv_label_set_text(lblRun, LV_SYMBOL_PLAY " Run");
+    lv_label_set_text(lblRun, LV_SYMBOL_PLAY);
     lv_obj_set_style_text_color(lblRun, lv_color_hex(0x00E676), 0);
     lv_obj_center(lblRun);
     lv_obj_add_event_cb(btnRun, btn_run_cb, LV_EVENT_CLICKED, NULL);
 
     // Botón Stop
     lv_obj_t* btnStop = lv_button_create(dock);
-    lv_obj_set_size(btnStop, 70, 44);
-    DefaultTheme::applyButton(btnStop, 10);
+    lv_obj_set_size(btnStop, 54, 44);
+    DefaultTheme::applyButton(btnStop, 8);
     lv_obj_set_style_bg_color(btnStop, lv_color_hex(0xB71C1C), 0); // Rojo oscuro
     lv_obj_t* lblStop = lv_label_create(btnStop);
-    lv_label_set_text(lblStop, LV_SYMBOL_STOP " Stop");
+    lv_label_set_text(lblStop, LV_SYMBOL_STOP);
     lv_obj_set_style_text_color(lblStop, lv_color_hex(0xFF5252), 0);
     lv_obj_center(lblStop);
     lv_obj_add_event_cb(btnStop, btn_stop_cb, LV_EVENT_CLICKED, NULL);
 
+    // Botón Editar
+    lv_obj_t* btnEdit = lv_button_create(dock);
+    lv_obj_set_size(btnEdit, 54, 44);
+    DefaultTheme::applyButton(btnEdit, 8);
+    lv_obj_t* lblEdit = lv_label_create(btnEdit);
+    lv_label_set_text(lblEdit, LV_SYMBOL_EDIT);
+    lv_obj_set_style_text_color(lblEdit, lv_color_hex(0xFFB800), 0);
+    lv_obj_center(lblEdit);
+    lv_obj_add_event_cb(btnEdit, btn_edit_cb, LV_EVENT_CLICKED, NULL);
+
     // Botón Cargar SD
     lv_obj_t* btnSd = lv_button_create(dock);
-    lv_obj_set_size(btnSd, 70, 44);
-    DefaultTheme::applyButton(btnSd, 10);
+    lv_obj_set_size(btnSd, 54, 44);
+    DefaultTheme::applyButton(btnSd, 8);
     lv_obj_t* lblSd = lv_label_create(btnSd);
-    lv_label_set_text(lblSd, LV_SYMBOL_DIRECTORY " SD");
+    lv_label_set_text(lblSd, LV_SYMBOL_DIRECTORY);
     lv_obj_set_style_text_color(lblSd, DefaultTheme::getTextColor(), 0);
     lv_obj_center(lblSd);
     lv_obj_add_event_cb(btnSd, btn_sd_cb, LV_EVENT_CLICKED, NULL);
 
     // Botón Limpiar
     lv_obj_t* btnClear = lv_button_create(dock);
-    lv_obj_set_size(btnClear, 70, 44);
-    DefaultTheme::applyButton(btnClear, 10);
+    lv_obj_set_size(btnClear, 54, 44);
+    DefaultTheme::applyButton(btnClear, 8);
     lv_obj_t* lblClear = lv_label_create(btnClear);
     lv_label_set_text(lblClear, LV_SYMBOL_TRASH);
     lv_obj_set_style_text_color(lblClear, DefaultTheme::getTextColor(), 0);
