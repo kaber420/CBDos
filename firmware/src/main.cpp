@@ -9,6 +9,7 @@
 #include "Network/MQTTService.h"
 #include "Core/SystemDiagnostics.h"
 #include "Core/LVFS_Driver.h"
+#include "Core/StorageManager.h"
 #include "Network/AssetManager.h"
 #include "Network/TlvNetworkClient.h"
 
@@ -306,6 +307,7 @@ void setup() {
         lv_fs_if_init();
         AssetManager::getInstance().init();
     }
+    StorageManager::init();
 #endif
 
     Serial.println("[..] Loading config...");

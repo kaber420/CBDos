@@ -27,6 +27,7 @@ public:
     void loadImageViewer(const std::string& imagePath, const std::string& imageName);
     void loadWallpaperConfig();
     void loadUtilities();
+    void loadFileManager();
     void loadDoom();
 
     void resetInactivityTimer() {}

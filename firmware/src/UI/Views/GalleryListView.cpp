@@ -156,8 +156,14 @@ lv_obj_t* GalleryListView::create() {
     lv_obj_set_style_pad_all(screen, 8, 0);
     lv_obj_set_style_pad_row(screen, 8, 0);
 
-    // Cabecera "Galería"
-    headerBar = HeaderBar::create(screen, "Galeria", true, true, false);
+    // Cabecera "Galería" (sin icono de WiFi)
+    HeaderBarConfig cfg;
+    cfg.title = "Galeria";
+    cfg.showBackButton = true;
+    cfg.showTime = true;
+    cfg.showWifi = false;
+    cfg.showCartButton = false;
+    headerBar = HeaderBar::create(screen, cfg);
     HeaderBar::setActiveHeader(headerBar);
 
     // Contenedor de Categorías / Filtros

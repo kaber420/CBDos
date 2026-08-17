@@ -95,6 +95,7 @@ void UIManager::loadTlvBrowser() {
 #include "Views/GalleryView.h"
 #include "Views/WallpaperConfigView.h"
 #include "Views/UtilitiesView.h"
+#include "Views/FileManagerView.h"
 #include "Views/DoomView.h"
 
 void UIManager::loadMusicPlayer() {
@@ -124,6 +125,12 @@ void UIManager::loadWallpaperConfig() {
 void UIManager::loadUtilities() {
     destroyTransient();
     currentTransientScreen = UtilitiesView::create();
+    lv_screen_load(currentTransientScreen);
+}
+
+void UIManager::loadFileManager() {
+    destroyTransient();
+    currentTransientScreen = FileManagerView::create();
     lv_screen_load(currentTransientScreen);
 }
 

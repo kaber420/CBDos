@@ -16,17 +16,19 @@ static void launchRadio()       { UIManager::getInstance().loadRadioPlayer(); }
 static void launchConfig()      { UIManager::getInstance().loadConfigView(); }
 static void launchTlvBrowser()  { UIManager::getInstance().loadTlvBrowser(); }
 static void launchUtilities()   { UIManager::getInstance().loadUtilities(); }
+static void launchFileManager() { UIManager::getInstance().loadFileManager(); }
 static void launchDoom()        { UIManager::getInstance().loadDoom(); }
 
 static const AppDescriptor kApps[] = {
-    {1, "Mesh Chat",     LV_SYMBOL_WIFI,     0x00F5D4, launchMeshChat},
-    {2, "Galeria",       LV_SYMBOL_IMAGE,    0xFF2E93, launchGallery},
-    {3, "Musica SD",     LV_SYMBOL_AUDIO,    0xFFB800, launchMusic},
-    {4, "Radio Web",     LV_SYMBOL_WIFI,     0x70E000, launchRadio},
-    {5, "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD, launchConfig},
-    {6, "Navegador",     LV_SYMBOL_EYE_OPEN, 0x00B4D8, launchTlvBrowser},
-    {7, "Utilidades",    LV_SYMBOL_LIST,     0x00F5D4, launchUtilities},
-    {8, "Cargador",      LV_SYMBOL_PLAY,     0xE50000, launchDoom},
+    {1, "Mesh Chat",     LV_SYMBOL_WIFI,      0x00F5D4, launchMeshChat},
+    {2, "Galeria",       LV_SYMBOL_IMAGE,     0xFF2E93, launchGallery},
+    {3, "Musica SD",     LV_SYMBOL_AUDIO,     0xFFB800, launchMusic},
+    {4, "Radio Web",     LV_SYMBOL_WIFI,      0x70E000, launchRadio},
+    {5, "Configuracion", LV_SYMBOL_SETTINGS,  0x9D4EDD, launchConfig},
+    {6, "Navegador",     LV_SYMBOL_EYE_OPEN,  0x00B4D8, launchTlvBrowser},
+    {7, "Utilidades",    LV_SYMBOL_LIST,      0x00F5D4, launchUtilities},
+    {8, "Archivos",      LV_SYMBOL_DIRECTORY, 0xF77F00, launchFileManager},
+    {9, "Cargador",      LV_SYMBOL_PLAY,      0xE50000, launchDoom},
 };
 
 void DashboardView::btn_event_cb(lv_event_t * e) {
