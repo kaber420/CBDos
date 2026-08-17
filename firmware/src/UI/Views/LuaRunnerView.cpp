@@ -138,12 +138,13 @@ void LuaRunnerView::file_select_cb(lv_event_t* e) {
 }
 
 void LuaRunnerView::showFilePickerModal() {
-    lv_obj_t* mask = lv_obj_create(lv_screen_active());
-    lv_obj_add_flag(mask, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_t* mask = lv_obj_create(lv_layer_top());
     lv_obj_set_size(mask, 320, 480);
+    lv_obj_set_pos(mask, 0, 0);
     lv_obj_set_style_bg_color(mask, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(mask, LV_OPA_80, 0);
     lv_obj_set_style_border_width(mask, 0, 0);
+    lv_obj_set_style_pad_all(mask, 0, 0);
 
     lv_obj_t* modal = lv_obj_create(mask);
     lv_obj_set_size(modal, 290, 380);

@@ -480,12 +480,13 @@ void FileManagerView::modal_confirm_delete_cb(lv_event_t* e) {
 }
 
 void FileManagerView::showDeleteConfirmModal(const StorageFileInfo& file) {
-    lv_obj_t* mask = lv_obj_create(lv_screen_active());
-    lv_obj_add_flag(mask, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_t* mask = lv_obj_create(lv_layer_top());
     lv_obj_set_size(mask, 320, 480);
+    lv_obj_set_pos(mask, 0, 0);
     lv_obj_set_style_bg_color(mask, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(mask, LV_OPA_80, 0);
     lv_obj_set_style_border_width(mask, 0, 0);
+    lv_obj_set_style_pad_all(mask, 0, 0);
 
     lv_obj_t* modal = lv_obj_create(mask);
     lv_obj_set_width(modal, 280);
@@ -556,12 +557,13 @@ void FileManagerView::modal_close_preview_cb(lv_event_t* e) {
 }
 
 void FileManagerView::showTextPreviewModal(const std::string& fileName, const std::string& content) {
-    lv_obj_t* mask = lv_obj_create(lv_screen_active());
-    lv_obj_add_flag(mask, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_t* mask = lv_obj_create(lv_layer_top());
     lv_obj_set_size(mask, 320, 480);
+    lv_obj_set_pos(mask, 0, 0);
     lv_obj_set_style_bg_color(mask, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(mask, LV_OPA_80, 0);
     lv_obj_set_style_border_width(mask, 0, 0);
+    lv_obj_set_style_pad_all(mask, 0, 0);
 
     lv_obj_t* modal = lv_obj_create(mask);
     lv_obj_set_width(modal, 290);

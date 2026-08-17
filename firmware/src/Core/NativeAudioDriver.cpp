@@ -134,13 +134,19 @@ bool NativeAudioDriver::begin(int bclk, int lrck, int dout, int sampleRate) {
 }
 
 static bool s_i2sInstalled = false;
+static int s_currentSampleRate = 0;
 
 // Instala el driver I2S con la sample rate real del archivo
 static bool installI2S(int bclk, int lrck, int dout, int sampleRate) {
-    // Si ya está instalado, desinstalarlo primero para reconfigurarlo
+    if (s_i2sInstalled && s_currentSampleRate == sampleRate) {
+        return true;
+    }
+
+    // Si ya está instalado a otro sample rate, desinstalarlo primero para reconfigurarlo
     if (s_i2sInstalled) {
         i2s_driver_uninstall(I2S_NUM_0);
         s_i2sInstalled = false;
+        s_currentSampleRate = 0;
     }
 
     i2s_config_t cfg = {
@@ -817,25 +823,44 @@ void NativeAudioDriver::playTonePattern(int patternId) {
 
 void NativeAudioDriver::playTone(float freq, int durationMs) {
     if (!initialized) begin();
-    stop();
-
     if (freq <= 0.0f || durationMs <= 0) return;
 
-    _toneFreq = freq;
-    _toneDuration = durationMs;
-    currentFilePath = "beep";
-    _isStream = false;
-    playing = true;
+    if (playing && !currentFilePath.equals("beep")) {
+        stop();
+    }
 
-    xTaskCreatePinnedToCore(
-        toneAudioTask,
-        "ToneTask",
-        4096,
-        this,
-        2,
-        &audioTaskHandle,
-        0
-    );
+    const int sampleRate = 44100;
+    installI2S(_bclk, _lrck, _dout, sampleRate);
+
+    const int CHUNK = 256;
+    int16_t pcm[CHUNK * 2];
+
+    int totalSamples = (sampleRate * durationMs) / 1000;
+    int generated = 0;
+    float phase = 0.0f;
+    float phaseInc = (2.0f * (float)M_PI * freq) / (float)sampleRate;
+
+    while (generated < totalSamples) {
+        int toGen = (totalSamples - generated > CHUNK) ? CHUNK : (totalSamples - generated);
+        for (int i = 0; i < toGen; i++) {
+            float progress = (float)(generated + i) / (float)totalSamples;
+            float env = 1.0f;
+            if (progress < 0.04f) {
+                env *= (progress / 0.04f);
+            } else if (progress > 0.94f) {
+                env *= ((1.0f - progress) / 0.06f);
+            }
+            int16_t s = (int16_t)(sinf(phase) * 26000.0f * env);
+            phase += phaseInc;
+            if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+            pcm[i * 2] = s;
+            pcm[i * 2 + 1] = s;
+        }
+        applyGain(pcm, toGen * 2);
+        size_t written = 0;
+        i2s_write(I2S_NUM_0, (const char*)pcm, toGen * 2 * sizeof(int16_t), &written, portMAX_DELAY);
+        generated += toGen;
+    }
 }
 
 void NativeAudioDriver::toneAudioTask(void* param) {
@@ -867,10 +892,12 @@ void NativeAudioDriver::toneAudioTask(void* param) {
                 if (decay > 0.0f) {
                     env = expf(-decay * progress);
                 }
-                if (progress < 0.04f) {
-                    env *= (progress / 0.04f);
+                if (progress < 0.03f) {
+                    env *= (progress / 0.03f);
+                } else if (progress > 0.95f) {
+                    env *= ((1.0f - progress) / 0.05f);
                 }
-                int16_t s = (int16_t)(sinf(phase) * 16000.0f * env);
+                int16_t s = (int16_t)(sinf(phase) * 26000.0f * env);
                 phase += phaseInc;
                 if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
                 pcm[i * 2] = s;
@@ -878,7 +905,7 @@ void NativeAudioDriver::toneAudioTask(void* param) {
             }
             applyGain(pcm, toGen * 2);
             size_t written = 0;
-            i2s_write(I2S_NUM_0, (const char*)pcm, toGen * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(100));
+            i2s_write(I2S_NUM_0, (const char*)pcm, toGen * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(200));
             generated += toGen;
         }
     };
@@ -890,7 +917,7 @@ void NativeAudioDriver::toneAudioTask(void* param) {
         while (generated < totalSamples && driver->playing) {
             int toGen = (totalSamples - generated > CHUNK) ? CHUNK : (totalSamples - generated);
             size_t written = 0;
-            i2s_write(I2S_NUM_0, (const char*)pcm, toGen * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(100));
+            i2s_write(I2S_NUM_0, (const char*)pcm, toGen * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(200));
             generated += toGen;
         }
     };
@@ -919,8 +946,8 @@ void NativeAudioDriver::toneAudioTask(void* param) {
         }
     }
 
-    i2s_zero_dma_buffer(I2S_NUM_0);
     free(pcm);
     driver->playing = false;
+    driver->audioTaskHandle = nullptr;
     vTaskDelete(NULL);
 }
