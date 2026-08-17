@@ -13,6 +13,7 @@ public:
     bool begin(int bclk = 42, int lrck = 2, int dout = 41, int sampleRate = 44100);
     void playMP3(const char* filePath);
     void playStream(const char* url);
+    void playTonePattern(int patternId);
     void stop();
     bool isPlaying() const { return playing; }
     bool isStream() const { return _isStream; }
@@ -37,6 +38,7 @@ private:
 
     static void audioTask(void* param);
     static void streamAudioTask(void* param);
+    static void toneAudioTask(void* param);
 };
 
 #endif // NATIVE_AUDIO_DRIVER_H

@@ -784,3 +784,110 @@ void NativeAudioDriver::streamAudioTask(void* param) {
     esp_task_wdt_delete(NULL);
     vTaskDelete(NULL);
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Síntesis de Tonos Nativos I2S (Alertas Pomodoro / Sistema)
+// ─────────────────────────────────────────────────────────────────────
+void NativeAudioDriver::playTonePattern(int patternId) {
+    if (!initialized) begin();
+    stop();
+
+    currentFilePath = String(patternId);
+    _isStream = false;
+    playing = true;
+
+    xTaskCreatePinnedToCore(
+        toneAudioTask,
+        "ToneTask",
+        4096,
+        this,
+        2,
+        &audioTaskHandle,
+        0
+    );
+}
+
+void NativeAudioDriver::toneAudioTask(void* param) {
+    NativeAudioDriver* driver = (NativeAudioDriver*)param;
+    int pattern = driver->currentFilePath.toInt();
+
+    const int sampleRate = 44100;
+    installI2S(driver->_bclk, driver->_lrck, driver->_dout, sampleRate);
+
+    const int CHUNK = 256;
+    int16_t* pcm = (int16_t*)malloc(CHUNK * 2 * sizeof(int16_t));
+    if (!pcm) {
+        driver->playing = false;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    auto playTone = [&](float freq, int durationMs, float decay) {
+        int totalSamples = (sampleRate * durationMs) / 1000;
+        int generated = 0;
+        float phase = 0.0f;
+        float phaseInc = (2.0f * (float)M_PI * freq) / (float)sampleRate;
+
+        while (generated < totalSamples && driver->playing) {
+            int toGen = (totalSamples - generated > CHUNK) ? CHUNK : (totalSamples - generated);
+            for (int i = 0; i < toGen; i++) {
+                float progress = (float)(generated + i) / (float)totalSamples;
+                float env = 1.0f;
+                if (decay > 0.0f) {
+                    env = expf(-decay * progress);
+                }
+                if (progress < 0.04f) {
+                    env *= (progress / 0.04f);
+                }
+                int16_t s = (int16_t)(sinf(phase) * 16000.0f * env);
+                phase += phaseInc;
+                if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+                pcm[i * 2] = s;
+                pcm[i * 2 + 1] = s;
+            }
+            applyGain(pcm, toGen * 2);
+            size_t written = 0;
+            i2s_write(I2S_NUM_0, (const char*)pcm, toGen * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(100));
+            generated += toGen;
+        }
+    };
+
+    auto playSilence = [&](int durationMs) {
+        int totalSamples = (sampleRate * durationMs) / 1000;
+        int generated = 0;
+        memset(pcm, 0, CHUNK * 2 * sizeof(int16_t));
+        while (generated < totalSamples && driver->playing) {
+            int toGen = (totalSamples - generated > CHUNK) ? CHUNK : (totalSamples - generated);
+            size_t written = 0;
+            i2s_write(I2S_NUM_0, (const char*)pcm, toGen * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(100));
+            generated += toGen;
+        }
+    };
+
+    if (pattern == 1) {
+        // Zen / Campana suave (Acorde armónico C5 -> E5 -> G5)
+        playTone(523.25f, 180, 2.0f);
+        playTone(659.25f, 180, 2.0f);
+        playTone(783.99f, 500, 3.0f);
+    } else if (pattern == 2) {
+        // Chime / Arpegio Retro (Secuencia melódica C6 -> E6 -> G6 -> C7 con alta resonancia)
+        playTone(1046.50f, 90, 1.0f);
+        playTone(1318.51f, 90, 1.0f);
+        playTone(1567.98f, 100, 1.0f);
+        playTone(2093.00f, 260, 2.5f);
+    } else if (pattern == 3) {
+        // Estridente / Alerta insistente (Ráfagas rápidas 1760Hz - 2200Hz)
+        for (int r = 0; r < 2 && driver->playing; r++) {
+            playTone(1760.0f, 65, 0.0f);
+            playTone(2200.0f, 65, 0.0f);
+            playTone(1760.0f, 65, 0.0f);
+            playTone(2200.0f, 65, 0.0f);
+            playSilence(80);
+        }
+    }
+
+    i2s_zero_dma_buffer(I2S_NUM_0);
+    free(pcm);
+    driver->playing = false;
+    vTaskDelete(NULL);
+}

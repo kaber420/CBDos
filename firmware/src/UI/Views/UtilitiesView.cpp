@@ -5,6 +5,7 @@
 #include "Utilities/TodoApp.h"
 #include "Utilities/CalculatorApp.h"
 #include "Utilities/StopwatchApp.h"
+#include "Utilities/PomodoroApp.h"
 
 HeaderBar* UtilitiesView::headerBar = nullptr;
 
@@ -12,6 +13,7 @@ void UtilitiesView::screen_delete_cb(lv_event_t* e) {
     TodoApp::cleanup();
     CalculatorApp::cleanup();
     StopwatchApp::cleanup();
+    PomodoroApp::cleanup();
 }
 
 lv_obj_t* UtilitiesView::create() {
@@ -27,10 +29,10 @@ lv_obj_t* UtilitiesView::create() {
 
     headerBar = HeaderBar::create(screen, "Utilidades", true, true);
 
-    // Tabview principal con 3 pestañas
+    // Tabview principal con 4 pestañas
     lv_obj_t* tabview = lv_tabview_create(screen);
     lv_tabview_set_tab_bar_position(tabview, LV_DIR_TOP);
-    lv_tabview_set_tab_bar_size(tabview, 42);
+    lv_tabview_set_tab_bar_size(tabview, 38);
     lv_obj_set_width(tabview, lv_pct(100));
     lv_obj_set_flex_grow(tabview, 1);
     lv_obj_set_style_bg_opa(tabview, 0, 0);
@@ -39,12 +41,13 @@ lv_obj_t* UtilitiesView::create() {
     // Estilizar barra de pestañas
     lv_obj_t* tab_bar = lv_tabview_get_tab_bar(tabview);
     DefaultTheme::applySunkenCard(tab_bar, 10);
-    lv_obj_set_style_pad_all(tab_bar, 3, 0);
-    lv_obj_set_style_pad_column(tab_bar, 6, 0);
+    lv_obj_set_style_pad_all(tab_bar, 2, 0);
+    lv_obj_set_style_pad_column(tab_bar, 4, 0);
 
     lv_obj_t* tab_todo = lv_tabview_add_tab(tabview, "Notas");
-    lv_obj_t* tab_calc = lv_tabview_add_tab(tabview, "Calculadora");
-    lv_obj_t* tab_sw   = lv_tabview_add_tab(tabview, "Cronometro");
+    lv_obj_t* tab_calc = lv_tabview_add_tab(tabview, "Calc");
+    lv_obj_t* tab_sw   = lv_tabview_add_tab(tabview, "Crono");
+    lv_obj_t* tab_pomo = lv_tabview_add_tab(tabview, "Pomodoro");
 
     // Desactivar scroll por gestos táctiles en el contenedor de pestañas
     lv_obj_t* content = lv_tabview_get_content(tabview);
@@ -57,6 +60,7 @@ lv_obj_t* UtilitiesView::create() {
     DefaultTheme::disableScroll(tab_todo);
     DefaultTheme::disableScroll(tab_calc);
     DefaultTheme::disableScroll(tab_sw);
+    DefaultTheme::disableScroll(tab_pomo);
 
     // Estilizar botones individuales de las pestañas
     uint32_t btn_cnt = lv_obj_get_child_count(tab_bar);
@@ -68,6 +72,12 @@ lv_obj_t* UtilitiesView::create() {
             lv_obj_set_style_bg_opa(btn, LV_OPA_60, 0);
             lv_obj_set_style_text_color(btn, DefaultTheme::getMutedTextColor(), 0);
             lv_obj_set_style_border_width(btn, 0, 0);
+
+            // Ajustar tipografía de la etiqueta
+            lv_obj_t* lbl = lv_obj_get_child(btn, 0);
+            if (lbl) {
+                lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
+            }
 
             // Estado seleccionado (activo)
             lv_obj_set_style_bg_color(btn, lv_color_hex(0x242838), LV_STATE_CHECKED);
@@ -83,6 +93,7 @@ lv_obj_t* UtilitiesView::create() {
     TodoApp::build(tab_todo);
     CalculatorApp::build(tab_calc);
     StopwatchApp::build(tab_sw);
+    PomodoroApp::build(tab_pomo);
 
     lv_obj_add_event_cb(screen, screen_delete_cb, LV_EVENT_DELETE, NULL);
 
