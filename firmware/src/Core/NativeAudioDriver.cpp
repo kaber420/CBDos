@@ -133,10 +133,15 @@ bool NativeAudioDriver::begin(int bclk, int lrck, int dout, int sampleRate) {
     return true;
 }
 
+static bool s_i2sInstalled = false;
+
 // Instala el driver I2S con la sample rate real del archivo
 static bool installI2S(int bclk, int lrck, int dout, int sampleRate) {
     // Si ya está instalado, desinstalarlo primero para reconfigurarlo
-    i2s_driver_uninstall(I2S_NUM_0);
+    if (s_i2sInstalled) {
+        i2s_driver_uninstall(I2S_NUM_0);
+        s_i2sInstalled = false;
+    }
 
     i2s_config_t cfg = {
         .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
@@ -173,6 +178,7 @@ static bool installI2S(int bclk, int lrck, int dout, int sampleRate) {
                   sampleRate,
                   AUDIO_DMA_BUF_COUNT, AUDIO_DMA_BUF_LEN,
                   AUDIO_DMA_BUF_COUNT * AUDIO_DMA_BUF_LEN * 2);
+    s_i2sInstalled = true;
     return true;
 }
 

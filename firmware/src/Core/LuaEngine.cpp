@@ -1,6 +1,9 @@
 #include "LuaEngine.h"
 #include <Arduino.h>
 #include <esp_heap_caps.h>
+#include <SD.h>
+#include <LittleFS.h>
+#include "LVFS_Driver.h"
 
 extern "C" {
 #include "lua.h"
@@ -150,13 +153,77 @@ bool LuaEngine::executeFile(const std::string& filePath, std::string* outResult)
 
     lastError.clear();
 
-    int status = luaL_dofile(L, filePath.c_str());
+    // Normalizar ruta (asegurar que empiece por '/')
+    std::string normPath = filePath;
+    if (normPath.empty() || normPath[0] != '/') {
+        normPath = "/" + normPath;
+    }
+
+    std::string content;
+    bool readOk = false;
+
+    // 1. Probar lectura desde SD Card
+    lv_fs_spi_lock();
+    if (SD.exists(normPath.c_str())) {
+        File f = SD.open(normPath.c_str(), FILE_READ);
+        if (f && !f.isDirectory()) {
+            size_t sz = f.size();
+            content.resize(sz);
+            size_t bytesRead = f.read((uint8_t*)content.data(), sz);
+            f.close();
+            if (bytesRead == sz) {
+                readOk = true;
+            }
+        } else if (f) {
+            f.close();
+        }
+    }
+    lv_fs_spi_unlock();
+
+    // 2. Si no se encontró en SD, probar LittleFS
+    if (!readOk) {
+        if (LittleFS.exists(normPath.c_str())) {
+            File f = LittleFS.open(normPath.c_str(), "r");
+            if (f && !f.isDirectory()) {
+                size_t sz = f.size();
+                content.resize(sz);
+                size_t bytesRead = f.read((uint8_t*)content.data(), sz);
+                f.close();
+                if (bytesRead == sz) {
+                    readOk = true;
+                }
+            } else if (f) {
+                f.close();
+            }
+        }
+    }
+
+    if (!readOk) {
+        lastError = "cannot open " + normPath + ": No such file or directory";
+        if (outResult) *outResult = lastError;
+        Serial.printf("[LuaEngine] Error al ejecutar '%s': %s\n", normPath.c_str(), lastError.c_str());
+        return false;
+    }
+
+    // Cargar y compilar el buffer en el estado de Lua
+    int status = luaL_loadbuffer(L, content.data(), content.size(), normPath.c_str());
     if (status != LUA_OK) {
         const char* err = lua_tostring(L, -1);
-        lastError = err ? err : "Error de lectura/ejecución del archivo Lua";
+        lastError = err ? err : "Error de sintaxis en archivo Lua";
         lua_pop(L, 1);
         if (outResult) *outResult = lastError;
-        Serial.printf("[LuaEngine] Error al ejecutar '%s': %s\n", filePath.c_str(), lastError.c_str());
+        Serial.printf("[LuaEngine] Error de sintaxis en '%s': %s\n", normPath.c_str(), lastError.c_str());
+        return false;
+    }
+
+    // Ejecutar el script cargado
+    status = lua_pcall(L, 0, LUA_MULTRET, 0);
+    if (status != LUA_OK) {
+        const char* err = lua_tostring(L, -1);
+        lastError = err ? err : "Error de ejecución en archivo Lua";
+        lua_pop(L, 1);
+        if (outResult) *outResult = lastError;
+        Serial.printf("[LuaEngine] Error al ejecutar '%s': %s\n", normPath.c_str(), lastError.c_str());
         return false;
     }
 

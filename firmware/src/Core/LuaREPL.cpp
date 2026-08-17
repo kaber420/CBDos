@@ -128,6 +128,19 @@ void LuaREPL::processLine(const std::string& line) {
 
     if (trimmed.empty()) return;
 
+    // Si el usuario copió y pegó accidentalmente con el prompt "lua> " o "> "
+    if (trimmed.rfind("lua>", 0) == 0) {
+        trimmed = trimmed.substr(4);
+        size_t s = trimmed.find_first_not_of(" \t");
+        trimmed = (s != std::string::npos) ? trimmed.substr(s) : "";
+    } else if (trimmed.rfind(">", 0) == 0) {
+        trimmed = trimmed.substr(1);
+        size_t s = trimmed.find_first_not_of(" \t");
+        trimmed = (s != std::string::npos) ? trimmed.substr(s) : "";
+    }
+
+    if (trimmed.empty()) return;
+
     // Comprobar si es un comando especial con punto
     if (trimmed[0] == '.') {
         handleDotCommand(trimmed);

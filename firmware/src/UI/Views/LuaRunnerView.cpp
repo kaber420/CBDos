@@ -183,32 +183,35 @@ void LuaRunnerView::showFilePickerModal() {
     lv_obj_set_style_pad_all(list, 6, 0);
     lv_obj_set_style_pad_row(list, 4, 0);
 
-    // Buscar en / y en /scripts
-    auto filesRoot = StorageManager::listDirectory(StorageType::SD_CARD, "/");
-    auto filesScripts = StorageManager::listDirectory(StorageType::SD_CARD, "/scripts");
-
+    // Escaneo recursivo de archivos .lua en la tarjeta SD (hasta 30 carpetas)
     std::vector<StorageFileInfo> luaFiles;
-    for (const auto& f : filesRoot) {
-        if (!f.isDirectory && f.name.size() > 4 && f.name.rfind(".lua") == f.name.size() - 4) {
-            luaFiles.push_back(f);
-        }
-    }
-    for (const auto& f : filesScripts) {
-        if (!f.isDirectory && f.name.size() > 4 && f.name.rfind(".lua") == f.name.size() - 4) {
-            luaFiles.push_back(f);
+    std::vector<std::string> dirsToScan = {"/"};
+
+    for (size_t d = 0; d < dirsToScan.size() && dirsToScan.size() < 30; d++) {
+        auto entries = StorageManager::listDirectory(StorageType::SD_CARD, dirsToScan[d]);
+        for (const auto& f : entries) {
+            if (f.isDirectory) {
+                dirsToScan.push_back(f.path);
+            } else {
+                std::string nameLower = f.name;
+                std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+                if (nameLower.size() >= 4 && nameLower.rfind(".lua") == nameLower.size() - 4) {
+                    luaFiles.push_back(f);
+                }
+            }
         }
     }
 
     if (luaFiles.empty()) {
         lv_obj_t* emptyLbl = lv_label_create(list);
-        lv_label_set_text(emptyLbl, "No se encontraron archivos .lua\nen la tarjeta SD.");
+        lv_label_set_text(emptyLbl, "No se encontraron archivos .lua\nen ninguna carpeta de la SD.");
         lv_obj_set_style_text_color(emptyLbl, DefaultTheme::getMutedTextColor(), 0);
         lv_obj_set_style_text_align(emptyLbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_center(emptyLbl);
     } else {
         for (const auto& f : luaFiles) {
             lv_obj_t* item = lv_button_create(list);
-            lv_obj_set_size(item, lv_pct(100), 38);
+            lv_obj_set_size(item, lv_pct(100), 40);
             DefaultTheme::applyButton(item, 8);
             lv_obj_set_flex_flow(item, LV_FLEX_FLOW_ROW);
             lv_obj_set_flex_align(item, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -219,9 +222,12 @@ void LuaRunnerView::showFilePickerModal() {
             lv_obj_set_style_text_color(icon, DefaultTheme::getPrimaryAccent(), 0);
 
             lv_obj_t* name = lv_label_create(item);
-            lv_label_set_text(name, f.name.c_str());
+            lv_label_set_text(name, f.path.c_str());
+            lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+            lv_obj_set_width(name, 210);
             lv_obj_set_style_text_color(name, DefaultTheme::getTextColor(), 0);
-            lv_obj_set_style_margin_left(name, 8, 0);
+            lv_obj_set_style_text_font(name, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_margin_left(name, 6, 0);
 
             // Almacenar path estático copiado
             char* pathAlloc = strdup(f.path.c_str());
