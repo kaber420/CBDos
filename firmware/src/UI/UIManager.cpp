@@ -1,6 +1,6 @@
 #include "UIManager.h"
 #include "Views/DashboardView.h"
-#include "Views/MenuView.h"
+#include "Views/GalleryListView.h"
 #include "Views/TlvBrowserView.h"
 #include "Themes/DefaultTheme.h"
 #include <cstdio>
@@ -67,7 +67,7 @@ void UIManager::loadLauncher() {
 
 void UIManager::loadMediaGallery() {
     destroyTransient();
-    currentTransientScreen = MenuView::create();
+    currentTransientScreen = GalleryListView::create();
     lv_screen_load(currentTransientScreen);
 }
 

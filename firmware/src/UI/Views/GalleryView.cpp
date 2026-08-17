@@ -1,5 +1,4 @@
 #include "GalleryView.h"
-#include "MenuView.h"
 #include "../Themes/DefaultTheme.h"
 #include "../UIManager.h"
 
@@ -11,9 +10,13 @@ lv_obj_t* GalleryView::create(const std::string& imagePath, const std::string& i
     currentImagePath = imagePath;
     currentImageName = imageName;
 
-    std::string resolvedPath = MenuView::resolveSdidxPath(imagePath);
-    if (resolvedPath.empty()) {
-        resolvedPath = imagePath;
+    std::string resolvedPath = imagePath;
+    if (resolvedPath.rfind("A:", 0) != 0) {
+        if (resolvedPath.rfind("/", 0) == 0) {
+            resolvedPath = "A:" + resolvedPath;
+        } else {
+            resolvedPath = "A:/" + resolvedPath;
+        }
     }
 
     lv_obj_t* scr = lv_obj_create(NULL);

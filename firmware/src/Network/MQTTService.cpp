@@ -1,6 +1,5 @@
 #include "MQTTService.h"
 #include "ConfigManager.h"
-#include "../UI/Views/MenuView.h"
 #include "../Core/LVFS_Driver.h"
 
 #ifdef ARDUINO
@@ -218,8 +217,9 @@ void MQTTService::processSync(byte* payload, unsigned int length) {
         return;
     }
     
+    static std::string currentCatalogVersion = "";
     std::string newVersion = doc["catalog_version"] | "";
-    std::string currentVersion = MenuView::getCurrentCatalogVersion();
+    std::string currentVersion = currentCatalogVersion;
     
     if (newVersion == currentVersion && !newVersion.empty()) {
         Serial.printf("[SYNC] Catalogo ya actualizado (Version: %s). Ignorando.\n", newVersion.c_str());
@@ -235,7 +235,7 @@ void MQTTService::processSync(byte* payload, unsigned int length) {
         file.close();
         if (written == length) {
             Serial.println("[SYNC] Nuevo manifesto MsgPack guardado exitosamente.");
-            MenuView::setCurrentCatalogVersion(newVersion);
+            currentCatalogVersion = newVersion;
         } else {
             Serial.printf("[SYNC] ERROR: Solo se escribieron %d de %d bytes en la SD\n", written, length);
         }
