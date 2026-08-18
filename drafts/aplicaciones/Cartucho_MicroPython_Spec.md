@@ -1,23 +1,54 @@
-# Especificación Técnica: Cartucho MicroPython para CBDos
+# Especificación Técnica: Ecosistema de Cartuchos MicroPython para CBDos
 
-## 📌 1. Visión General
-El **Cartucho MicroPython** transforma el dispositivo CBDos (ESP32-S3 / JC3248W535) en una estación de desarrollo e interpretación de código Python autónoma y portátil. 
+## 📌 1. Visión General: Filosofía Dual y Niveles de Uso
 
-Gracias a la **Arquitectura Multi-Slot de Cartuchos**, el runtime de MicroPython opera de forma 100% aislada de CBDos: dispone de la totalidad de la CPU (240 MHz dual-core), los 8 MB de PSRAM Octal (OPI) y acceso exclusivo al hardware sin interferir con la memoria ni la estabilidad del sistema operativo base.
+El **Ecosistema de Cartuchos MicroPython** transforma el dispositivo CBDos (ESP32-S3 / JC3248W535) en una estación de desarrollo e interpretación de código Python autónoma y portátil.
+
+Para equilibrar **seguridad/confianza oficial** con **máxima capacidad gráfica y multimedia**, el ecosistema se divide en dos líneas de cartuchos:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   ECOSISTEMA DE CARTUCHOS CBDos                        │
+├────────────────────────────────┬───────────────────────────────────────┤
+│ 🔵 LÍNEA OFICIAL (VANILLA)     │ 🟢 LÍNEA CBDos ENHANCED (COMPLETA)     │
+├────────────────────────────────┼───────────────────────────────────────┤
+│ • micropython_core.bin         │ • micropython_media.bin                │
+│   (100% Upstream oficial)      │   (Canvas 2D, Audio I2S, Touch nativo) │
+│                                │ • micropython_lvgl.bin                 │
+│ • Máxima confianza y seguridad │   (Entorno GUI completo en Python)     │
+│ • Para IoT, terminal y cómputo │ • Para desarrollar y jugar en el S3    │
+└────────────────────────────────┴───────────────────────────────────────┘
+```
+
+### 1.1. Línea Oficial (Vanilla / Upstream)
+* **`micropython_core.bin` (Headless & Máxima Potencia):**
+  - **Origen:** 100% oficial e intacto descargado de [micropython.org](https://micropython.org) para `ESP32_GENERIC_S3-SPIRAM_OCT`.
+  - **Propósito:** Para desarrolladores que priorizan la seguridad de una fuente upstream oficial verificada. Cero código de terceros inyectado.
+  - **Recursos:** 100% de CPU libre, casi 8 MB de PSRAM dedicados al heap.
+  - **Uso:** Servidores locales, bots, matemáticas, protocolos de radio (LoRa/FLRC), scripts de fondo y automatizaciones IoT.
+  - **Retorno al SO:** Mediante la API estándar de particiones de MicroPython (`esp32.Partition.find(...)`) o script `boot.py`.
+
+### 1.2. Línea CBDos Enhanced (Gráficos, Audio y UI Táctil)
+* **`micropython_media.bin` (Arcade 2D + Audio I2S + Touch):**
+  - **Origen:** Build personalizada de la comunidad CBDos con drivers nativos embebidos en C (Pantalla QSPI AXS15231B, Audio I2S DMA y Touch GT911).
+  - **Propósito:** Creación de videojuegos retro en Python (estilo Pygame/PICO-8), visualizadores de audio y sintetizadores.
+* **`micropython_lvgl.bin` (Rich GUI con LVGL):**
+  - **Origen:** Build con bindings oficiales de LVGL integrados.
+  - **Propósito:** Desarrollo de aplicaciones gráficas completas con ventanas, botones, teclados virtuales y dashboards táctiles escritos 100% en Python directamente sobre el ESP32-S3.
 
 ---
 
 ## 🗺️ 2. Mapa de Memoria y Ubicación de Ranura
 
-El cartucho de MicroPython está diseñado para operar en la **Ranura 1 (Slot Grande de 4.0 MB)** o ser cargado dinámicamente desde la tarjeta MicroSD.
+Los cartuchos de MicroPython están diseñados para operar en la **Ranura 1 (Slot Grande de 4.0 MB)** o ser cargados dinámicamente desde la tarjeta MicroSD.
 
 | Propiedad | Valor / Detalle |
 | :--- | :--- |
 | **Ranura Destino en Flash** | **Ranura 1 (app1 / ota_1)** |
 | **Offset en Flash** | `0x510000` |
 | **Tamaño Máximo de Ranura** | `0x400000` (**4.0 MB**) |
-| **Archivo Binario en SD** | `/sd/cartridges/micropython.bin` |
-| **Tamaño Típico del Binario** | ~1.6 MB – 2.2 MB (con soporte SPIRAM + LVGL/display) |
+| **Archivos en MicroSD** | `/sd/cartridges/micropython_core.bin`<br>`/sd/cartridges/micropython_media.bin`<br>`/sd/cartridges/micropython_lvgl.bin` |
+| **Tamaño Típico del Binario** | ~1.6 MB (Core) a ~2.5 MB (LVGL) |
 
 ---
 
