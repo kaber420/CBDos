@@ -1,4 +1,5 @@
 #include "TlvBrowserView.h"
+#include "../UIManager.h"
 #include "../Components/HeaderBar.h"
 #include "../Themes/DefaultTheme.h"
 #include "../../Core/tlv_parser.h"
@@ -9,7 +10,6 @@
 
 lv_obj_t* TlvBrowserView::contentArea = nullptr;
 lv_obj_t* TlvBrowserView::urlInput = nullptr;
-lv_obj_t* TlvBrowserView::keyboard = nullptr;
 
 namespace {
 
@@ -103,10 +103,6 @@ void TlvBrowserView::processNetworkPacket(const uint8_t* packet, size_t length) 
 void TlvBrowserView::navigateToUrl(const char* url) {
     if (!url || strlen(url) == 0) return;
     
-    if (keyboard) {
-        lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-    }
-    
     uint8_t tlv_frame[256];
     size_t frame_len = tlv_build_req_url(tlv_frame, sizeof(tlv_frame), url);
     if (frame_len > 0) {
@@ -122,23 +118,6 @@ void TlvBrowserView::onUrlSubmit(lv_event_t* e) {
     }
 }
 
-void TlvBrowserView::onUrlFocus(lv_event_t* e) {
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t* ta = (lv_obj_t*)lv_event_get_target(e);
-    
-    if (code == LV_EVENT_FOCUSED || code == LV_EVENT_CLICKED) {
-        if (!keyboard) {
-            lv_obj_t* scr = lv_obj_get_screen(ta);
-            keyboard = lv_keyboard_create(scr);
-        }
-        lv_keyboard_set_textarea(keyboard, ta);
-        lv_obj_remove_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-    } else if (code == LV_EVENT_DEFOCUSED || code == LV_EVENT_READY) {
-        if (keyboard) {
-            lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-}
 
 void TlvBrowserView::onBookmarkClick(lv_event_t* e) {
     const char* url = (const char*)lv_event_get_user_data(e);
@@ -193,7 +172,7 @@ lv_obj_t* TlvBrowserView::create() {
 
     lv_obj_add_event_cb(goBtn, onUrlSubmit, LV_EVENT_CLICKED, urlInput);
     lv_obj_add_event_cb(urlInput, onUrlSubmit, LV_EVENT_READY, urlInput);
-    lv_obj_add_event_cb(urlInput, onUrlFocus, LV_EVENT_ALL, NULL);
+    UIManager::attachKeyboard(urlInput);
 
     // 2. Barra de Marcadores Rápidos (1-Touch Bookmarks)
     lv_obj_t* bookmarkBar = lv_obj_create(scr);

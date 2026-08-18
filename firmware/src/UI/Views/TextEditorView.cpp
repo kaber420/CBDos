@@ -96,6 +96,17 @@ void TextEditorView::btn_toggle_kb_cb(lv_event_t* e) {
     }
 }
 
+void TextEditorView::editor_kb_event_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+        if (keyboard && lv_obj_is_valid(keyboard)) {
+            keyboardVisible = false;
+            lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+
 void TextEditorView::btn_save_cb(lv_event_t* e) {
     if (currentFilePath.empty()) {
         showSaveAsModal();
@@ -191,14 +202,18 @@ void TextEditorView::modal_save_confirm_cb(lv_event_t* e) {
         UIManager::showToast("Error al guardar archivo");
     }
 
-    lv_obj_delete(ctx->mask);
+    if (ctx->mask && lv_obj_is_valid(ctx->mask)) {
+        lv_obj_delete_async(ctx->mask);
+    }
     delete ctx;
 }
 
 void TextEditorView::modal_save_cancel_cb(lv_event_t* e) {
     SaveAsContext* ctx = (SaveAsContext*)lv_event_get_user_data(e);
     if (ctx) {
-        lv_obj_delete(ctx->mask);
+        if (ctx->mask && lv_obj_is_valid(ctx->mask)) {
+            lv_obj_delete_async(ctx->mask);
+        }
         delete ctx;
     }
 }
@@ -220,28 +235,34 @@ void TextEditorView::modal_storage_toggle_cb(lv_event_t* e) {
 }
 
 void TextEditorView::showSaveAsModal() {
-    lv_obj_t* activeScr = lv_screen_active();
-    if (!activeScr) return;
+    // 1. Ocultar teclado base del editor para evitar duplicados
+    if (keyboard && lv_obj_is_valid(keyboard)) {
+        lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+        keyboardVisible = false;
+    }
 
     SaveAsContext* ctx = new SaveAsContext();
     ctx->targetStorage = currentStorage;
 
-    // Máscara oscura
-    ctx->mask = lv_obj_create(activeScr);
-    lv_obj_set_size(ctx->mask, lv_pct(100), lv_pct(100));
+    // 2. Máscara oscura montada en lv_layer_top()
+    ctx->mask = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(ctx->mask, 320, 480);
+    lv_obj_set_pos(ctx->mask, 0, 0);
     lv_obj_set_style_bg_color(ctx->mask, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(ctx->mask, LV_OPA_70, 0);
-    lv_obj_center(ctx->mask);
+    lv_obj_set_style_bg_opa(ctx->mask, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(ctx->mask, 0, 0);
+    lv_obj_set_style_pad_all(ctx->mask, 0, 0);
     lv_obj_add_flag(ctx->mask, LV_OBJ_FLAG_CLICKABLE);
 
-    // Contenedor modal
+    // 3. Contenedor modal superior
     lv_obj_t* modal = lv_obj_create(ctx->mask);
-    lv_obj_set_size(modal, 290, 420);
+    lv_obj_set_size(modal, 300, 200);
     DefaultTheme::applyRaisedCard(modal, 16);
-    lv_obj_center(modal);
+    lv_obj_set_align(modal, LV_ALIGN_TOP_MID);
+    lv_obj_set_style_margin_top(modal, 15, 0);
     lv_obj_set_flex_flow(modal, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(modal, 12, 0);
-    lv_obj_set_style_pad_row(modal, 8, 0);
+    lv_obj_set_style_pad_all(modal, 10, 0);
+    lv_obj_set_style_pad_row(modal, 6, 0);
 
     // Título
     lv_obj_t* title = lv_label_create(modal);
@@ -251,7 +272,7 @@ void TextEditorView::showSaveAsModal() {
 
     // Botón selector de unidad
     lv_obj_t* btnUnit = lv_button_create(modal);
-    lv_obj_set_size(btnUnit, lv_pct(100), 32);
+    lv_obj_set_size(btnUnit, lv_pct(100), 30);
     DefaultTheme::applyButton(btnUnit, 8);
     lv_obj_t* lblUnit = lv_label_create(btnUnit);
     lv_label_set_text(lblUnit, (ctx->targetStorage == StorageType::SD_CARD) ? "Unidad: MicroSD" : "Unidad: Flash");
@@ -267,14 +288,9 @@ void TextEditorView::showSaveAsModal() {
     lv_textarea_set_text(ctx->taPath, defaultPath.c_str());
     lv_obj_set_style_text_font(ctx->taPath, &lv_font_montserrat_12, 0);
 
-    // Teclado modal para ingresar ruta
-    lv_obj_t* kb = lv_keyboard_create(modal);
-    lv_obj_set_size(kb, lv_pct(100), 220);
-    lv_keyboard_set_textarea(kb, ctx->taPath);
-
     // Botones Cancelar / Guardar
     lv_obj_t* btnRow = lv_obj_create(modal);
-    lv_obj_set_size(btnRow, lv_pct(100), 40);
+    lv_obj_set_size(btnRow, lv_pct(100), 36);
     lv_obj_set_style_bg_opa(btnRow, 0, 0);
     lv_obj_set_style_border_width(btnRow, 0, 0);
     lv_obj_set_flex_flow(btnRow, LV_FLEX_FLOW_ROW);
@@ -282,7 +298,7 @@ void TextEditorView::showSaveAsModal() {
     lv_obj_set_style_pad_all(btnRow, 0, 0);
 
     lv_obj_t* btnCancel = lv_button_create(btnRow);
-    lv_obj_set_size(btnCancel, 120, 36);
+    lv_obj_set_size(btnCancel, 120, 32);
     DefaultTheme::applyButton(btnCancel, 8);
     lv_obj_t* lblC = lv_label_create(btnCancel);
     lv_label_set_text(lblC, "Cancelar");
@@ -290,7 +306,7 @@ void TextEditorView::showSaveAsModal() {
     lv_obj_add_event_cb(btnCancel, modal_save_cancel_cb, LV_EVENT_CLICKED, ctx);
 
     lv_obj_t* btnSave = lv_button_create(btnRow);
-    lv_obj_set_size(btnSave, 120, 36);
+    lv_obj_set_size(btnSave, 120, 32);
     DefaultTheme::applyButton(btnSave, 8);
     lv_obj_set_style_bg_color(btnSave, lv_color_hex(0x1B5E20), 0);
     lv_obj_t* lblS = lv_label_create(btnSave);
@@ -298,6 +314,18 @@ void TextEditorView::showSaveAsModal() {
     lv_obj_set_style_text_color(lblS, lv_color_hex(0x00E676), 0);
     lv_obj_center(lblS);
     lv_obj_add_event_cb(btnSave, modal_save_confirm_cb, LV_EVENT_CLICKED, ctx);
+
+    // 4. Teclado dedicado en la parte inferior de la misma capa modal
+    lv_obj_t* kb = lv_keyboard_create(ctx->mask);
+    lv_obj_set_size(kb, lv_pct(100), 240);
+    lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(kb, lv_color_hex(0x1B1E29), 0);
+    lv_obj_set_style_border_color(kb, lv_color_hex(0x2E3444), 0);
+    lv_obj_set_style_border_width(kb, 1, 0);
+    lv_obj_set_style_radius(kb, 0, 0);
+    lv_keyboard_set_textarea(kb, ctx->taPath);
+    lv_obj_add_event_cb(kb, modal_save_confirm_cb, LV_EVENT_READY, ctx);
+    lv_obj_add_event_cb(kb, modal_save_cancel_cb, LV_EVENT_CANCEL, ctx);
 }
 
 // ── Modal: Abrir Archivo ──────────────────────────────────────────
@@ -309,7 +337,7 @@ struct OpenFileContext {
 void TextEditorView::modal_open_close_cb(lv_event_t* e) {
     lv_obj_t* mask = (lv_obj_t*)lv_event_get_user_data(e);
     if (mask && lv_obj_is_valid(mask)) {
-        lv_obj_delete(mask);
+        lv_obj_delete_async(mask);
     }
 }
 
@@ -324,32 +352,51 @@ void TextEditorView::modal_file_item_cb(lv_event_t* e) {
     }
 
     if (mask && lv_obj_is_valid(mask)) {
-        lv_obj_delete(mask);
+        lv_obj_delete_async(mask);
+    }
+}
+
+static void modal_scroll_up_cb(lv_event_t* e) {
+    lv_obj_t* targetList = (lv_obj_t*)lv_event_get_user_data(e);
+    if (targetList && lv_obj_is_valid(targetList)) {
+        lv_obj_scroll_by_bounded(targetList, 0, 120, LV_ANIM_ON);
+    }
+}
+
+static void modal_scroll_down_cb(lv_event_t* e) {
+    lv_obj_t* targetList = (lv_obj_t*)lv_event_get_user_data(e);
+    if (targetList && lv_obj_is_valid(targetList)) {
+        lv_obj_scroll_by_bounded(targetList, 0, -120, LV_ANIM_ON);
     }
 }
 
 void TextEditorView::showOpenFileModal() {
-    lv_obj_t* activeScr = lv_screen_active();
-    if (!activeScr) return;
+    // 1. Ocultar teclado si está visible para liberar la pantalla completa
+    if (keyboard && lv_obj_is_valid(keyboard)) {
+        lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
+        keyboardVisible = false;
+    }
 
-    // Máscara
-    lv_obj_t* mask = lv_obj_create(activeScr);
-    lv_obj_set_size(mask, lv_pct(100), lv_pct(100));
+    // 2. Máscara montada en lv_layer_top()
+    lv_obj_t* mask = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(mask, 320, 480);
+    lv_obj_set_pos(mask, 0, 0);
     lv_obj_set_style_bg_color(mask, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(mask, LV_OPA_70, 0);
-    lv_obj_center(mask);
+    lv_obj_set_style_bg_opa(mask, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(mask, 0, 0);
+    lv_obj_set_style_pad_all(mask, 0, 0);
     lv_obj_add_flag(mask, LV_OBJ_FLAG_CLICKABLE);
 
-    // Contenedor modal
+    // 3. Contenedor modal
     lv_obj_t* modal = lv_obj_create(mask);
-    lv_obj_set_size(modal, 290, 380);
+    lv_obj_set_size(modal, 300, 420);
     DefaultTheme::applyRaisedCard(modal, 16);
     lv_obj_center(modal);
     lv_obj_set_flex_flow(modal, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(modal, 12, 0);
+    lv_obj_set_style_pad_all(modal, 10, 0);
     lv_obj_set_style_pad_row(modal, 8, 0);
 
-    // Header del modal
+    // 4. Header del modal con título y controles de navegación
     lv_obj_t* header = lv_obj_create(modal);
     lv_obj_set_size(header, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(header, 0, 0);
@@ -359,25 +406,58 @@ void TextEditorView::showOpenFileModal() {
     lv_obj_set_style_pad_all(header, 0, 0);
 
     lv_obj_t* title = lv_label_create(header);
-    lv_label_set_text(title, "Abrir Archivo de Texto / Script");
+    lv_label_set_text(title, "Abrir Archivo");
     lv_obj_set_style_text_color(title, DefaultTheme::getTextColor(), 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
 
-    lv_obj_t* btnClose = lv_button_create(header);
-    lv_obj_set_size(btnClose, 28, 28);
-    DefaultTheme::applyButton(btnClose, 14);
+    lv_obj_t* navRow = lv_obj_create(header);
+    lv_obj_set_size(navRow, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(navRow, 0, 0);
+    lv_obj_set_style_border_width(navRow, 0, 0);
+    lv_obj_set_flex_flow(navRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_all(navRow, 0, 0);
+    lv_obj_set_style_pad_column(navRow, 6, 0);
+
+    // Botón Scroll Arriba (⬆️)
+    lv_obj_t* btnUp = lv_button_create(navRow);
+    lv_obj_set_size(btnUp, 32, 30);
+    DefaultTheme::applyButton(btnUp, 8);
+    lv_obj_t* lblUp = lv_label_create(btnUp);
+    lv_label_set_text(lblUp, LV_SYMBOL_UP);
+    lv_obj_center(lblUp);
+
+    // Botón Scroll Abajo (⬇️)
+    lv_obj_t* btnDown = lv_button_create(navRow);
+    lv_obj_set_size(btnDown, 32, 30);
+    DefaultTheme::applyButton(btnDown, 8);
+    lv_obj_t* lblDown = lv_label_create(btnDown);
+    lv_label_set_text(lblDown, LV_SYMBOL_DOWN);
+    lv_obj_center(lblDown);
+
+    // Botón Cerrar (✖️)
+    lv_obj_t* btnClose = lv_button_create(navRow);
+    lv_obj_set_size(btnClose, 32, 30);
+    DefaultTheme::applyButton(btnClose, 8);
     lv_obj_t* lblX = lv_label_create(btnClose);
     lv_label_set_text(lblX, LV_SYMBOL_CLOSE);
     lv_obj_center(lblX);
     lv_obj_add_event_cb(btnClose, modal_open_close_cb, LV_EVENT_CLICKED, mask);
 
-    // Lista de archivos
+    // 5. Lista de archivos con scroll táctil habilitado
     lv_obj_t* list = lv_obj_create(modal);
-    lv_obj_set_size(list, lv_pct(100), lv_pct(82));
+    lv_obj_set_width(list, lv_pct(100));
+    lv_obj_set_flex_grow(list, 1);
     DefaultTheme::applySunkenCard(list, 10);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(list, 6, 0);
     lv_obj_set_style_pad_row(list, 4, 0);
+    lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+
+    // Vincular flechas de navegación a la lista
+    lv_obj_add_event_cb(btnUp, modal_scroll_up_cb, LV_EVENT_CLICKED, list);
+    lv_obj_add_event_cb(btnDown, modal_scroll_down_cb, LV_EVENT_CLICKED, list);
 
     // Escanear SD en busca de archivos editables
     std::vector<StorageFileInfo> textFiles;
@@ -416,6 +496,7 @@ void TextEditorView::showOpenFileModal() {
             lv_obj_set_flex_flow(item, LV_FLEX_FLOW_ROW);
             lv_obj_set_flex_align(item, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
             lv_obj_set_style_pad_all(item, 6, 0);
+            lv_obj_add_flag(item, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
 
             lv_obj_t* icon = lv_label_create(item);
             lv_label_set_text(icon, LV_SYMBOL_FILE);
@@ -449,14 +530,29 @@ lv_obj_t* TextEditorView::create(const std::string& initialPath, StorageType sto
     WallpaperManager::getInstance().applyWallpaper(screen);
 
     lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(screen, 6, 0);
-    lv_obj_set_style_pad_row(screen, 4, 0);
+    lv_obj_set_style_pad_all(screen, 0, 0);
+    lv_obj_set_style_pad_row(screen, 0, 0);
 
-    // 1. HeaderBar
-    HeaderBar::create(screen, "Editor", true, true);
+    // Contenedor superior para el editor (con padding interior)
+    lv_obj_t* editorLayout = lv_obj_create(screen);
+    lv_obj_set_width(editorLayout, lv_pct(100));
+    lv_obj_set_flex_grow(editorLayout, 1);
+    lv_obj_set_flex_flow(editorLayout, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(editorLayout, 6, 0);
+    lv_obj_set_style_pad_row(editorLayout, 4, 0);
+    lv_obj_set_style_bg_opa(editorLayout, 0, 0);
+    lv_obj_set_style_border_width(editorLayout, 0, 0);
+
+    // 1. HeaderBar (sin indicador de WiFi para un encabezado más limpio)
+    HeaderBarConfig hbCfg;
+    hbCfg.title = "Editor";
+    hbCfg.showBackButton = true;
+    hbCfg.showTime = true;
+    hbCfg.showWifi = false;
+    HeaderBar::create(editorLayout, hbCfg);
 
     // 2. Info Bar (Ruta del archivo actual)
-    lv_obj_t* infoBar = lv_obj_create(screen);
+    lv_obj_t* infoBar = lv_obj_create(editorLayout);
     lv_obj_set_size(infoBar, lv_pct(100), 28);
     DefaultTheme::applySunkenCard(infoBar, 6);
     lv_obj_set_flex_flow(infoBar, LV_FLEX_FLOW_ROW);
@@ -471,7 +567,7 @@ lv_obj_t* TextEditorView::create(const std::string& initialPath, StorageType sto
     lv_obj_set_style_text_font(fileLabel, &lv_font_montserrat_12, 0);
 
     // 3. Toolbar de botones de acción
-    lv_obj_t* toolbar = lv_obj_create(screen);
+    lv_obj_t* toolbar = lv_obj_create(editorLayout);
     lv_obj_set_size(toolbar, lv_pct(100), 38);
     lv_obj_set_style_bg_opa(toolbar, 0, 0);
     lv_obj_set_style_border_width(toolbar, 0, 0);
@@ -539,7 +635,7 @@ lv_obj_t* TextEditorView::create(const std::string& initialPath, StorageType sto
     lv_obj_add_event_cb(btnRun, btn_run_cb, LV_EVENT_CLICKED, NULL);
 
     // 4. Área de Texto Principal (Textarea)
-    textArea = lv_textarea_create(screen);
+    textArea = lv_textarea_create(editorLayout);
     lv_obj_set_width(textArea, lv_pct(100));
     lv_obj_set_flex_grow(textArea, 1);
     DefaultTheme::applySunkenCard(textArea, 10);
@@ -550,10 +646,15 @@ lv_obj_t* TextEditorView::create(const std::string& initialPath, StorageType sto
     lv_textarea_set_cursor_click_pos(textArea, true);
     lv_obj_add_event_cb(textArea, ta_event_cb, LV_EVENT_ALL, NULL);
 
-    // 5. Teclado Virtual Acoplado
+    // 5. Teclado Virtual Acoplado (Full width borde a borde, estilo CBDos)
     keyboard = lv_keyboard_create(screen);
-    lv_obj_set_size(keyboard, lv_pct(100), 190);
+    lv_obj_set_size(keyboard, lv_pct(100), lv_pct(50));
+    lv_obj_set_style_bg_color(keyboard, lv_color_hex(0x1B1E29), 0);
+    lv_obj_set_style_border_color(keyboard, lv_color_hex(0x2E3444), 0);
+    lv_obj_set_style_border_width(keyboard, 1, 0);
+    lv_obj_set_style_radius(keyboard, 0, 0);
     lv_keyboard_set_textarea(keyboard, textArea);
+    lv_obj_add_event_cb(keyboard, editor_kb_event_cb, LV_EVENT_ALL, NULL);
 
     // 6. Cargar contenido inicial si se proporcionó una ruta
     if (!initialPath.empty()) {

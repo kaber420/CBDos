@@ -23,10 +23,8 @@ public:
 private:
     static lv_obj_t* contentArea;
     static lv_obj_t* urlInput;
-    static lv_obj_t* keyboard;
     
     static void onUrlSubmit(lv_event_t* e);
-    static void onUrlFocus(lv_event_t* e);
     static void onBookmarkClick(lv_event_t* e);
     static void onUplinkFrameGenerated(const uint8_t* frame, size_t len);
 };

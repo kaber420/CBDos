@@ -16,6 +16,7 @@ private:
     static void btn_new_cb(lv_event_t* e);
     static void btn_open_cb(lv_event_t* e);
     static void btn_toggle_kb_cb(lv_event_t* e);
+    static void editor_kb_event_cb(lv_event_t* e);
     static void btn_run_cb(lv_event_t* e);
 
     // Modales y herramientas

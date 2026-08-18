@@ -21,8 +21,12 @@ void WallpaperConfigView::wallpaper_select_cb(lv_event_t* e) {
         lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
         const char* path = (const char*)lv_obj_get_user_data(btn);
         if (path) {
-            WallpaperManager::getInstance().setWallpaper(path);
-            UIManager::showToast("Fondo de pantalla actualizado");
+            bool ok = WallpaperManager::getInstance().setWallpaper(path);
+            if (ok) {
+                UIManager::showToast("Fondo copiado a Flash y aplicado");
+            } else {
+                UIManager::showToast("Error: Formato no compatible");
+            }
             UIManager::getInstance().loadLauncher();
         }
     }
@@ -87,7 +91,7 @@ lv_obj_t* WallpaperConfigView::create() {
         lv_obj_set_style_pad_all(emptyCard, 14, 0);
 
         lv_obj_t* emptyLbl = lv_label_create(emptyCard);
-        lv_label_set_text(emptyLbl, "No se encontraron imagenes en\nS:/wallpapers/*.jpg");
+        lv_label_set_text(emptyLbl, "No se encontraron imagenes en\n/wallpapers/ (*.bin, *.jpg)");
         lv_obj_set_style_text_color(emptyLbl, DefaultTheme::getMutedTextColor(), 0);
         lv_obj_set_style_text_align(emptyLbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_center(emptyLbl);

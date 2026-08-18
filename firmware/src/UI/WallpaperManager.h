@@ -20,15 +20,23 @@ public:
 
     void init();
     void applyWallpaper(lv_obj_t* parent);
-    void setWallpaper(const std::string& path);
+    bool setWallpaper(const std::string& path);
     void restoreDefault();
     std::string getCurrentWallpaper() const { return currentPath; }
-    bool isCustom() const { return !currentPath.empty() && currentPath != "default"; }
+    bool isCustom() const { return hasCustomWallpaper; }
     std::vector<std::string> getAvailableWallpapers();
 
 private:
-    WallpaperManager() : currentPath("default") {}
+    WallpaperManager();
+    ~WallpaperManager();
+
+    bool ensureBufferAllocated();
+    bool loadFromFlash();
+
     std::string currentPath;
+    bool hasCustomWallpaper;
+    uint8_t* customBuffer;
+    lv_image_dsc_t customDsc;
 };
 
 #endif // WALLPAPER_MANAGER_H

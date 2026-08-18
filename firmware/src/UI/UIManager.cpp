@@ -1,4 +1,5 @@
 #include "UIManager.h"
+#include "WallpaperManager.h"
 #include "Views/DashboardView.h"
 #include "Views/GalleryListView.h"
 #include "Views/TlvBrowserView.h"
@@ -61,6 +62,8 @@ void UIManager::loadLauncher() {
     destroyTransient();
     if (!launcherScreen) {
         launcherScreen = DashboardView::create();
+    } else {
+        WallpaperManager::getInstance().applyWallpaper(launcherScreen);
     }
     lv_screen_load(launcherScreen);
 }

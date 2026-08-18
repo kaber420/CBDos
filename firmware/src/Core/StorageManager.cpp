@@ -287,12 +287,16 @@ bool StorageManager::writeFile(StorageType storage, const std::string& path, con
         targetFS = &LittleFS;
     }
 
-    // Asegurar directorio padre si contiene subdirectorios
+    // Asegurar directorio padre de forma recursiva si contiene subdirectorios
     size_t lastSlash = path.rfind('/');
     if (lastSlash != std::string::npos && lastSlash > 0) {
-        std::string dirPath = path.substr(0, lastSlash);
-        if (!targetFS->exists(dirPath.c_str())) {
-            targetFS->mkdir(dirPath.c_str());
+        for (size_t i = 1; i <= lastSlash; i++) {
+            if (path[i] == '/' || i == lastSlash) {
+                std::string currentDir = path.substr(0, i);
+                if (!targetFS->exists(currentDir.c_str())) {
+                    targetFS->mkdir(currentDir.c_str());
+                }
+            }
         }
     }
 
