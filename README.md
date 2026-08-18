@@ -20,38 +20,46 @@ Integra una suite completa de aplicaciones nativas para productividad, multimedi
 | Componente / App | Estado | Operatividad | Descripción |
 | :--- | :---: | :---: | :--- |
 | **Dashboard & Launcher** | 🟢 Estable | **100%** | Grid dinámico con scroll, barra de estado superior (`HeaderBar`), reloj, batería, RSSI y wallpapers. |
+| **Gestor de Cartuchos (`CartridgeView`)** | 🟢 Estable | **100%** | Administrador de ranuras OTA fijas con inspección de firmware, validación anti-cuelgues y flasheo directo de `.bin` desde MicroSD. |
 | **Sistema de Fondos (Wallpaper)** | 🟢 Estable | **100%** | Selección híbrida de fondos de pantalla: predeterminados en Flash o imágenes JPG dinámicas desde MicroSD. |
-| **Radio Web Online** | 🟢 Estable | **95%** | Streaming HTTP de emisoras Shoutcast/Icecast con decodificación MP3 y AAC por hardware/software (`libhelix`) y reconexión automática. |
-| **Reproductor de Música** | 🟢 Estable | **90%** | Reproducción de archivos MP3 locales almacenados en la tarjeta MicroSD. Incluye control de reproduccion.|
+| **Motor Lua Script Runner (In-App)** | 🟢 Estable | **95%** | Motor de scripting integrado en CBDos para automatizaciones, consola interactiva y mini-apps UI sin reiniciar el SO. |
+| **Cartucho MicroPython (app1)** | 🟡 En Integración | **85%** | Entorno Python autónomo en Ranura 1 (4MB) con 8MB PSRAM dedicados, USB REPL, WebREPL y montaje de `/sd`. |
+| **Cartucho DOOM (app1)** | 🟢 Estable | **95%** | Motor nativo `doomgeneric` en PSRAM con pad virtual táctil (`CartridgeGamepad`), soporte mandos BLE y retorno seguro al OS. |
+| **Cartucho Game Boy Color (app2)** | 🟡 Beta | **80%** | Emulador nativo `Peanut-GB` con overlay clásico Game Boy y selector de ROMs (`.gb` / `.gbc`) desde MicroSD. |
+| **Radio Web Online** | 🟢 Estable | **95%** | Streaming HTTP de emisoras Shoutcast/Icecast con decodificación MP3 y AAC (`libhelix`) y reconexión automática. |
+| **Reproductor de Música** | 🟢 Estable | **90%** | Reproducción de archivos MP3 locales almacenados en la tarjeta MicroSD. Incluye control de reproducción.|
 | **Visor de Medios / Galería** | 🟢 Estable | **90%** | Explorador de archivos en MicroSD con decodificación y renderizado nativo en pantalla de imágenes JPG, PNG y BMP. |
-| **Cartucho DOOM (app1)** | 🟢 Estable | **95%** | Motor nativo `doomgeneric` optimizado en PSRAM con pad virtual táctil (`CartridgeGamepad`), soporte para mandos Bluetooth BLE y retorno seguro al OS. |
-| **Cartucho Game Boy Color (app2)** | 🟡 Beta | **75%** | Emulador nativo `Peanut-GB` con overlay clásico Game Boy y selector de ROMs (`.gb` / `.gbc`) desde MicroSD. |
 | **BLE Gamepad Tester** | 🟢 Estable | **95%** | Sniffer y analizador de mandos inalámbricos Bluetooth para inspección de paquetes HID en tiempo real. |
 | **Todo App / Bloc de Notas** | 🟢 Estable | **90%** | Gestor de tareas con casillas de verificación (*checkboxes*) y persistencia de notas en tarjeta MicroSD (`/notes`). |
 | **Cronómetro / Timer** | 🟢 Estable | **95%** | Cronómetro digital de precisión con soporte para registro de vueltas (*laps*). |
-| **Calculadora** | 🟡 En Desarrollo | **60%** | Esqueleto UI y operaciones aritméticas básicas operativas. *Detalle:* En números grandes o desbordamientos la representación de caracteres requiere ajuste de formato numérico. |
+| **Calculadora** | 🟡 En Desarrollo | **60%** | Esqueleto UI y operaciones aritméticas básicas operativas. |
 | **Navegador TLVGL / Mesh** | 🟢 Estable | **10%** | Renderizado binario de páginas CBML servidas por el Router Mesh en Go y el servidor de hosting Python. |
 | **Gestor de Conectividad & Radio** | 🟢 Estable | **50%** | Paneles de configuración para WiFi, Gateway Mesh, MQTT y transceptores RF duales (LoRa / FLRC SX1280). |
 
 ---
 
-## 🎮 Emulación y Arquitectura de Cartuchos (Dual/Multi Firmware OTA)
+## 🎮 Arquitectura Multi-Slot de Cartuchos & Flasheo desde MicroSD
 
-Para superar los límites de memoria y garantizar el máximo rendimiento sin sacrificar la interfaz de usuario, CBDos implementa un esquema de **particionado modular multi-cartucho**:
+Para superar los límites de memoria y garantizar la ejecución aislada de juegos, emuladores y motores de programación pesados, CBDos implementa un esquema de **2 Ranuras Fijas de Memoria Flash (16MB)** con soporte para flashear binarios `.bin` directamente desde la tarjeta MicroSD sin necesidad de cables ni PC:
 
 ```text
 [ Flash 16MB SPI ]
-├── 0x010000 (ota_0 - 6MB): CBDos (Sistema Operativo, Dashboard, WiFi, LVGL v9)
-├── 0x610000 (ota_1 - 4MB): Cartucho DOOM (Motor Nativo en PSRAM + Virtual Gamepad)
-├── 0xA10000 (ota_2 - 4MB): Cartucho Game Boy Color (Emulador Peanut-GB)
-└── 0xE10000 (nvs / data):  Almacenamiento de Sistema y Configuraciones
+├── 0x010000 (app0 - 5.0MB): CBDos (Sistema Operativo Base, Dashboard, WiFi, LVGL v9.5)
+├── 0x510000 (app1 - 4.0MB): Ranura 1 (Slot Grande) ◄── [MicroPython / DOOM / Motores 3D]
+├── 0x910000 (app2 - 2.0MB): Ranura 2 (Slot Pequeño) ◄─ [Game Boy Color / NES / Testers]
+├── 0xB10000 (spiffs - 4.0MB): LittleFS (Fondos de pantalla, fuentes y caché del sistema)
+└── 0xF10000 (fatfs - 0.9MB): Almacenamiento FAT secundario
 ```
 
-### 🚀 Comandos de Despliegue (PlatformIO)
-Dado el sistema de particiones, cada entorno debe compilarse y flashearse de manera independiente:
-* `pio run -e esp32 -t upload` *(CBDos - OS Principal)*
-* `pio run -e doom -t upload` *(Cartucho DOOM)*
-* `pio run -e gbc -t upload` *(Cartucho Game Boy)*
+### 🚀 Características de la Arquitectura de Cartuchos:
+* **Flasheo Directo desde MicroSD:** Puedes guardar tus ejecutables compilados en `/sd/cartridges/*.bin` y cargarlos a la Flash en 2-3 segundos desde la UI de CBDos (`CartridgeManager`).
+* **Protección Anti-Cuelgues:** Inspección de cabeceras de firmware (`esp_app_desc_t`) para prevenir reinicios si una ranura está vacía.
+* **Control Táctil Universal (`CartridgeGamepad`):** Overlay virtual táctil acelerado por hardware con multitouch GT911 y botón `[SALIR]` que conmuta la partición OTA para reiniciar de vuelta a CBDos.
+
+### 💻 Despliegue por Cable (PlatformIO):
+* `pio run -e esp32 -t upload` *(CBDos - OS Principal a 0x010000)*
+* `pio run -e doom -t upload` *(DOOM a Ranura 1: 0x510000)*
+* `pio run -e gbc -t upload` *(Game Boy Color a Ranura 2: 0x910000)*
 
 * **Control Táctil Universal (`CartridgeGamepad`):** Overlay virtual acelerado por hardware con respuesta inmediata, multitouch GT911 y botón físico/táctil `[SALIR]` que conmuta la partición OTA para reiniciar de vuelta a CBDos sin pérdida de estado.
 * **Soporte Mandos BLE:** Conexión inalámbrica a mandos Bluetooth (ej. iPega, DualShock, mandos genéricos HID).
@@ -136,11 +144,12 @@ go build -o build/router cmd/router/main.go
 ├── firmware/                 # Código fuente C/C++ (PlatformIO)
 │   ├── src/
 │   │   ├── main.cpp          # Punto de entrada, init de hardware, LVGL loop
-│   │   ├── UI/Views/         # Vistas: Dashboard, Radio, Música, Galería, Config, etc.
+│   │   ├── UI/Views/         # Vistas: Dashboard, CartridgeView, LuaRunner, Radio, Música, etc.
 │   │   │   └── Utilities/    # Calculadora, TodoApp/Notas, Cronómetro
-│   │   ├── Core/             # Drivers: Audio Nativo, LVFS, TLV Parser
-│   │   ├── DoomLauncher.cpp  # Lanzador Cartucho DOOM
-│   │   └── GBCLauncher.cpp   # Lanzador Cartucho Game Boy Color
+│   │   ├── Core/             # CartridgeManager, LuaEngine, Audio Nativo, LVFS, StorageManager
+│   │   ├── CartridgeGamepad.cpp # Gamepad virtual táctil multitouch para cartuchos
+│   │   ├── DoomLauncher.cpp  # Punto de entrada Cartucho DOOM (app1)
+│   │   └── GBCLauncher.cpp   # Punto de entrada Cartucho Game Boy Color (app2)
 │   ├── include/              # Cabeceras del sistema y configuración de LVGL
 │   └── platformio.ini        # Definición de entornos y librerías
 ├── gateway/
