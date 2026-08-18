@@ -29,7 +29,7 @@ public:
     void loadWallpaperConfig();
     void loadUtilities();
     void loadFileManager();
-    void loadDoom();
+    void loadCartridges();
     void loadLuaRunner(const std::string& scriptPath = "");
     void loadTextEditor(const std::string& filePath = "", StorageType storage = StorageType::SD_CARD);
 

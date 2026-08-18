@@ -99,7 +99,7 @@ void UIManager::loadTlvBrowser() {
 #include "Views/WallpaperConfigView.h"
 #include "Views/UtilitiesView.h"
 #include "Views/FileManagerView.h"
-#include "Views/DoomView.h"
+#include "Views/CartridgeView.h"
 #include "Views/LuaRunnerView.h"
 #include "Views/TextEditorView.h"
 
@@ -181,9 +181,9 @@ void UIManager::loadGatewayConfig() {
     lv_screen_load(currentTransientScreen);
 }
 
-void UIManager::loadDoom() {
+void UIManager::loadCartridges() {
     destroyTransient();
-    currentTransientScreen = DoomView::create();
+    currentTransientScreen = CartridgeView::create();
     if (currentTransientScreen) {
         lv_screen_load(currentTransientScreen);
     }

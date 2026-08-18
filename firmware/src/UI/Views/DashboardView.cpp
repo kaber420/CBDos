@@ -17,7 +17,7 @@ static void launchConfig()      { UIManager::getInstance().loadConfigView(); }
 static void launchTlvBrowser()  { UIManager::getInstance().loadTlvBrowser(); }
 static void launchUtilities()   { UIManager::getInstance().loadUtilities(); }
 static void launchFileManager() { UIManager::getInstance().loadFileManager(); }
-static void launchDoom()        { UIManager::getInstance().loadDoom(); }
+static void launchCartridges()  { UIManager::getInstance().loadCartridges(); }
 static void launchLua()         { UIManager::getInstance().loadLuaRunner(); }
 static void launchEditor()      { UIManager::getInstance().loadTextEditor(); }
 
@@ -30,7 +30,7 @@ static const AppDescriptor kApps[] = {
     {6, "Navegador",     LV_SYMBOL_EYE_OPEN,  0x00B4D8, launchTlvBrowser},
     {7, "Utilidades",    LV_SYMBOL_LIST,      0x00F5D4, launchUtilities},
     {8, "Archivos",      LV_SYMBOL_DIRECTORY, 0xF77F00, launchFileManager},
-    {9, "Cargador",      LV_SYMBOL_PLAY,      0xE50000, launchDoom},
+    {9, "Cartuchos",     LV_SYMBOL_PLAY,      0x3F68D9, launchCartridges},
     {10, "Lua Script",   LV_SYMBOL_FILE,      0x00E676, launchLua},
     {11, "Editor",       LV_SYMBOL_EDIT,      0xFF6D00, launchEditor},
 };
