@@ -1,0 +1,25 @@
+idf_component_register(
+    SRCS 
+        "src/cbdos_core.cpp"
+        "src/ui/ThemeEngine.cpp"
+        "src/ui/UIManager.cpp"
+        "src/ui/WallpaperManager.cpp"
+        "src/ui/themes/DefaultTheme.cpp"
+        "src/ui/assets/default_wallpaper.c"
+        "src/ui/components/HeaderBar.cpp"
+        "src/ui/components/QuickSettingsPanel.cpp"
+        "src/ui/views/DashboardView.cpp"
+        "src/ui/views/ConfigView.cpp"
+        "src/ui/views/WiFiConfigView.cpp"
+        "src/ui/views/WallpaperConfigView.cpp"
+        "src/network/ConfigManager.cpp"
+        "src/network/TimeService.cpp"
+    INCLUDE_DIRS 
+        "include"
+        "src/ui"
+        "src/network"
+    REQUIRES 
+        "esp_timer"
+        "freertos"
+        "lvgl__lvgl"
+)

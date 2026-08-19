@@ -1,0 +1,52 @@
+# ==============================================================================
+# Git Ignore - CyBerDeck OS (CBDos v0.2.0)
+# ==============================================================================
+
+# --- PlatformIO (ESP32-S3) ---
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# --- ESP-IDF 5.5 / CMake / Ninja (ESP32-P4) ---
+build/
+**/build/
+managed_components/
+**/managed_components/
+dependencies.lock
+sdkconfig.old
+sdkconfig.ci
+
+# --- Python Virtual Environments & Cache ---
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# --- IDEs & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.orig
+
+# --- Logs & Temporales de compilación ---
+*.log
+*.elf
+*.bin
+*.map
+*.hex
+*.tmp
+
+# --- Wallpapers / Assets pesados ---
+wallpapers/
+**/wallpapers/
+
+# --- Archivos del Sistema Operativo ---
+.DS_Store
+Thumbs.db
+Desktop.ini

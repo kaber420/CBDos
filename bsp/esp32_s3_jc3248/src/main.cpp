@@ -1,0 +1,131 @@
+#include "cbdos/system.hpp"
+#include "cbdos/display.hpp"
+#include "cbdos/input.hpp"
+#include "cbdos/network.hpp"
+#include "cbdos/ui.hpp"
+#include "../../core/src/network/ConfigManager.h"
+#include "../../core/src/network/TimeService.h"
+#include <Arduino.h>
+#include <WiFi.h>
+#include <lvgl.h>
+#include <JC3248W535.h>
+
+extern JC3248W535_Display& get_s3_display_driver();
+extern JC3248W535_Touch& get_s3_touch_driver();
+
+static const char* TAG = "CBDos_Main";
+static lv_display_t* s_lv_display = nullptr;
+static lv_indev_t* s_lv_indev = nullptr;
+
+static uint32_t lvgl_tick_get_cb(void) {
+    return (uint32_t)millis();
+}
+
+static void lvgl_display_flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *px_map) {
+    uint32_t w = (area->x2 - area->x1 + 1);
+    uint32_t h = (area->y2 - area->y1 + 1);
+
+    JC3248W535_Display& drv = get_s3_display_driver();
+    if (drv.getCanvas()) {
+        drv.getCanvas()->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map, w, h);
+        drv.flush();
+    }
+    lv_display_flush_ready(display);
+}
+
+static void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data) {
+    cbdos::input::TouchPoint tp;
+    if (cbdos::input::getTouch(tp) && tp.isPressed) {
+        data->state = LV_INDEV_STATE_PR;
+        data->point.x = tp.x;
+        data->point.y = tp.y;
+    } else {
+        data->state = LV_INDEV_STATE_REL;
+    }
+}
+
+static void networkTask(void* param) {
+    while (1) {
+        if (WiFi.status() == WL_CONNECTED) {
+            TimeService::getInstance().update();
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    cbdos::system::sleepMs(500);
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.0) [Target: ESP32-S3] ===");
+    
+    // 1. Inicializar Subsistema de Pantalla a través de la API
+    if (!cbdos::display::init()) {
+        cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando Display en S3");
+        return;
+    }
+    
+    // 2. Inicializar Entrada Táctil
+    if (!cbdos::input::init()) {
+        cbdos::system::log(cbdos::system::LogLevel::Warn, TAG, "Aviso: Touch no detectado o fallo en bus I2C");
+    } else {
+        get_s3_display_driver().setTouchRotation(&get_s3_touch_driver());
+        cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Touch AXS15231B calibrado y asociado a la rotación");
+    }
+
+    // 3. Inicializar Red y Servicio de Hora NTP
+    cbdos::network::init();
+    TimeConfig timeCfg;
+    ConfigManager::getInstance().loadTime(timeCfg);
+    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str());
+
+    WiFiConfig wifiCfg;
+    if (ConfigManager::getInstance().loadWiFi(wifiCfg) && wifiCfg.ssid.length() > 0) {
+        cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Auto-conectando a Wi-Fi: %s", wifiCfg.ssid.c_str());
+        if (wifiCfg.useStaticIp) {
+            IPAddress ip, gw, sub;
+            if (ip.fromString(wifiCfg.staticIp.c_str()) && gw.fromString(wifiCfg.gateway.c_str())) {
+                sub.fromString(wifiCfg.subnet.length() > 0 ? wifiCfg.subnet.c_str() : "255.255.255.0");
+                WiFi.config(ip, gw, sub);
+            }
+        }
+        WiFi.begin(wifiCfg.ssid.c_str(), wifiCfg.password.c_str());
+    }
+
+    xTaskCreatePinnedToCore(networkTask, "NetworkTask", 8192, NULL, 1, NULL, 0);
+
+    // 4. Inicializar LVGL 9.5 con fuente de Ticks
+    lv_init();
+    lv_tick_set_cb(lvgl_tick_get_cb);
+    
+    auto caps = cbdos::display::getCapabilities();
+    
+    // Búferes para LVGL (en PSRAM)
+    size_t buf_size = caps.width * 40 * sizeof(lv_color_t);
+    lv_color_t* buf1 = (lv_color_t*)ps_malloc(buf_size);
+    if (!buf1) buf1 = (lv_color_t*)malloc(buf_size);
+
+    s_lv_display = lv_display_create(caps.width, caps.height);
+    lv_display_set_color_format(s_lv_display, LV_COLOR_FORMAT_RGB565);
+    lv_display_set_buffers(s_lv_display, buf1, nullptr, buf_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_flush_cb(s_lv_display, lvgl_display_flush_cb);
+
+    // Configurar Input Táctil y vincularlo explícitamente al display en LVGL 9
+    s_lv_indev = lv_indev_create();
+    lv_indev_set_type(s_lv_indev, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(s_lv_indev, lvgl_touch_read_cb);
+    lv_indev_set_display(s_lv_indev, s_lv_display);
+
+    // 5. Inicializar Sistema de Interfaz Gráfica Universal (Fase 1)
+    if (!cbdos::ui::init()) {
+        cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando UI Core en S3");
+        return;
+    }
+
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "CyBerDeck OS v0.2.0 iniciado en ESP32-S3 a %d FPS!", caps.targetFps);
+}
+
+void loop() {
+    lv_timer_handler();
+    cbdos::ui::update();
+    cbdos::system::sleepMs(5);
+}
