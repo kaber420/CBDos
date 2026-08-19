@@ -15,6 +15,7 @@
 #include "Core/LuaREPL.h"
 #include "Network/AssetManager.h"
 #include "Network/TlvNetworkClient.h"
+#include "Network/TimeService.h"
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
 #include <unistd.h>
@@ -102,6 +103,7 @@ static void networkTask(void* param) {
                 g_currentRssi = WiFi.RSSI();
                 SystemStateAPI::updateWifi(true, g_currentRssi);
             }
+            TimeService::getInstance().update();
             if (g_hasGateway) {
                 MQTTService::getInstance().update();
             }
@@ -117,6 +119,13 @@ static void networkTask(void* param) {
 
 void startNormalBoot() {
     Serial.println("[OK] Starting normal boot...");
+
+    TimeConfig timeCfg;
+    ConfigManager::getInstance().loadTime(timeCfg);
+    if (timeCfg.enabled) {
+        TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str());
+    }
+
     String mac;
 #ifdef ARDUINO
     WiFi.mode(WIFI_STA);
@@ -370,6 +379,21 @@ void loop() {
         int rssi = SystemStateAPI::isWifiConnected() ? SystemStateAPI::getWifiRSSI() : -999;
         HeaderBar::updateActiveSignal(rssi);
     }
+
+    static uint32_t lastClockCheck = 0;
+    if (now - lastClockCheck >= 15000 || lastClockCheck == 0) {
+        lastClockCheck = now;
+        char timeBuf[16];
+        TimeService::getInstance().getFormattedTime(timeBuf, sizeof(timeBuf));
+        HeaderBar::updateActiveTime(timeBuf);
+
+        if (TimeService::getInstance().isSynced()) {
+            char dateBuf[16];
+            TimeService::getInstance().getFormattedDate(dateBuf, sizeof(dateBuf), "%d/%m/%Y");
+            HeaderBar::updateActiveDate(dateBuf);
+        }
+    }
+
     if (g_isConfigured) {
         if (AssetManager::getInstance().checkAndClearRefreshFlag()) {
             lv_obj_send_event(lv_screen_active(), LV_EVENT_REFRESH, NULL);

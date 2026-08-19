@@ -20,6 +20,8 @@ bool ConfigManager::init() {
     if (res) preferences.end();
     res = preferences.begin("gateways", true);
     if (res) preferences.end();
+    res = preferences.begin("time", true);
+    if (res) preferences.end();
     return true;
 }
 
@@ -34,7 +36,7 @@ bool ConfigManager::clearLegacyConfig() {
 }
 
 bool ConfigManager::clearAllNvs() {
-    const char* namespaces[] = {"wifi", "lora", "flrc", "gateways", "tablehub"};
+    const char* namespaces[] = {"wifi", "lora", "flrc", "gateways", "time", "tablehub"};
     for (const char* ns : namespaces) {
         if (preferences.begin(ns, false)) {
             preferences.clear();
@@ -151,6 +153,31 @@ bool ConfigManager::saveFLRC(const FLRCConfig& cfg) {
     preferences.putUShort("sync", cfg.syncWord);
     preferences.putBool("crc", cfg.enableCRC);
     preferences.putUShort("preamb", cfg.preambleLength);
+    preferences.end();
+    return true;
+}
+
+// ─── Time / NTP Config ───
+bool ConfigManager::loadTime(TimeConfig& cfg) {
+    if (!preferences.begin("time", true)) {
+        return false;
+    }
+    cfg.ntpServer = preferences.getString("server", "pool.ntp.org");
+    cfg.gmtOffsetSeconds = preferences.getInt("offset", -21600);
+    cfg.daylightOffsetSeconds = preferences.getInt("dst", 0);
+    cfg.enabled = preferences.getBool("enabled", true);
+    preferences.end();
+    return true;
+}
+
+bool ConfigManager::saveTime(const TimeConfig& cfg) {
+    if (!preferences.begin("time", false)) {
+        return false;
+    }
+    preferences.putString("server", cfg.ntpServer);
+    preferences.putInt("offset", cfg.gmtOffsetSeconds);
+    preferences.putInt("dst", cfg.daylightOffsetSeconds);
+    preferences.putBool("enabled", cfg.enabled);
     preferences.end();
     return true;
 }
@@ -438,6 +465,18 @@ bool ConfigManager::loadFLRC(FLRCConfig& cfg) {
 
 bool ConfigManager::saveFLRC(const FLRCConfig& cfg) {
     mockFLRC = cfg;
+    return true;
+}
+
+static TimeConfig mockTime;
+
+bool ConfigManager::loadTime(TimeConfig& cfg) {
+    cfg = mockTime;
+    return true;
+}
+
+bool ConfigManager::saveTime(const TimeConfig& cfg) {
+    mockTime = cfg;
     return true;
 }
 

@@ -6,6 +6,7 @@ struct HeaderBarConfig {
     bool showBackButton = true;
     bool showTime = true;
     bool showWifi = true;
+    bool showDate = false;
     bool showCartButton = false;
     bool titleMarquee = false;
     bool translucent = false;
@@ -24,12 +25,14 @@ public:
     
     // Métodos estáticos para actualizar el header actualmente activo (llamados desde main.cpp / UIManager)
     static void updateActiveTime(const char* timeStr);
+    static void updateActiveDate(const char* dateStr);
     static void updateActiveBattery(int percentage);
     static void updateActiveSignal(int strength);
     static void updateActiveCart();
 
     // Métodos de instancia para actualización de widgets LVGL internos
     void updateTime(const char* timeStr);
+    void updateDate(const char* dateStr);
     void updateBattery(int percentage);
     void updateSignal(int strength);
     void updateCart(int count);
@@ -40,6 +43,7 @@ private:
     lv_obj_t* container = nullptr;
     lv_obj_t* backButton = nullptr;
     lv_obj_t* titleLabel = nullptr;
+    bool isDateHeader = false;
     
     // Componentes del Carrito
     lv_obj_t* cartButton = nullptr;
@@ -61,6 +65,7 @@ private:
     // Estado global compartido
     static HeaderBar* activeHeader;
     static char lastTimeStr[16];
+    static char lastDateStr[16];
     static int lastBatteryPercentage;
     static int lastSignalStrength;
     static int lastCartCount;

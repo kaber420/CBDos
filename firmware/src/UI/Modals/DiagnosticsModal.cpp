@@ -1,5 +1,6 @@
 #include "DiagnosticsModal.h"
 #include "../Themes/DefaultTheme.h"
+#include "../../Network/TimeService.h"
 #include <stdio.h>
 
 lv_obj_t* DiagnosticsModal::modalMask = nullptr;
@@ -99,6 +100,16 @@ void DiagnosticsModal::show(lv_obj_t* parent, const SystemDiagnostics& diag) {
     uint32_t secs = diag.uptimeSeconds % 60;
     snprintf(upBuf, sizeof(upBuf), "%um %us", mins, secs);
     addInfoRow(card, "[Sistema] Uptime:", upBuf, true);
+
+    char timeBuf[32];
+    if (TimeService::getInstance().isSynced()) {
+        char tStr[16];
+        TimeService::getInstance().getFormattedTime(tStr, sizeof(tStr), "%H:%M:%S");
+        snprintf(timeBuf, sizeof(timeBuf), "%s (NTP OK)", tStr);
+        addInfoRow(card, "[Hora] Real:", timeBuf, true);
+    } else {
+        addInfoRow(card, "[Hora] Real:", "Sin sincronizar", false);
+    }
 
     // Botón Cerrar
     lv_obj_t* btnClose = lv_button_create(card);

@@ -52,6 +52,13 @@ struct GatewayConfig {
     std::string notes;
 };
 
+struct TimeConfig {
+    std::string ntpServer = "pool.ntp.org";
+    int32_t gmtOffsetSeconds = -21600;
+    int32_t daylightOffsetSeconds = 0;
+    bool enabled = true;
+};
+
 class ConfigManager {
 public:
     static ConfigManager& getInstance() {
@@ -72,6 +79,10 @@ public:
     // FLRC
     bool loadFLRC(FLRCConfig& cfg);
     bool saveFLRC(const FLRCConfig& cfg);
+
+    // Time / NTP
+    bool loadTime(TimeConfig& cfg);
+    bool saveTime(const TimeConfig& cfg);
 
     // Gateways
     bool importGateway(const std::string& encPath, const std::string& pin, std::string& errorOut);
@@ -139,6 +150,13 @@ struct GatewayConfig {
     String notes;
 };
 
+struct TimeConfig {
+    String ntpServer = "pool.ntp.org";
+    int32_t gmtOffsetSeconds = -21600;
+    int32_t daylightOffsetSeconds = 0;
+    bool enabled = true;
+};
+
 class ConfigManager {
 public:
     static ConfigManager& getInstance() {
@@ -160,6 +178,10 @@ public:
     bool loadFLRC(FLRCConfig& cfg);
     bool saveFLRC(const FLRCConfig& cfg);
 
+    // Time / NTP
+    bool loadTime(TimeConfig& cfg);
+    bool saveTime(const TimeConfig& cfg);
+
     // Gateways
     bool importGateway(const String& encPath, const String& pin, String& errorOut);
     bool removeGateway(const String& gwId);
@@ -178,4 +200,5 @@ private:
 
 #endif
 #endif
+
 

@@ -10,6 +10,7 @@
 // Inicialización de miembros estáticos
 HeaderBar* HeaderBar::activeHeader = nullptr;
 char HeaderBar::lastTimeStr[16] = "--:--";
+char HeaderBar::lastDateStr[16] = "CBDos";
 int HeaderBar::lastBatteryPercentage = 85;
 int HeaderBar::lastSignalStrength = -999;
 int HeaderBar::lastCartCount = 0;
@@ -20,6 +21,7 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const char* title, bool showBackB
     config.showBackButton = showBackButton;
     config.showTime = showStatus;
     config.showWifi = showStatus;
+    config.showDate = !showBackButton; // Si no tiene botón de volver (ej. Launcher principal), muestra la fecha
     config.showCartButton = showCartButton;
     config.titleMarquee = false;
     config.translucent = false;
@@ -134,8 +136,15 @@ HeaderBar* HeaderBar::create(lv_obj_t* parent, const HeaderBarConfig& config) {
         hb->updateTime(lastTimeStr);
     }
 
-    // Título de la pantalla (o Marquesina)
-    if (config.title && strlen(config.title) > 0) {
+    // Fecha o Título a la izquierda
+    if (config.showDate && !config.showBackButton) {
+        hb->isDateHeader = true;
+        hb->titleLabel = lv_label_create(hb->container);
+        lv_label_set_text(hb->titleLabel, lastDateStr);
+        lv_obj_set_style_text_color(hb->titleLabel, DefaultTheme::getTextColor(), 0);
+        lv_obj_set_style_text_font(hb->titleLabel, &lv_font_montserrat_14, 0);
+        lv_obj_align(hb->titleLabel, LV_ALIGN_LEFT_MID, 12, 0);
+    } else if (config.title && strlen(config.title) > 0) {
         hb->titleLabel = lv_label_create(hb->container);
         lv_label_set_text(hb->titleLabel, config.title);
         lv_obj_set_style_text_color(hb->titleLabel, DefaultTheme::getTextColor(), 0);
@@ -179,6 +188,9 @@ void HeaderBar::setActiveHeader(HeaderBar* header) {
     activeHeader = header;
     if (activeHeader && activeHeader->container && lv_obj_is_valid(activeHeader->container)) {
         activeHeader->updateTime(lastTimeStr);
+        if (activeHeader->isDateHeader) {
+            activeHeader->updateDate(lastDateStr);
+        }
         activeHeader->updateBattery(lastBatteryPercentage);
         int currentRssi = SystemStateAPI::isWifiConnected() ? SystemStateAPI::getWifiRSSI() : -999;
         activeHeader->updateSignal(currentRssi);
@@ -195,6 +207,24 @@ void HeaderBar::updateActiveTime(const char* timeStr) {
     }
     if (activeHeader && activeHeader->container && lv_obj_is_valid(activeHeader->container)) {
         activeHeader->updateTime(timeStr);
+    }
+}
+
+void HeaderBar::updateActiveDate(const char* dateStr) {
+    if (dateStr) {
+        std::strncpy(lastDateStr, dateStr, sizeof(lastDateStr) - 1);
+        lastDateStr[sizeof(lastDateStr) - 1] = '\0';
+    }
+    if (activeHeader && activeHeader->container && lv_obj_is_valid(activeHeader->container)) {
+        if (activeHeader->isDateHeader) {
+            activeHeader->updateDate(dateStr);
+        }
+    }
+}
+
+void HeaderBar::updateDate(const char* dateStr) {
+    if (titleLabel && dateStr) {
+        lv_label_set_text(titleLabel, dateStr);
     }
 }
 
