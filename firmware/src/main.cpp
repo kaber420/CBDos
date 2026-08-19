@@ -350,10 +350,18 @@ void loop() {
 #else
     lv_tick_inc(5);
 #endif
+    if (LuaBridge::checkAndClearNeedsRefresh()) {
+        lv_obj_t* scr = lv_screen_active();
+        if (scr && lv_obj_is_valid(scr)) {
+            lv_obj_invalidate(scr);
+            lv_refr_now(NULL);
+        }
+    }
     uint32_t time_till_next = lv_timer_handler();
     UIManager::getInstance().update();
     TlvNetworkClient::loop();
     LuaREPL::getInstance().update();
+
 
     static uint32_t lastBadgeCheck = 0;
     uint32_t now = millis();

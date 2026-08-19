@@ -350,6 +350,7 @@ extern JC3248W535_Touch touchDriver;
 
 static volatile uint32_t s_uiPausedUntil = 0;
 static volatile bool s_uiPausedIndefinite = false;
+static volatile bool s_needsScreenRefresh = false;
 
 void LuaBridge::pauseUI(uint32_t seconds) {
     if (seconds == 0) {
@@ -365,12 +366,17 @@ void LuaBridge::resumeUI() {
     bool wasPaused = s_uiPausedIndefinite || (s_uiPausedUntil > 0);
     s_uiPausedIndefinite = false;
     s_uiPausedUntil = 0;
-    if (wasPaused && lv_is_initialized()) {
-        lv_obj_t* scr = lv_screen_active();
-        if (scr && lv_obj_is_valid(scr)) {
-            lv_obj_invalidate(scr);
-        }
+    if (wasPaused) {
+        s_needsScreenRefresh = true;
     }
+}
+
+bool LuaBridge::checkAndClearNeedsRefresh() {
+    if (s_needsScreenRefresh) {
+        s_needsScreenRefresh = false;
+        return true;
+    }
+    return false;
 }
 
 bool LuaBridge::isUIPaused() {
@@ -388,6 +394,7 @@ bool LuaBridge::isUIPaused() {
     }
     return false;
 }
+
 
 static inline uint16_t toRGB565(uint32_t c) {
     uint8_t r = (c >> 16) & 0xFF;
