@@ -1,5 +1,6 @@
 #include "LuaRunner.h"
 #include "LuaEngine.h"
+#include "LuaBridge.h"
 #include <Arduino.h>
 
 extern "C" {
@@ -202,6 +203,10 @@ void LuaRunner::luaTask(void* param) {
         runner->appendLog("[Error] Motor Lua no inicializado.");
     }
 
+    // Asegurar restauración de la interfaz de LVGL al terminar el script
+    LuaBridge::resumeUI();
+
     runner->_taskHandle = nullptr;
     vTaskDelete(NULL);
 }
+

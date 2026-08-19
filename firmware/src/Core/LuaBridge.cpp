@@ -343,9 +343,51 @@ void LuaBridge::registerFsAPI(lua_State* L) {
 // Graphics API
 // ─────────────────────────────────────────────────────────────────────────────
 #include <JC3248W535.h>
+#include <lvgl.h>
 
 extern JC3248W535_Display displayDriver;
 extern JC3248W535_Touch touchDriver;
+
+static volatile uint32_t s_uiPausedUntil = 0;
+static volatile bool s_uiPausedIndefinite = false;
+
+void LuaBridge::pauseUI(uint32_t seconds) {
+    if (seconds == 0) {
+        s_uiPausedIndefinite = true;
+        s_uiPausedUntil = 0;
+    } else {
+        s_uiPausedIndefinite = false;
+        s_uiPausedUntil = millis() + (seconds * 1000);
+    }
+}
+
+void LuaBridge::resumeUI() {
+    bool wasPaused = s_uiPausedIndefinite || (s_uiPausedUntil > 0);
+    s_uiPausedIndefinite = false;
+    s_uiPausedUntil = 0;
+    if (wasPaused && lv_is_initialized()) {
+        lv_obj_t* scr = lv_screen_active();
+        if (scr && lv_obj_is_valid(scr)) {
+            lv_obj_invalidate(scr);
+        }
+    }
+}
+
+bool LuaBridge::isUIPaused() {
+    if (s_uiPausedIndefinite) {
+        return true;
+    }
+    if (s_uiPausedUntil > 0) {
+        if (millis() < s_uiPausedUntil) {
+            return true;
+        } else {
+            // Expiró la pausa temporal
+            resumeUI();
+            return false;
+        }
+    }
+    return false;
+}
 
 static inline uint16_t toRGB565(uint32_t c) {
     uint8_t r = (c >> 16) & 0xFF;
@@ -459,6 +501,22 @@ static int lua_gfx_height(lua_State* L) {
     return 1;
 }
 
+static int lua_gfx_pause_ui(lua_State* L) {
+    uint32_t seconds = (uint32_t)luaL_optinteger(L, 1, 0);
+    LuaBridge::pauseUI(seconds);
+    return 0;
+}
+
+static int lua_gfx_resume_ui(lua_State* L) {
+    LuaBridge::resumeUI();
+    return 0;
+}
+
+static int lua_gfx_is_ui_paused(lua_State* L) {
+    lua_pushboolean(L, LuaBridge::isUIPaused());
+    return 1;
+}
+
 void LuaBridge::registerGfxAPI(lua_State* L) {
     // Subtabla cbdos.gfx
     lua_newtable(L);
@@ -480,8 +538,21 @@ void LuaBridge::registerGfxAPI(lua_State* L) {
     lua_setfield(L, -2, "width");
     lua_pushcfunction(L, lua_gfx_height);
     lua_setfield(L, -2, "height");
+    lua_pushcfunction(L, lua_gfx_pause_ui);
+    lua_setfield(L, -2, "pause_ui");
+    lua_pushcfunction(L, lua_gfx_resume_ui);
+    lua_setfield(L, -2, "resume_ui");
+    lua_pushcfunction(L, lua_gfx_is_ui_paused);
+    lua_setfield(L, -2, "is_ui_paused");
     lua_setfield(L, -2, "gfx");
+
+    // Accesos directos en cbdos.*
+    lua_pushcfunction(L, lua_gfx_pause_ui);
+    lua_setfield(L, -2, "pause_ui");
+    lua_pushcfunction(L, lua_gfx_resume_ui);
+    lua_setfield(L, -2, "resume_ui");
 }
+
 
 void LuaBridge::registerAll(lua_State* L) {
     if (!L) return;

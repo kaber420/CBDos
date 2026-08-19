@@ -28,16 +28,16 @@
 JC3248W535_Display displayDriver;
 JC3248W535_Touch touchDriver;
 
-void my_disp_flush(lv_display_t *display, const lv_area_t *area, uint8_t *px_map) {
-    uint32_t w = (area->x2 - area->x1 + 1);
-    uint32_t h = (area->y2 - area->y1 + 1);
-    
-    // Corregir colores (endianness) y escribir DIRECTAMENTE a la pantalla de hardware
-    // Eliminado lv_draw_sw_rgb565_swap para ahorrar CPU; LVGL ya lo hace internamente (LV_COLOR_16_SWAP 1)
+void lvgl_display_flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *px_map) {
+    // Si la UI está pausada (ej: script gráfico de Lua corriendo), no sobreescribir el canvas de hardware
+    if (!LuaBridge::isUIPaused()) {
+        uint32_t w = (area->x2 - area->x1 + 1);
+        uint32_t h = (area->y2 - area->y1 + 1);
 
-    if (displayDriver.getCanvas()) {
-        displayDriver.getCanvas()->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map, w, h);
-        displayDriver.flush();
+        if (displayDriver.getCanvas()) {
+            displayDriver.getCanvas()->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map, w, h);
+            displayDriver.flush();
+        }
     }
     lv_display_flush_ready(display);
 }
@@ -45,7 +45,13 @@ void my_disp_flush(lv_display_t *display, const lv_area_t *area, uint8_t *px_map
 static bool was_pressed = false;
 static TouchPoint last_point;
 
-void my_touchpad_read(lv_indev_t * indev, lv_indev_data_t * data) {
+void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data) {
+    // Si la UI está pausada, ignorar toques en LVGL para ceder control exclusivo al script Lua
+    if (LuaBridge::isUIPaused()) {
+        data->state = LV_INDEV_STATE_REL;
+        return;
+    }
+
     TouchPoint tp;
     if (touchDriver.read(tp) && tp.touched) {
         data->state = LV_INDEV_STATE_PR;
@@ -63,6 +69,7 @@ void my_touchpad_read(lv_indev_t * indev, lv_indev_data_t * data) {
     }
 }
 #endif
+
 
 static constexpr uint32_t LVGL_TASK_PERIOD_MS = 5;
 
@@ -253,7 +260,7 @@ void setup() {
     // Creamos la pantalla en su resolución física real (Vertical 320x480)
     lv_display_t * disp = lv_display_create(320, 480);
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
-    lv_display_set_flush_cb(disp, my_disp_flush);
+    lv_display_set_flush_cb(disp, lvgl_display_flush_cb);
     
     // El usuario quiere el sistema en VERTICAL, por lo tanto la rotación es 0 (Portrait)
     lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);
@@ -276,7 +283,8 @@ void setup() {
 
     lv_indev_t * indev = lv_indev_create();
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
-    lv_indev_set_read_cb(indev, my_touchpad_read);
+    lv_indev_set_read_cb(indev, lvgl_touch_read_cb);
+
     lv_timer_t * indev_timer = lv_indev_get_read_timer(indev);
     if (indev_timer) {
         lv_timer_set_period(indev_timer, 10); // Polling táctil a 100Hz (10ms)
