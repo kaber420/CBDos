@@ -3,6 +3,7 @@
 #include "MusicPlayerView.hpp"
 #include "FlasherView.hpp"
 #include "RadioView.hpp"
+#include "LuaRunnerView.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
@@ -17,6 +18,7 @@ static const char* TAG = "DashboardView";
 DashboardView::DashboardView()
     : BaseView("Dashboard") {
     m_apps = {
+        {"lua", "Lua Runner", LV_SYMBOL_FILE, 0x06B6D4},
         {"radio", "Radio Online", LV_SYMBOL_WIFI, 0x10B981},
         {"flasher", "Flasheador", LV_SYMBOL_DOWNLOAD, 0xF59E0B},
         {"music", "Musica", LV_SYMBOL_AUDIO, 0x00E5FF},
@@ -118,7 +120,9 @@ void DashboardView::createCards() {
 void DashboardView::cardClickedEventCb(lv_event_t* e) {
     const char* appId = static_cast<const char*>(lv_event_get_user_data(e));
     if (appId) {
-        if (strcmp(appId, "radio") == 0) {
+        if (strcmp(appId, "lua") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<LuaRunnerView>());
+        } else if (strcmp(appId, "radio") == 0) {
             UIManager::getInstance().pushView(std::make_shared<RadioView>());
         } else if (strcmp(appId, "config") == 0) {
             UIManager::getInstance().pushView(std::make_shared<ConfigView>());

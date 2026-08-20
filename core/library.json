@@ -13,6 +13,8 @@
       "-I src/audio/libhelix/src/utils",
       "-I src/audio/libhelix/src/libhelix-mp3",
       "-I src/audio/libhelix/src/libhelix-aac",
+      "-I src/lua",
+      "-I src/lua/liblua",
       "-DESP32",
       "-DUSE_DEFAULT_STDLIB",
       "-DHELIX_LOGGING_ACTIVE=0"

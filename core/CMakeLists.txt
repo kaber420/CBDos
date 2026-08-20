@@ -5,6 +5,10 @@ file(GLOB_RECURSE HELIX_SRCS
     "src/audio/libhelix/src/utils/*.c"
 )
 
+file(GLOB_RECURSE LUA_SRCS
+    "src/lua/liblua/*.c"
+)
+
 idf_component_register(
     SRCS 
         "src/cbdos_core.cpp"
@@ -24,6 +28,7 @@ idf_component_register(
         "src/ui/views/MusicPlayerView.cpp"
         "src/ui/views/RadioView.cpp"
         "src/ui/views/FlasherView.cpp"
+        "src/ui/views/LuaRunnerView.cpp"
         "src/ui/modals/DiagnosticsModal.cpp"
 
         "src/ui/modals/C6FlasherModal.cpp"
@@ -32,7 +37,11 @@ idf_component_register(
 
         "src/network/ConfigManager.cpp"
         "src/network/TimeService.cpp"
+        "src/lua/LuaEngine.cpp"
+        "src/lua/LuaBridge.cpp"
+        "src/lua/LuaRunner.cpp"
         ${HELIX_SRCS}
+        ${LUA_SRCS}
     INCLUDE_DIRS 
         "include"
         "src/ui"
@@ -42,6 +51,8 @@ idf_component_register(
         "src/audio/libhelix/src/libhelix-mp3"
         "src/audio/libhelix/src/libhelix-aac"
         "src/network"
+        "src/lua"
+        "src/lua/liblua"
     REQUIRES 
         "esp_timer"
         "freertos"
@@ -49,6 +60,7 @@ idf_component_register(
         "nvs_flash"
         "json"
         "esp_http_client"
+        "driver"
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC -DESP32 -DUSE_DEFAULT_STDLIB -DHELIX_LOGGING_ACTIVE=0)
