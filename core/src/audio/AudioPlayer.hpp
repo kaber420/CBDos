@@ -24,6 +24,7 @@ public:
     static AudioPlayer& getInstance();
 
     bool play(const char* filepath);
+    bool playStream(const char* url);
     void pause();
     void resume();
     void stop();
@@ -31,6 +32,7 @@ public:
 
     bool isPlaying() const { return m_isPlaying; }
     bool isPaused() const { return m_isPaused; }
+    bool isStream() const { return m_isStream; }
     
     uint32_t getCurrentTimeSec() const;
     uint32_t getTotalTimeSec() const { return m_totalTimeSec; }
@@ -50,7 +52,9 @@ private:
     AudioPlayer& operator=(const AudioPlayer&) = delete;
 
     static void playbackTask(void* param);
+    static void streamPlaybackTask(void* param);
     void runPlayback();
+    void runStreamPlayback();
     void runMp3Playback();
     void runWavPlayback();
 
@@ -59,6 +63,7 @@ private:
     FILE* m_file = nullptr;
     std::string m_currentFile;
     AudioFormat m_format = AudioFormat::Unknown;
+    bool m_isStream = false;
     
     uint32_t m_fileSize = 0;
     uint32_t m_sampleRate = 44100;

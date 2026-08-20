@@ -1,9 +1,15 @@
 #include "AudioPlayer.hpp"
+#include "cbdos/network.hpp"
 #include "mp3dec.h"
 #include "aacdec.h"
 #include <esp_log.h>
 #include <cstring>
 #include <algorithm>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
 
 static const char* TAG = "AudioPlayer";
 
@@ -230,10 +236,292 @@ bool AudioPlayer::play(const char* filepath) {
     return true;
 }
 
+bool AudioPlayer::playStream(const char* url) {
+    if (!url || strlen(url) == 0) return false;
+
+    if (!cbdos::network::isConnected()) {
+        ESP_LOGW(TAG, "[Stream] No se puede iniciar streaming sin conexion de red");
+        return false;
+    }
+
+    stop();
+
+    if (xSemaphoreTake(m_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+        return false;
+    }
+
+    m_file = nullptr;
+    m_currentFile = url;
+    m_format = AudioFormat::MP3;
+    m_isStream = true;
+    m_fileSize = 0;
+    m_bytesProcessed = 0;
+    m_currentSec = 0;
+    m_totalTimeSec = 0;
+    m_isPlaying = true;
+    m_isPaused = false;
+    m_stopRequested = false;
+    m_seekRequestSec = -1;
+    m_sampleRate = 44100;
+    m_channels = 2;
+    m_bitrate = 128000;
+
+    cbdos::audio::setSampleRate(44100);
+
+    ESP_LOGI(TAG, "Iniciando Helix Stream Player para: %s", url);
+
+    xTaskCreatePinnedToCore(streamPlaybackTask, "helix_stream_task", 12288, this, 4, &m_taskHandle, 0);
+
+    xSemaphoreGive(m_mutex);
+    return true;
+}
+
 void AudioPlayer::playbackTask(void* param) {
     AudioPlayer* player = static_cast<AudioPlayer*>(param);
     player->runPlayback();
     vTaskDelete(NULL);
+}
+
+void AudioPlayer::streamPlaybackTask(void* param) {
+    AudioPlayer* player = static_cast<AudioPlayer*>(param);
+    player->runStreamPlayback();
+    vTaskDelete(NULL);
+}
+
+void AudioPlayer::runStreamPlayback() {
+    std::string currentUrl = m_currentFile;
+    int maxRedirects = 5;
+    int sock = -1;
+
+    for (int r = 0; r < maxRedirects && !m_stopRequested; r++) {
+        std::string host;
+        std::string port = "80";
+        std::string path = "/";
+
+        std::string urlToParse = currentUrl;
+        if (urlToParse.rfind("http://", 0) == 0) {
+            urlToParse = urlToParse.substr(7);
+        } else if (urlToParse.rfind("https://", 0) == 0) {
+            urlToParse = urlToParse.substr(8);
+            port = "443";
+        }
+
+        size_t slashIdx = urlToParse.find('/');
+        if (slashIdx != std::string::npos) {
+            host = urlToParse.substr(0, slashIdx);
+            path = urlToParse.substr(slashIdx);
+        } else {
+            host = urlToParse;
+            path = "/";
+        }
+
+        size_t colonIdx = host.find(':');
+        if (colonIdx != std::string::npos) {
+            port = host.substr(colonIdx + 1);
+            host = host.substr(0, colonIdx);
+        }
+
+        ESP_LOGI(TAG, "[Stream] Conectando a %s:%s%s", host.c_str(), port.c_str(), path.c_str());
+
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+
+        struct addrinfo* res = nullptr;
+        int err = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
+        if (err != 0 || !res) {
+            ESP_LOGE(TAG, "[Stream] getaddrinfo fallo para %s", host.c_str());
+            break;
+        }
+
+        sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sock < 0) {
+            ESP_LOGE(TAG, "[Stream] Fallo al crear socket");
+            freeaddrinfo(res);
+            break;
+        }
+
+        struct timeval tv;
+        tv.tv_sec = 6;
+        tv.tv_usec = 0;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+        if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
+            ESP_LOGE(TAG, "[Stream] Fallo al conectar socket con %s:%s", host.c_str(), port.c_str());
+            close(sock);
+            sock = -1;
+            freeaddrinfo(res);
+            break;
+        }
+        freeaddrinfo(res);
+
+        char req[512];
+        int reqLen = snprintf(req, sizeof(req),
+            "GET %s HTTP/1.1\r\n"
+            "Host: %s\r\n"
+            "User-Agent: CBDos-Radio/2.0\r\n"
+            "Accept: */*\r\n"
+            "Icy-MetaData: 0\r\n"
+            "Connection: close\r\n\r\n",
+            path.c_str(), host.c_str());
+
+        if (send(sock, req, reqLen, 0) < 0) {
+            ESP_LOGE(TAG, "[Stream] Error enviando HTTP GET");
+            close(sock);
+            sock = -1;
+            break;
+        }
+
+        // Leer cabecera HTTP
+        std::string headerBuf;
+        char c;
+        while (headerBuf.find("\r\n\r\n") == std::string::npos && !m_stopRequested) {
+            int n = recv(sock, &c, 1, 0);
+            if (n <= 0) break;
+            headerBuf.push_back(c);
+            if (headerBuf.size() > 4096) break;
+        }
+
+        // Analizar si hay redirección (301, 302, 307)
+        if (headerBuf.find("301 ") != std::string::npos ||
+            headerBuf.find("302 ") != std::string::npos ||
+            headerBuf.find("307 ") != std::string::npos) {
+            size_t locPos = headerBuf.find("Location: ");
+            if (locPos == std::string::npos) locPos = headerBuf.find("location: ");
+            if (locPos != std::string::npos) {
+                size_t locEnd = headerBuf.find("\r\n", locPos);
+                std::string newLoc = headerBuf.substr(locPos + 10, locEnd - (locPos + 10));
+                ESP_LOGI(TAG, "[Stream] Redirigiendo a: %s", newLoc.c_str());
+                currentUrl = newLoc;
+                close(sock);
+                sock = -1;
+                continue;
+            }
+        }
+
+        // Conectado y cabeceras leídas
+        break;
+    }
+
+    if (sock < 0 || m_stopRequested) {
+        if (sock >= 0) close(sock);
+        m_isPlaying = false;
+        m_taskHandle = nullptr;
+        return;
+    }
+
+    HMP3Decoder hMP3Decoder = MP3InitDecoder();
+    if (!hMP3Decoder) {
+        ESP_LOGE(TAG, "[Stream] Fallo al inicializar decoder Helix MP3");
+        close(sock);
+        m_isPlaying = false;
+        m_taskHandle = nullptr;
+        return;
+    }
+
+    const size_t IN_BUF_SIZE = 32768; // 32 KB de buffer en memoria
+    uint8_t* inBuf = (uint8_t*)malloc(IN_BUF_SIZE);
+    int16_t* pcmBuf = (int16_t*)malloc(MAX_NCHAN * MAX_NGRAN * MAX_NSAMP * sizeof(int16_t) * 2);
+
+    if (!inBuf || !pcmBuf) {
+        ESP_LOGE(TAG, "[Stream] Memoria insuficiente para buffers");
+        if (inBuf) free(inBuf);
+        if (pcmBuf) free(pcmBuf);
+        MP3FreeDecoder(hMP3Decoder);
+        close(sock);
+        m_isPlaying = false;
+        m_taskHandle = nullptr;
+        return;
+    }
+
+    int bytesLeft = 0;
+    uint8_t* readPtr = inBuf;
+    uint64_t totalSamplesDecoded = 0;
+
+    // Pre-buffering de 16 KB para reproducción continua
+    while (bytesLeft < 16384 && !m_stopRequested) {
+        int n = recv(sock, inBuf + bytesLeft, 16384 - bytesLeft, 0);
+        if (n <= 0) break;
+        bytesLeft += n;
+    }
+
+    ESP_LOGI(TAG, "[Stream] Pre-buffering completado (%d bytes). Iniciando audio...", bytesLeft);
+
+    while (!m_stopRequested) {
+        if (m_isPaused) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
+        if (bytesLeft < (int)(IN_BUF_SIZE / 2)) {
+            if (bytesLeft > 0 && readPtr != inBuf) {
+                memmove(inBuf, readPtr, bytesLeft);
+            }
+            readPtr = inBuf;
+            size_t toRead = IN_BUF_SIZE - bytesLeft;
+            int nRead = recv(sock, inBuf + bytesLeft, toRead, 0);
+            if (nRead > 0) {
+                bytesLeft += nRead;
+            } else if (nRead <= 0 && bytesLeft == 0) {
+                ESP_LOGW(TAG, "[Stream] Conexion cerrada por el servidor");
+                break;
+            }
+        }
+
+        int offset = MP3FindSyncWord(readPtr, bytesLeft);
+        if (offset < 0) {
+            if (bytesLeft > 3) {
+                memmove(inBuf, readPtr + bytesLeft - 3, 3);
+                bytesLeft = 3;
+            }
+            readPtr = inBuf;
+            taskYIELD();
+            continue;
+        }
+
+        readPtr += offset;
+        bytesLeft -= offset;
+
+        int err = MP3Decode(hMP3Decoder, &readPtr, &bytesLeft, pcmBuf, 0);
+        if (err == ERR_MP3_NONE) {
+            MP3FrameInfo info;
+            MP3GetLastFrameInfo(hMP3Decoder, &info);
+
+            if (info.samprate > 0 && info.samprate != m_sampleRate) {
+                m_sampleRate = info.samprate;
+                cbdos::audio::setSampleRate(m_sampleRate);
+            }
+            m_channels = info.nChans;
+            m_bitrate = info.bitrate;
+
+            int outSamples = info.outputSamps;
+            if (info.nChans == 1) {
+                for (int i = outSamples - 1; i >= 0; i--) {
+                    pcmBuf[i * 2]     = pcmBuf[i];
+                    pcmBuf[i * 2 + 1] = pcmBuf[i];
+                }
+                outSamples *= 2;
+            }
+
+            cbdos::audio::writeAudio(pcmBuf, outSamples * sizeof(int16_t));
+            totalSamplesDecoded += (info.outputSamps / (info.nChans ? info.nChans : 2));
+            m_currentSec = totalSamplesDecoded / (m_sampleRate ? m_sampleRate : 44100);
+        } else {
+            taskYIELD();
+        }
+    }
+
+    close(sock);
+    free(inBuf);
+    free(pcmBuf);
+    MP3FreeDecoder(hMP3Decoder);
+
+    m_isPlaying = false;
+    m_isPaused = false;
+    m_taskHandle = nullptr;
+    ESP_LOGI(TAG, "[Stream] Reproduccion de radio finalizada");
 }
 
 void AudioPlayer::runPlayback() {

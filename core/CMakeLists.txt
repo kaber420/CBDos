@@ -22,11 +22,13 @@ idf_component_register(
         "src/ui/views/WallpaperConfigView.cpp"
         "src/ui/views/StorageConfigView.cpp"
         "src/ui/views/MusicPlayerView.cpp"
+        "src/ui/views/RadioView.cpp"
         "src/ui/views/FlasherView.cpp"
         "src/ui/modals/DiagnosticsModal.cpp"
 
         "src/ui/modals/C6FlasherModal.cpp"
         "src/audio/AudioPlayer.cpp"
+        "src/audio/RadioManager.cpp"
 
         "src/network/ConfigManager.cpp"
         "src/network/TimeService.cpp"
@@ -45,6 +47,8 @@ idf_component_register(
         "freertos"
         "lvgl__lvgl"
         "nvs_flash"
+        "json"
+        "esp_http_client"
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC -DESP32 -DUSE_DEFAULT_STDLIB -DHELIX_LOGGING_ACTIVE=0)

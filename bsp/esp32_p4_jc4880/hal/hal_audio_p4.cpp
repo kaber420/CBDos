@@ -11,8 +11,7 @@ bool init() {
 }
 
 bool playStream(const char* url) {
-    (void)url;
-    return false;
+    return AudioPlayer::getInstance().playStream(url);
 }
 
 bool playFile(const char* filepath) {
