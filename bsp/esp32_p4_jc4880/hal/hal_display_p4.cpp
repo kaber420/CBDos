@@ -1,5 +1,6 @@
 #include "cbdos/display.hpp"
 #include "DisplayHAL.h"
+#include "LVGL_Port.h"
 
 namespace cbdos {
 namespace display {
@@ -32,6 +33,14 @@ uint8_t getBrightness() {
 
 void* getFramebuffer(int index) {
     return DisplayHAL::getInstance().getFrameBuffer(index);
+}
+
+bool lock(uint32_t timeout_ms) {
+    return LVGL_Port::getInstance().lock(timeout_ms);
+}
+
+void unlock() {
+    LVGL_Port::getInstance().unlock();
 }
 
 } // namespace display

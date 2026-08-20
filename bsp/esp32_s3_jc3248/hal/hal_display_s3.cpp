@@ -42,6 +42,14 @@ void* getFramebuffer(int index) {
     return s_display.getCanvas();
 }
 
+bool lock(uint32_t timeout_ms) {
+    (void)timeout_ms;
+    return true;
+}
+
+void unlock() {
+}
+
 } // namespace display
 } // namespace cbdos
 

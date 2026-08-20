@@ -18,6 +18,8 @@ DisplayCaps getCapabilities();
 void setBrightness(uint8_t percent);
 uint8_t getBrightness();
 void* getFramebuffer(int index);
+bool lock(uint32_t timeout_ms = 100);
+void unlock();
 
 } // namespace display
 } // namespace cbdos

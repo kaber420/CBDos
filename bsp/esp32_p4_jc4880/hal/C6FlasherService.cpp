@@ -30,13 +30,17 @@ C6FlasherService::C6FlasherService() {
     cbdos::flasher::FlasherPreset p1;
     p1.id = "p4_c6_internal";
     p1.name = "ESP32-C6 Coprocesador (JC4880)";
-    p1.description = "Coprocesador WiFi 6 / BT 5 integrado en módulo P4.";
+    p1.description = "Coprocesador WiFi 6 / BT 5 integrado en modulo P4.";
     p1.wiringInfo =
-        "Conexiones JP1 (2x13):\n"
-        "• Pin 1 (3V3) ────[Cable 1]───> Pin 18 (ESP_3V3)\n"
-        "• Pin 17 (GPIO34) ─[Cable 2]──> Pin 24 (C6_IO9) [Boot]\n"
-        "• Pin 19 (GPIO32) ─[Jumper 1]─> Pin 20 (C6_U0RXD) [TX]\n"
-        "• Pin 21 (GPIO28) ─[Jumper 2]─> Pin 22 (C6_U0TXD) [RX]";
+        "+---------------------------------------------+\n"
+        "|  CONEXIONES EN CONECTOR JP1 (2x13)          |\n"
+        "+---------------------------------------------+\n"
+        "| [Cable 1]  Pin 01 (3V3)  --> Pin 18 (ESP_3V3)|\n"
+        "| [Cable 2]  Pin 17 (IO34) --> Pin 24 (C6_IO9)|\n"
+        "| [Jumper 1] Pin 19 (IO32) --> Pin 20 (C6_RX) |\n"
+        "| [Jumper 2] Pin 21 (IO28) --> Pin 22 (C6_TX) |\n"
+        "+---------------------------------------------+\n"
+        "| Control: Auto-Boot (IO34) + Auto-RST (IO54) |";
     p1.config.txPin = 32;
     p1.config.rxPin = 28;
     p1.config.bootPin = 34;
@@ -54,12 +58,16 @@ C6FlasherService::C6FlasherService() {
     p2.name = "ESP Externo (Header JP1 P4)";
     p2.description = "Flasheo de chips ESP externos conectados a JP1.";
     p2.wiringInfo =
-        "Conexiones Externas:\n"
-        "• JP1 Pin 19 (GPIO32) ──> Target RX\n"
-        "• JP1 Pin 21 (GPIO28) ──> Target TX\n"
-        "• JP1 Pin 17 (GPIO34) ──> Target GPIO0/BOOT\n"
-        "• JP1 Pin 54 / Manual ──> Target EN/RST\n"
-        "• JP1 GND y 3V3/5V ─────> Target GND y VCC";
+        "+---------------------------------------------+\n"
+        "|  CONEXIONES JP1 HACIA ESP EXTERNO           |\n"
+        "+---------------------------------------------+\n"
+        "| [UART TX]  JP1 Pin 19 (GPIO 32) -> Target RX|\n"
+        "| [UART RX]  JP1 Pin 21 (GPIO 28) -> Target TX|\n"
+        "| [BOOT IO0] JP1 Pin 17 (GPIO 34) -> Target IO0\n"
+        "| [RESET]    JP1 Pin 54 / Manual  -> Target EN|\n"
+        "| [POWER]    JP1 Pin 01 (3.3V/5V) -> Target VCC\n"
+        "| [TIERRA]   JP1 Pin 05 (GND)     -> Target GND|\n"
+        "+---------------------------------------------+";
     p2.config.txPin = 32;
     p2.config.rxPin = 28;
     p2.config.bootPin = 34;
@@ -77,12 +85,15 @@ C6FlasherService::C6FlasherService() {
     p3.name = "ESP Externo (JC3248W535 S3)";
     p3.description = "Flasheo desde tarjeta S3 usando pines libres.";
     p3.wiringInfo =
-        "Conexiones S3:\n"
-        "• GPIO 15 (TX) ──> Target RX\n"
-        "• GPIO 16 (RX) ──> Target TX\n"
-        "• GPIO 0  (BOOT)─> Target GPIO0\n"
-        "• Target RST ───> Botón Reset o Control Manual\n"
-        "• MicroSD ──────> /sdcard/firmware.bin";
+        "+---------------------------------------------+\n"
+        "|  CONEXIONES S3 HACIA ESP EXTERNO            |\n"
+        "+---------------------------------------------+\n"
+        "| [UART TX]  GPIO 15        -> Target RX      |\n"
+        "| [UART RX]  GPIO 16        -> Target TX      |\n"
+        "| [BOOT IO0] GPIO 0         -> Target GPIO 0  |\n"
+        "| [RESET]    Boton Manual   -> Target EN / RST|\n"
+        "| [FIRMWARE] MicroSD        -> /sdcard/*.bin  |\n"
+        "+---------------------------------------------+";
     p3.config.txPin = 15;
     p3.config.rxPin = 16;
     p3.config.bootPin = 0;
@@ -98,10 +109,17 @@ C6FlasherService::C6FlasherService() {
     cbdos::flasher::FlasherPreset p4;
     p4.id = "custom";
     p4.name = "Personalizado / Manual";
-    p4.description = "Configuración libre de GPIOs, baudrate y firmware.";
+    p4.description = "Configuracion libre de GPIOs, baudrate y firmware.";
     p4.wiringInfo =
-        "Configura los pines GPIO asignados en la pantalla\n"
-        "y conecta las líneas correspondientes a tu chip ESP.";
+        "+---------------------------------------------+\n"
+        "|  GUIA DE CONEXION PERSONALIZADA             |\n"
+        "+---------------------------------------------+\n"
+        "| 1. Conectar Host TX al pin RX del objetivo. |\n"
+        "| 2. Conectar Host RX al pin TX del objetivo. |\n"
+        "| 3. Conectar Host BOOT al pin GPIO0/IO9.     |\n"
+        "| 4. Conectar Host RST al pin Reset/EN.       |\n"
+        "| 5. Conectar masa GND comun entre placas.    |\n"
+        "+---------------------------------------------+";
     p4.config.txPin = 32;
     p4.config.rxPin = 28;
     p4.config.bootPin = 34;
@@ -269,12 +287,16 @@ void C6FlasherService::runFlashTask() {
     m_status = cbdos::flasher::FlasherStatus::Writing;
     size_t offset = 0;
     const size_t chunkSize = 4096;
+    int lastNotifiedPct = -1;
+    uint8_t chunkBuffer[4096];
 
     while (offset < binSize) {
         size_t toWrite = binSize - offset;
         if (toWrite > chunkSize) toWrite = chunkSize;
 
-        err = esp_loader_flash_write((void*)(binData + offset), toWrite);
+        memcpy(chunkBuffer, binData + offset, toWrite);
+
+        err = esp_loader_flash_write(chunkBuffer, toWrite);
         if (err != ESP_LOADER_SUCCESS) {
             ESP_LOGE(TAG_FLASHER, "Fallo al escribir en offset 0x%x (err=%d)", offset, err);
             m_status = cbdos::flasher::FlasherStatus::Failed;
@@ -290,12 +312,16 @@ void C6FlasherService::runFlashTask() {
         int pct = 15 + (int)((offset * 80) / binSize);
         m_progress = pct;
 
-        char msgBuf[64];
-        snprintf(msgBuf, sizeof(msgBuf), "Escribiendo Flash... %d KB / %d KB", (int)(offset / 1024), (int)(binSize / 1024));
-        m_message = msgBuf;
-        if (m_cb) m_cb(m_status, m_progress, m_message.c_str());
+        // Notificar a la UI solo si avanza el porcentaje o es el último bloque
+        if (pct != lastNotifiedPct || offset >= binSize) {
+            lastNotifiedPct = pct;
+            char msgBuf[64];
+            snprintf(msgBuf, sizeof(msgBuf), "Escribiendo Flash... %d KB / %d KB", (int)(offset / 1024), (int)(binSize / 1024));
+            m_message = msgBuf;
+            if (m_cb) m_cb(m_status, m_progress, m_message.c_str());
+        }
 
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 
     // 6. Finalizar y verificar

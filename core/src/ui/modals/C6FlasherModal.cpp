@@ -3,6 +3,7 @@
 #include "../UIManager.hpp"
 #include "cbdos/system.hpp"
 #include "cbdos/flasher.hpp"
+#include "cbdos/display.hpp"
 #include <cstdio>
 
 namespace cbdos {
@@ -42,26 +43,29 @@ void C6FlasherModal::start_flash_cb(lv_event_t* e) {
     }
 
     cbdos::flasher::startFlash([](cbdos::flasher::FlasherStatus status, int percent, const char* message) {
-        if (s_barProgress) {
-            lv_bar_set_value(s_barProgress, percent, LV_ANIM_ON);
-        }
-        if (s_lblStatus && message) {
-            lv_label_set_text(s_lblStatus, message);
-            if (status == cbdos::flasher::FlasherStatus::Failed) {
-                lv_obj_set_style_text_color(s_lblStatus, lv_color_hex(0xEF4444), 0);
-            } else if (status == cbdos::flasher::FlasherStatus::Success) {
-                lv_obj_set_style_text_color(s_lblStatus, lv_color_hex(0x10B981), 0);
-            } else {
-                lv_obj_set_style_text_color(s_lblStatus, lv_color_hex(0x60A5FA), 0);
+        if (cbdos::display::lock(200)) {
+            if (s_barProgress) {
+                lv_bar_set_value(s_barProgress, percent, LV_ANIM_OFF);
             }
-        }
-        if (status == cbdos::flasher::FlasherStatus::Success || status == cbdos::flasher::FlasherStatus::Failed) {
-            if (s_btnStart) {
-                lv_obj_remove_state(s_btnStart, LV_STATE_DISABLED);
+            if (s_lblStatus && message) {
+                lv_label_set_text(s_lblStatus, message);
+                if (status == cbdos::flasher::FlasherStatus::Failed) {
+                    lv_obj_set_style_text_color(s_lblStatus, lv_color_hex(0xEF4444), 0);
+                } else if (status == cbdos::flasher::FlasherStatus::Success) {
+                    lv_obj_set_style_text_color(s_lblStatus, lv_color_hex(0x10B981), 0);
+                } else {
+                    lv_obj_set_style_text_color(s_lblStatus, lv_color_hex(0x60A5FA), 0);
+                }
             }
-            if (s_lblBtn) {
-                lv_label_set_text(s_lblBtn, (status == cbdos::flasher::FlasherStatus::Success) ? "Flashear Nuevamente" : "Reintentar Flasheo");
+            if (status == cbdos::flasher::FlasherStatus::Success || status == cbdos::flasher::FlasherStatus::Failed) {
+                if (s_btnStart) {
+                    lv_obj_remove_state(s_btnStart, LV_STATE_DISABLED);
+                }
+                if (s_lblBtn) {
+                    lv_label_set_text(s_lblBtn, (status == cbdos::flasher::FlasherStatus::Success) ? "Flashear Nuevamente" : "Reintentar Flasheo");
+                }
             }
+            cbdos::display::unlock();
         }
     });
 }

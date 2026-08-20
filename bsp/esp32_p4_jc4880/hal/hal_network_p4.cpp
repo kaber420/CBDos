@@ -95,7 +95,11 @@ bool init() {
     gpio_set_level(GPIO_NUM_54, 0); // Pulso de Reset
     vTaskDelay(pdMS_TO_TICKS(100));
     gpio_set_level(GPIO_NUM_54, 1); // Liberar Reset
-    vTaskDelay(pdMS_TO_TICKS(300)); // Esperar que el C6 arranque su firmware esclavo
+    vTaskDelay(pdMS_TO_TICKS(500)); // Esperar que el C6 arranque su firmware esclavo
+
+    if (!s_sta_netif) {
+        s_sta_netif = esp_netif_create_default_wifi_sta();
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     err = esp_wifi_init(&cfg);

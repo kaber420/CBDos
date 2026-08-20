@@ -27,10 +27,10 @@ private:
     lv_obj_t* m_lblPresetDesc = nullptr;
     lv_obj_t* m_cardPinConfig = nullptr;
     
-    lv_obj_t* m_lblTxPin = nullptr;
-    lv_obj_t* m_lblRxPin = nullptr;
-    lv_obj_t* m_lblBootPin = nullptr;
-    lv_obj_t* m_lblRstPin = nullptr;
+    lv_obj_t* m_ddTxPin = nullptr;
+    lv_obj_t* m_ddRxPin = nullptr;
+    lv_obj_t* m_ddBootPin = nullptr;
+    lv_obj_t* m_ddRstPin = nullptr;
     lv_obj_t* m_ddBaud = nullptr;
     lv_obj_t* m_lblFirmwareSource = nullptr;
 
@@ -43,10 +43,11 @@ private:
     void updateUIFromConfig();
     static void presetChangedCb(lv_event_t* e);
     static void baudChangedCb(lv_event_t* e);
-    static void pinAdjustCb(lv_event_t* e);
+    static void pinDropdownChangedCb(lv_event_t* e);
     static void startFlashCb(lv_event_t* e);
 };
 
 } // namespace ui
 } // namespace cbdos
+
 
