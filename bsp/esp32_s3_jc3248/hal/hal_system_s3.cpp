@@ -40,6 +40,10 @@ size_t getTotalPsram() {
     return ESP.getPsramSize();
 }
 
+float getCpuTemperature() {
+    return temperatureRead();
+}
+
 void restart() {
     ESP.restart();
 }

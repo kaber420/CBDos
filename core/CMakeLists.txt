@@ -9,9 +9,12 @@ idf_component_register(
         "src/ui/components/HeaderBar.cpp"
         "src/ui/components/QuickSettingsPanel.cpp"
         "src/ui/views/DashboardView.cpp"
+        "src/ui/views/SplashScreenView.cpp"
         "src/ui/views/ConfigView.cpp"
         "src/ui/views/WiFiConfigView.cpp"
         "src/ui/views/WallpaperConfigView.cpp"
+        "src/ui/views/StorageConfigView.cpp"
+        "src/ui/modals/DiagnosticsModal.cpp"
         "src/network/ConfigManager.cpp"
         "src/network/TimeService.cpp"
     INCLUDE_DIRS 

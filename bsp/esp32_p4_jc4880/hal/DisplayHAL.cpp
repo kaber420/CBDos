@@ -17,7 +17,7 @@ static const char *TAG = "DisplayHAL";
 #define LCD_LEDC_MODE        LEDC_LOW_SPEED_MODE
 #define LCD_LEDC_CHANNEL     LEDC_CHANNEL_0
 #define LCD_LEDC_DUTY_RES    LEDC_TIMER_10_BIT
-#define LCD_LEDC_FREQ        5000
+#define LCD_LEDC_FREQ        1000
 
 /* 8 barras de color de prueba para verificación visual inmediata en panel 480x800 */
 static const uint16_t kTestBarColors[8] = {
@@ -48,15 +48,7 @@ DisplayHAL::DisplayHAL() {}
 DisplayHAL::~DisplayHAL() {}
 
 esp_err_t DisplayHAL::initBacklight() {
-    ESP_LOGI(TAG, "Inicializando Retroiluminación en GPIO %d...", BOARD_DISP_BL_GPIO);
-
-    // Configurar GPIO inicialmente en nivel ALTO
-    gpio_config_t io_conf = {};
-    io_conf.pin_bit_mask = (1ULL << BOARD_DISP_BL_GPIO);
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    gpio_config(&io_conf);
-    gpio_set_level((gpio_num_t)BOARD_DISP_BL_GPIO, 1);
+    ESP_LOGI(TAG, "Inicializando Retroiluminación PWM en GPIO %d (%d Hz)...", BOARD_DISP_BL_GPIO, LCD_LEDC_FREQ);
 
     ledc_timer_config_t timer_conf = {};
     timer_conf.speed_mode = LCD_LEDC_MODE;
@@ -66,8 +58,8 @@ esp_err_t DisplayHAL::initBacklight() {
     timer_conf.clk_cfg = LEDC_AUTO_CLK;
     esp_err_t ret = ledc_timer_config(&timer_conf);
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Aviso timer LEDC: %s (manteniendo GPIO en ALTO)", esp_err_to_name(ret));
-        return ESP_OK;
+        ESP_LOGE(TAG, "Error timer LEDC: %s", esp_err_to_name(ret));
+        return ret;
     }
 
     ledc_channel_config_t channel_conf = {};
@@ -80,8 +72,8 @@ esp_err_t DisplayHAL::initBacklight() {
     channel_conf.hpoint = 0;
     ret = ledc_channel_config(&channel_conf);
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Aviso canal LEDC: %s (manteniendo GPIO en ALTO)", esp_err_to_name(ret));
-        return ESP_OK;
+        ESP_LOGE(TAG, "Error canal LEDC: %s", esp_err_to_name(ret));
+        return ret;
     }
 
     setBrightness(100);
@@ -212,19 +204,19 @@ esp_err_t DisplayHAL::initMipiDsi() {
         return ret;
     }
 
-    // 7. Obtener los framebuffers asignados por el controlador DPI y pintarlos con patrón de prueba
+    // 7. Obtener los framebuffers asignados por el controlador DPI y limpiarlos en negro puro
     ret = esp_lcd_dpi_panel_get_frame_buffer(panelHandle, 2, &fb0, &fb1);
     if (ret == ESP_OK) {
         const size_t fb_bytes = (size_t)width * height * sizeof(uint16_t);
         if (fb0) {
-            drawInitialTestPattern((uint16_t*)fb0, width, height);
+            memset(fb0, 0, fb_bytes);
             esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
         }
         if (fb1) {
-            drawInitialTestPattern((uint16_t*)fb1, width, height);
+            memset(fb1, 0, fb_bytes);
             esp_cache_msync(fb1, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
         }
-        ESP_LOGI(TAG, "Framebuffers DPI inicializados con patrón de prueba: fb0=%p, fb1=%p", fb0, fb1);
+        ESP_LOGI(TAG, "Framebuffers DPI inicializados a negro puro: fb0=%p, fb1=%p", fb0, fb1);
     } else {
         ESP_LOGW(TAG, "Aviso: no se pudieron obtener framebuffers DPI: %s", esp_err_to_name(ret));
     }

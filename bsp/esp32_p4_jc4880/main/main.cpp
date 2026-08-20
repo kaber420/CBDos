@@ -1,6 +1,7 @@
 #include "cbdos/system.hpp"
 #include "cbdos/display.hpp"
 #include "cbdos/input.hpp"
+#include "cbdos/storage.hpp"
 #include "cbdos/ui.hpp"
 #include "LVGL_Port.h"
 #include <esp_log.h>
@@ -22,24 +23,30 @@ static void uiUpdateTask(void* pvParameters) {
 extern "C" void app_main(void) {
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.0) ===");
     
-    // 1. Inicializar Subsistema de Pantalla a través de la API
+    // 1. Inicializar Subsistema de Almacenamiento (MicroSD / Flash)
+    if (!cbdos::storage::init()) {
+        cbdos::system::log(cbdos::system::LogLevel::Warn, TAG, "Aviso: MicroSD no insertada o no montada al inicio");
+    }
+
+    // 2. Inicializar Subsistema de Pantalla a través de la API
     if (!cbdos::display::init()) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando Display");
         return;
     }
     
-    // 2. Inicializar Entrada Táctil a través de la API
+    // 3. Inicializar Entrada Táctil a través de la API
     if (!cbdos::input::init()) {
         cbdos::system::log(cbdos::system::LogLevel::Warn, TAG, "Aviso: Touch no detectado o fallo inicializacion");
     }
     
-    // 3. Inicializar Puerto LVGL 9.5
+    // 4. Inicializar Puerto LVGL 9.5
     if (LVGL_Port::getInstance().init() != ESP_OK) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando LVGL 9.5 Port");
         return;
     }
 
-    // 4. Inicializar Sistema de Interfaz Gráfica Universal (Fase 1)
+    // 5. Inicializar Sistema de Interfaz Gráfica Universal (Fase 1)
+
     if (LVGL_Port::getInstance().lock()) {
         if (!cbdos::ui::init()) {
             cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando UI Core");

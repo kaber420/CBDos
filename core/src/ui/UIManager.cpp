@@ -1,5 +1,6 @@
 #include "UIManager.hpp"
 #include "views/DashboardView.hpp"
+#include "views/SplashScreenView.hpp"
 #include "WallpaperManager.h"
 #include "themes/DefaultTheme.h"
 #include "cbdos/system.hpp"
@@ -82,7 +83,17 @@ bool UIManager::init(lv_obj_t* rootScreen) {
     // 5. Crear Contenedor de Contenido (Debajo de la HeaderBar flotante de 44px + margen)
     m_contentContainer = lv_obj_create(m_rootScreen);
     lv_obj_set_pos(m_contentContainer, 0, 58);
-    lv_obj_set_size(m_contentContainer, LV_PCT(100), LV_PCT(100) - 58);
+    lv_obj_set_width(m_contentContainer, lv_pct(100));
+
+    int32_t screenHeight = 800;
+    lv_display_t* disp = lv_display_get_default();
+    if (disp) {
+        screenHeight = lv_display_get_vertical_resolution(disp);
+    } else if (m_rootScreen) {
+        screenHeight = lv_obj_get_height(m_rootScreen);
+        if (screenHeight <= 0) screenHeight = 800;
+    }
+    lv_obj_set_height(m_contentContainer, screenHeight - 58);
     lv_obj_set_style_bg_opa(m_contentContainer, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(m_contentContainer, 0, 0);
     lv_obj_set_style_pad_all(m_contentContainer, 0, 0);
@@ -94,7 +105,7 @@ bool UIManager::init(lv_obj_t* rootScreen) {
         this->onThemeChanged(theme, pal);
     });
 
-    // 7. Cargar vista inicial (Dashboard)
+    // 7. Cargar vista inicial directa (Dashboard)
     openDashboard();
 
     m_initialized = true;
@@ -115,37 +126,68 @@ void UIManager::update() {
     }
 }
 
+static lv_obj_t* s_activeKeyboard = nullptr;
+
+void UIManager::closeKeyboard() {
+    if (s_activeKeyboard && lv_obj_is_valid(s_activeKeyboard)) {
+        lv_keyboard_set_textarea(s_activeKeyboard, nullptr);
+        lv_obj_t* kb = s_activeKeyboard;
+        s_activeKeyboard = nullptr;
+        lv_obj_delete_async(kb);
+    } else {
+        s_activeKeyboard = nullptr;
+    }
+}
+
 static void kb_event_cb(lv_event_t* ev) {
     lv_event_code_t c = lv_event_get_code(ev);
+    lv_obj_t* kb = (lv_obj_t*)lv_event_get_target(ev);
     if (c == LV_EVENT_READY || c == LV_EVENT_CANCEL) {
-        lv_obj_t* kb = (lv_obj_t*)lv_event_get_target(ev);
-        if (kb && lv_obj_is_valid(kb)) {
-            lv_obj_delete_async(kb);
+        UIManager::closeKeyboard();
+    } else if (c == LV_EVENT_DELETE) {
+        if (s_activeKeyboard == kb) {
+            s_activeKeyboard = nullptr;
         }
     }
 }
 
-static void ta_focus_cb(lv_event_t* e) {
+static void ta_event_cb(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t* targetTa = (lv_obj_t*)lv_event_get_target(e);
+
     if (code == LV_EVENT_FOCUSED || code == LV_EVENT_CLICKED) {
-        lv_obj_t* topLayer = lv_layer_top();
-        lv_obj_t* kb = lv_keyboard_create(topLayer);
-        lv_obj_set_style_bg_color(kb, lv_color_hex(0x1B1E29), 0);
-        lv_obj_set_style_border_color(kb, lv_color_hex(0x2E3444), 0);
-        lv_obj_set_style_border_width(kb, 1, 0);
-        lv_keyboard_set_textarea(kb, targetTa);
-        lv_obj_add_event_cb(kb, kb_event_cb, LV_EVENT_ALL, NULL);
+        if (!s_activeKeyboard || !lv_obj_is_valid(s_activeKeyboard)) {
+            lv_obj_t* topLayer = lv_layer_top();
+            s_activeKeyboard = lv_keyboard_create(topLayer);
+            lv_obj_set_size(s_activeKeyboard, lv_pct(100), lv_pct(45));
+            lv_obj_align(s_activeKeyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+            lv_obj_set_style_bg_color(s_activeKeyboard, lv_color_hex(0x1B1E29), 0);
+            lv_obj_set_style_border_color(s_activeKeyboard, lv_color_hex(0x2E3444), 0);
+            lv_obj_set_style_border_width(s_activeKeyboard, 1, 0);
+            lv_obj_add_event_cb(s_activeKeyboard, kb_event_cb, LV_EVENT_ALL, NULL);
+        } else {
+            lv_obj_remove_flag(s_activeKeyboard, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_to_index(s_activeKeyboard, -1);
+        }
+        lv_keyboard_set_textarea(s_activeKeyboard, targetTa);
+    } else if (code == LV_EVENT_DELETE) {
+        if (s_activeKeyboard && lv_obj_is_valid(s_activeKeyboard)) {
+            if (lv_keyboard_get_textarea(s_activeKeyboard) == targetTa) {
+                UIManager::closeKeyboard();
+            }
+        }
     }
 }
 
 void UIManager::attachKeyboard(lv_obj_t* ta) {
     if (!ta) return;
-    lv_obj_add_event_cb(ta, ta_focus_cb, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(ta, ta_event_cb, LV_EVENT_ALL, NULL);
 }
 
 void UIManager::pushView(std::shared_ptr<BaseView> view) {
     if (!view) return;
+
+    closeKeyboard();
 
     if (!m_viewStack.empty()) {
         m_viewStack.back()->onHide();
@@ -172,6 +214,8 @@ void UIManager::popView() {
         return;
     }
 
+    closeKeyboard();
+
     auto topView = m_viewStack.back();
     topView->onHide();
     topView->onDestroy();
@@ -195,6 +239,8 @@ void UIManager::popView() {
 void UIManager::switchView(std::shared_ptr<BaseView> view) {
     if (!view) return;
 
+    closeKeyboard();
+
     while (!m_viewStack.empty()) {
         auto v = m_viewStack.back();
         v->onHide();
@@ -211,6 +257,10 @@ std::shared_ptr<BaseView> UIManager::getCurrentView() const {
 }
 
 void UIManager::openDashboard() {
+    closeKeyboard();
+    if (m_headerBar.getContainer() && lv_obj_is_valid(m_headerBar.getContainer())) {
+        lv_obj_remove_flag(m_headerBar.getContainer(), LV_OBJ_FLAG_HIDDEN);
+    }
     switchView(std::make_shared<DashboardView>());
 }
 

@@ -1,6 +1,8 @@
 #include "ConfigView.hpp"
 #include "WiFiConfigView.hpp"
 #include "WallpaperConfigView.hpp"
+#include "StorageConfigView.hpp"
+#include "../modals/DiagnosticsModal.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "../../network/ConfigManager.h"
@@ -88,10 +90,12 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
         int id = (int)(intptr_t)lv_obj_get_user_data(btn);
         if (id == 1) {
             UIManager::getInstance().pushView(std::make_shared<WiFiConfigView>());
+        } else if (id == 2) {
+            UIManager::getInstance().pushView(std::make_shared<StorageConfigView>());
         } else if (id == 5) {
             UIManager::getInstance().pushView(std::make_shared<WallpaperConfigView>());
         } else if (id == 6) {
-            UIManager::showToast("CBDos v0.2.0 Universal Core");
+            DiagnosticsModal::show();
         }
     }
 }
@@ -104,9 +108,11 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_size(m_container, LV_PCT(100), LV_PCT(100));
     lv_obj_set_flex_flow(m_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(m_container, 8, 0);
+    lv_obj_set_style_pad_bottom(m_container, 24, 0);
     lv_obj_set_style_pad_row(m_container, 10, 0);
     lv_obj_set_style_bg_opa(m_container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(m_container, 0, 0);
+    lv_obj_set_scrollbar_mode(m_container, LV_SCROLLBAR_MODE_AUTO);
 
     struct OptionItem {
         const char* title;
@@ -116,17 +122,19 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
 
     OptionItem options[] = {
         {"WiFi", "Red local y parametros IP", 1},
+        {"Almacenamiento", "Gestion de MicroSD, Flash y USB", 2},
         {"Fondo de Pantalla", "Elegir wallpaper de SD o Flash", 5},
         {"Sistema", "Diagnostico de hardware y memoria", 6},
         {"Resetear NVS", "Manten presionado 3s para borrar", 7}
     };
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         lv_obj_t* card = lv_button_create(m_container);
         lv_obj_set_width(card, lv_pct(100));
         lv_obj_set_height(card, 60);
         DefaultTheme::applyButton(card, 14);
         lv_obj_set_user_data(card, (void*)(intptr_t)options[i].id);
+
 
         if (options[i].id == 7) {
             lv_obj_add_event_cb(card, nvs_btn_event_cb, LV_EVENT_ALL, NULL);

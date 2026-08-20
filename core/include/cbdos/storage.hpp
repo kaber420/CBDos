@@ -8,7 +8,8 @@ namespace storage {
 
 enum class StorageType {
     InternalFlash,
-    SdCard
+    SdCard,
+    UsbDrive
 };
 
 struct FileEntry {
@@ -17,8 +18,23 @@ struct FileEntry {
     bool isDirectory;
 };
 
+struct StorageStats {
+    bool isMounted;
+    uint64_t totalBytes;
+    uint64_t usedBytes;
+    uint64_t freeBytes;
+    std::string label;
+};
+
 bool init();
+bool mountSd();
+bool unmountSd();
 bool isSdMounted();
+
+StorageStats getFlashStats();
+StorageStats getSdCardStats();
+StorageStats getUsbStats();
+
 std::vector<FileEntry> listDir(const char* path);
 bool fileExists(const char* path);
 size_t getFreeBytes(StorageType type);
@@ -26,3 +42,4 @@ size_t getTotalBytes(StorageType type);
 
 } // namespace storage
 } // namespace cbdos
+

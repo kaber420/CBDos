@@ -12,6 +12,10 @@ const char* getVersion() {
     return "0.2.0-CyBerDeck";
 }
 
+namespace system {
+    __attribute__((weak)) float getCpuTemperature() { return 0.0f; }
+}
+
 namespace audio {
     __attribute__((weak)) bool init() { return true; }
     __attribute__((weak)) bool playStream(const char*) { return true; }
@@ -37,11 +41,26 @@ namespace network {
 
 namespace storage {
     __attribute__((weak)) bool init() { return true; }
-    __attribute__((weak)) bool mountSdCard() { return true; }
-    __attribute__((weak)) void unmountSdCard() {}
-    __attribute__((weak)) bool isSdCardMounted() { return false; }
-    __attribute__((weak)) size_t getSdTotalBytes() { return 0; }
-    __attribute__((weak)) size_t getSdUsedBytes() { return 0; }
+    __attribute__((weak)) bool mountSd() { return false; }
+    __attribute__((weak)) bool unmountSd() { return false; }
+    __attribute__((weak)) bool isSdMounted() { return false; }
+    __attribute__((weak)) StorageStats getFlashStats() {
+        return StorageStats{ true, 16 * 1024 * 1024, 0, 16 * 1024 * 1024, "Flash Interna" };
+    }
+    __attribute__((weak)) StorageStats getSdCardStats() {
+        return StorageStats{ false, 0, 0, 0, "MicroSD" };
+    }
+    __attribute__((weak)) StorageStats getUsbStats() {
+        return StorageStats{ false, 0, 0, 0, "USB Drive" };
+    }
+    __attribute__((weak)) std::vector<FileEntry> listDir(const char*) { return {}; }
+    __attribute__((weak)) bool fileExists(const char*) { return false; }
+    __attribute__((weak)) size_t getFreeBytes(StorageType type) {
+        return (type == StorageType::InternalFlash) ? (16 * 1024 * 1024) : 0;
+    }
+    __attribute__((weak)) size_t getTotalBytes(StorageType type) {
+        return (type == StorageType::InternalFlash) ? (16 * 1024 * 1024) : 0;
+    }
 }
 
 } // namespace cbdos

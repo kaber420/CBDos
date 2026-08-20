@@ -24,11 +24,12 @@ public:
     std::shared_ptr<BaseView> getCurrentView() const;
 
     void openDashboard();
-    void toggleQuickSettings() { QuickSettingsPanel::toggle(); }
+    void toggleQuickSettings() { closeKeyboard(); QuickSettingsPanel::toggle(); }
     bool isQuickSettingsOpen() const { return QuickSettingsPanel::isOpen(); }
     void showNotification(const char* message, uint32_t durationMs = 3000);
     static void showToast(const char* message, uint32_t durationMs = 2500) { getInstance().showNotification(message, durationMs); }
     static void attachKeyboard(lv_obj_t* ta);
+    static void closeKeyboard();
 
     HeaderBar& getHeaderBar() { return m_headerBar; }
     lv_obj_t* getContentContainer() const { return m_contentContainer; }

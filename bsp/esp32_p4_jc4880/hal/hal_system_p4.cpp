@@ -1,4 +1,5 @@
 #include "cbdos/system.hpp"
+#include <driver/temperature_sensor.h>
 #include <esp_timer.h>
 #include <esp_rom_sys.h>
 #include <freertos/FreeRTOS.h>
@@ -40,12 +41,39 @@ size_t getTotalHeap() {
     return heap_caps_get_total_size(MALLOC_CAP_DEFAULT);
 }
 
+
+
+static temperature_sensor_handle_t s_temp_sensor = nullptr;
+static bool s_temp_sensor_init = false;
+
+static void init_temp_sensor_if_needed() {
+    if (!s_temp_sensor_init) {
+        temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(10, 80);
+        if (temperature_sensor_install(&temp_sensor_config, &s_temp_sensor) == ESP_OK) {
+            if (temperature_sensor_enable(s_temp_sensor) == ESP_OK) {
+                s_temp_sensor_init = true;
+            }
+        }
+    }
+}
+
 size_t getFreePsram() {
     return heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 }
 
 size_t getTotalPsram() {
     return heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+}
+
+float getCpuTemperature() {
+    init_temp_sensor_if_needed();
+    if (s_temp_sensor_init && s_temp_sensor) {
+        float tsens_out = 0.0f;
+        if (temperature_sensor_get_celsius(s_temp_sensor, &tsens_out) == ESP_OK) {
+            return tsens_out;
+        }
+    }
+    return 0.0f;
 }
 
 void restart() {

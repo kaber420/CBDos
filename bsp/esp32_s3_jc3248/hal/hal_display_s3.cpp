@@ -12,7 +12,8 @@ bool init() {
     if (!s_display.begin()) {
         return false;
     }
-    s_display.backlightOn();
+    pinMode(1, OUTPUT);
+    analogWrite(1, (s_brightness * 255) / 100);
     return true;
 }
 
@@ -29,11 +30,7 @@ DisplayCaps getCapabilities() {
 void setBrightness(uint8_t percent) {
     if (percent > 100) percent = 100;
     s_brightness = percent;
-    if (percent == 0) {
-        s_display.backlightOff();
-    } else {
-        s_display.backlightOn();
-    }
+    analogWrite(1, (percent * 255) / 100);
 }
 
 uint8_t getBrightness() {
