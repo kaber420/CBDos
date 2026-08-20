@@ -3,7 +3,7 @@
 #include <JC3248W535.h>
 
 static JC3248W535_Display s_display;
-static uint8_t s_brightness = 100;
+static uint8_t s_brightness = 70;
 
 namespace cbdos {
 namespace display {

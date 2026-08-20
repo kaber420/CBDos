@@ -59,6 +59,16 @@ struct TimeConfig {
     bool enabled = true;
 };
 
+struct SystemConfig {
+    uint8_t brightness = 70;
+    uint8_t volume = 70;
+    bool autoConnectWifi = false;
+    int32_t gmtOffsetSeconds = -21600; // -21600 = GMT-6 por defecto
+    int32_t daylightOffsetSeconds = 0;
+    uint32_t screenTimeoutSeconds = 60;
+    std::string defaultTheme = "dark";
+};
+
 class ConfigManager {
 public:
     static ConfigManager& getInstance() {
@@ -67,6 +77,18 @@ public:
     }
 
     bool init();
+
+    // System / Preferences
+    bool loadSystem(SystemConfig& cfg);
+    bool saveSystem(const SystemConfig& cfg);
+    uint8_t getBrightness();
+    void setBrightness(uint8_t percent);
+    uint8_t getVolume();
+    void setVolume(uint8_t percent);
+    bool isWifiAutoConnect();
+    void setWifiAutoConnect(bool enable);
+    int32_t getTimezoneOffset();
+    void setTimezoneOffset(int32_t offsetSec);
 
     // WiFi
     bool loadWiFi(WiFiConfig& cfg);
@@ -157,6 +179,16 @@ struct TimeConfig {
     bool enabled = true;
 };
 
+struct SystemConfig {
+    uint8_t brightness = 70;
+    uint8_t volume = 70;
+    bool autoConnectWifi = false;
+    int32_t gmtOffsetSeconds = -21600; // -21600 = GMT-6 por defecto
+    int32_t daylightOffsetSeconds = 0;
+    uint32_t screenTimeoutSeconds = 60;
+    String defaultTheme = "dark";
+};
+
 class ConfigManager {
 public:
     static ConfigManager& getInstance() {
@@ -165,6 +197,18 @@ public:
     }
 
     bool init();
+
+    // System / Preferences
+    bool loadSystem(SystemConfig& cfg);
+    bool saveSystem(const SystemConfig& cfg);
+    uint8_t getBrightness();
+    void setBrightness(uint8_t percent);
+    uint8_t getVolume();
+    void setVolume(uint8_t percent);
+    bool isWifiAutoConnect();
+    void setWifiAutoConnect(bool enable);
+    int32_t getTimezoneOffset();
+    void setTimezoneOffset(int32_t offsetSec);
 
     // WiFi
     bool loadWiFi(WiFiConfig& cfg);

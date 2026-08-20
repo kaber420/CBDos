@@ -56,6 +56,6 @@ private:
 
     int width = BOARD_DISP_H_RES;
     int height = BOARD_DISP_V_RES;
-    uint8_t currentBrightness = 100;
+    uint8_t currentBrightness = 70;
     bool initialized = false;
 };

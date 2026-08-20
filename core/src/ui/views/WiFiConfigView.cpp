@@ -32,6 +32,7 @@ WiFiConfigView::WiFiConfigView()
 void WiFiConfigView::enable_wifi_event_cb(lv_event_t* e) {
     if (!swEnableWifi) return;
     bool isEnabled = lv_obj_has_state(swEnableWifi, LV_STATE_CHECKED);
+    ConfigManager::getInstance().setWifiAutoConnect(isEnabled);
     if (isEnabled) {
         if (wifiSettingsBox) lv_obj_remove_flag(wifiSettingsBox, LV_OBJ_FLAG_HIDDEN);
         if (lblWifiStatusText) {
@@ -75,6 +76,7 @@ void WiFiConfigView::save_event_cb(lv_event_t* e) {
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG_WIFI_UI, "Boton Guardar presionado -> SSID: '%s', Pass: '%s'", 
                        currentCfg.ssid.c_str(), (currentCfg.password.length() == 0) ? "(vacia)" : "******");
 
+    ConfigManager::getInstance().setWifiAutoConnect(true);
     if (ConfigManager::getInstance().saveWiFi(currentCfg)) {
         if (currentCfg.ssid.length() > 0) {
             cbdos::system::log(cbdos::system::LogLevel::Info, TAG_WIFI_UI, "Llamando a connectWifi('%s')...", currentCfg.ssid.c_str());
@@ -149,6 +151,14 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_border_width(wifiSettingsBox, 0, 0);
     DefaultTheme::disableScroll(wifiSettingsBox);
     lv_obj_add_flag(wifiSettingsBox, LV_OBJ_FLAG_HIDDEN); // Oculto por defecto hasta activar switch
+
+    bool isWifiActive = cbdos::network::isConnected() || ConfigManager::getInstance().isWifiAutoConnect();
+    if (isWifiActive) {
+        lv_obj_add_state(swEnableWifi, LV_STATE_CHECKED);
+        lv_obj_remove_flag(wifiSettingsBox, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(lblWifiStatusText, "Estado: Wi-Fi Habilitado");
+        lv_obj_set_style_text_color(lblWifiStatusText, lv_color_hex(0x10B981), 0);
+    }
 
     // SSID
     lv_obj_t* lblSsid = lv_label_create(wifiSettingsBox);

@@ -49,7 +49,7 @@ private:
 
     esp_codec_dev_handle_t playDevHandle = nullptr;
     
-    uint8_t currentVolume = 75;
+    uint8_t currentVolume = 70;
     bool muted = false;
     bool initialized = false;
     uint32_t currentSampleRate = 44100;

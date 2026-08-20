@@ -12,7 +12,9 @@
 
 bool ConfigManager::init() {
     // Probar abrir namespaces
-    bool res = preferences.begin("wifi", true);
+    bool res = preferences.begin("cbdos_sys", true);
+    if (res) preferences.end();
+    res = preferences.begin("wifi", true);
     if (res) preferences.end();
     res = preferences.begin("lora", true);
     if (res) preferences.end();
@@ -36,7 +38,7 @@ bool ConfigManager::clearLegacyConfig() {
 }
 
 bool ConfigManager::clearAllNvs() {
-    const char* namespaces[] = {"wifi", "lora", "flrc", "gateways", "time", "tablehub"};
+    const char* namespaces[] = {"cbdos_sys", "wifi", "lora", "flrc", "gateways", "time", "tablehub"};
     for (const char* ns : namespaces) {
         if (preferences.begin(ns, false)) {
             preferences.clear();
@@ -45,6 +47,89 @@ bool ConfigManager::clearAllNvs() {
     }
     Serial.println("[NVS] Todos los namespaces NVS borrados correctamente");
     return true;
+}
+
+// ─── System Config ───
+bool ConfigManager::loadSystem(SystemConfig& cfg) {
+    if (preferences.begin("cbdos_sys", true)) {
+        cfg.brightness = preferences.getUChar("bright", 70);
+        cfg.volume = preferences.getUChar("vol", 70);
+        cfg.autoConnectWifi = preferences.getBool("wifi_auto", false);
+        cfg.gmtOffsetSeconds = preferences.getInt("gmt_off", -21600);
+        cfg.daylightOffsetSeconds = preferences.getInt("dst_off", 0);
+        cfg.screenTimeoutSeconds = preferences.getUInt("scr_tout", 60);
+        cfg.defaultTheme = preferences.getString("theme", "dark");
+        preferences.end();
+        return true;
+    }
+    return false;
+}
+
+bool ConfigManager::saveSystem(const SystemConfig& cfg) {
+    if (!preferences.begin("cbdos_sys", false)) {
+        return false;
+    }
+    preferences.putUChar("bright", cfg.brightness);
+    preferences.putUChar("vol", cfg.volume);
+    preferences.putBool("wifi_auto", cfg.autoConnectWifi);
+    preferences.putInt("gmt_off", cfg.gmtOffsetSeconds);
+    preferences.putInt("dst_off", cfg.daylightOffsetSeconds);
+    preferences.putUInt("scr_tout", cfg.screenTimeoutSeconds);
+    preferences.putString("theme", cfg.defaultTheme);
+    preferences.end();
+    return true;
+}
+
+uint8_t ConfigManager::getBrightness() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.brightness;
+}
+
+void ConfigManager::setBrightness(uint8_t percent) {
+    if (preferences.begin("cbdos_sys", false)) {
+        preferences.putUChar("bright", percent);
+        preferences.end();
+    }
+}
+
+uint8_t ConfigManager::getVolume() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.volume;
+}
+
+void ConfigManager::setVolume(uint8_t percent) {
+    if (preferences.begin("cbdos_sys", false)) {
+        preferences.putUChar("vol", percent);
+        preferences.end();
+    }
+}
+
+bool ConfigManager::isWifiAutoConnect() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.autoConnectWifi;
+}
+
+void ConfigManager::setWifiAutoConnect(bool enable) {
+    if (preferences.begin("cbdos_sys", false)) {
+        preferences.putBool("wifi_auto", enable);
+        preferences.end();
+    }
+}
+
+int32_t ConfigManager::getTimezoneOffset() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.gmtOffsetSeconds;
+}
+
+void ConfigManager::setTimezoneOffset(int32_t offsetSec) {
+    if (preferences.begin("cbdos_sys", false)) {
+        preferences.putInt("gmt_off", offsetSec);
+        preferences.end();
+    }
 }
 
 // ─── WiFi Config ───
@@ -441,6 +526,8 @@ static TimeConfig s_cachedTime;
 static std::vector<GatewayConfig> s_cachedGateways;
 static std::string s_cachedActiveGwId = "";
 
+static SystemConfig s_cachedSys;
+
 bool ConfigManager::init() {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -448,6 +535,144 @@ bool ConfigManager::init() {
         ret = nvs_flash_init();
     }
     return (ret == ESP_OK);
+}
+
+// ─── System Config ───
+bool ConfigManager::loadSystem(SystemConfig& cfg) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("cbdos_sys", NVS_READONLY, &handle);
+    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
+        init();
+        err = nvs_open("cbdos_sys", NVS_READONLY, &handle);
+    }
+    if (err != ESP_OK) {
+        cfg = s_cachedSys;
+        return true;
+    }
+
+    uint8_t val8 = 70;
+    if (nvs_get_u8(handle, "bright", &val8) == ESP_OK) {
+        cfg.brightness = val8;
+    }
+    val8 = 70;
+    if (nvs_get_u8(handle, "vol", &val8) == ESP_OK) {
+        cfg.volume = val8;
+    }
+    val8 = 0;
+    if (nvs_get_u8(handle, "wifi_auto", &val8) == ESP_OK) {
+        cfg.autoConnectWifi = (val8 != 0);
+    }
+    uint32_t val32 = 60;
+    if (nvs_get_u32(handle, "scr_tout", &val32) == ESP_OK) {
+        cfg.screenTimeoutSeconds = val32;
+    }
+    int32_t valI32 = -21600;
+    if (nvs_get_i32(handle, "gmt_off", &valI32) == ESP_OK) {
+        cfg.gmtOffsetSeconds = valI32;
+    }
+    valI32 = 0;
+    if (nvs_get_i32(handle, "dst_off", &valI32) == ESP_OK) {
+        cfg.daylightOffsetSeconds = valI32;
+    }
+    char themeBuf[32];
+    size_t themeLen = sizeof(themeBuf);
+    if (nvs_get_str(handle, "theme", themeBuf, &themeLen) == ESP_OK) {
+        cfg.defaultTheme = themeBuf;
+    }
+
+    nvs_close(handle);
+    s_cachedSys = cfg;
+    return true;
+}
+
+bool ConfigManager::saveSystem(const SystemConfig& cfg) {
+    s_cachedSys = cfg;
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("cbdos_sys", NVS_READWRITE, &handle);
+    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
+        init();
+        err = nvs_open("cbdos_sys", NVS_READWRITE, &handle);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG_CFG, "Error abriendo NVS cbdos_sys: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    nvs_set_u8(handle, "bright", cfg.brightness);
+    nvs_set_u8(handle, "vol", cfg.volume);
+    nvs_set_u8(handle, "wifi_auto", cfg.autoConnectWifi ? 1 : 0);
+    nvs_set_i32(handle, "gmt_off", cfg.gmtOffsetSeconds);
+    nvs_set_i32(handle, "dst_off", cfg.daylightOffsetSeconds);
+    nvs_set_u32(handle, "scr_tout", cfg.screenTimeoutSeconds);
+    nvs_set_str(handle, "theme", cfg.defaultTheme.c_str());
+
+    err = nvs_commit(handle);
+    nvs_close(handle);
+    return (err == ESP_OK);
+}
+
+uint8_t ConfigManager::getBrightness() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.brightness;
+}
+
+void ConfigManager::setBrightness(uint8_t percent) {
+    s_cachedSys.brightness = percent;
+    nvs_handle_t handle;
+    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u8(handle, "bright", percent);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+uint8_t ConfigManager::getVolume() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.volume;
+}
+
+void ConfigManager::setVolume(uint8_t percent) {
+    s_cachedSys.volume = percent;
+    nvs_handle_t handle;
+    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u8(handle, "vol", percent);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+bool ConfigManager::isWifiAutoConnect() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.autoConnectWifi;
+}
+
+void ConfigManager::setWifiAutoConnect(bool enable) {
+    s_cachedSys.autoConnectWifi = enable;
+    nvs_handle_t handle;
+    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u8(handle, "wifi_auto", enable ? 1 : 0);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+int32_t ConfigManager::getTimezoneOffset() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.gmtOffsetSeconds;
+}
+
+void ConfigManager::setTimezoneOffset(int32_t offsetSec) {
+    s_cachedSys.gmtOffsetSeconds = offsetSec;
+    nvs_handle_t handle;
+    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_i32(handle, "gmt_off", offsetSec);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
 }
 
 bool ConfigManager::loadWiFi(WiFiConfig& cfg) {
@@ -550,12 +775,48 @@ bool ConfigManager::saveFLRC(const FLRCConfig& cfg) {
 }
 
 bool ConfigManager::loadTime(TimeConfig& cfg) {
-    cfg = s_cachedTime;
+    nvs_handle_t handle;
+    if (nvs_open("cbdos_time", NVS_READONLY, &handle) == ESP_OK) {
+        char srvBuf[64];
+        size_t srvLen = sizeof(srvBuf);
+        if (nvs_get_str(handle, "server", srvBuf, &srvLen) == ESP_OK) {
+            cfg.ntpServer = srvBuf;
+        }
+        int32_t offset = -21600;
+        if (nvs_get_i32(handle, "offset", &offset) == ESP_OK) {
+            cfg.gmtOffsetSeconds = offset;
+        }
+        int32_t dst = 0;
+        if (nvs_get_i32(handle, "dst", &dst) == ESP_OK) {
+            cfg.daylightOffsetSeconds = dst;
+        }
+        uint8_t en = 1;
+        if (nvs_get_u8(handle, "enabled", &en) == ESP_OK) {
+            cfg.enabled = (en != 0);
+        }
+        nvs_close(handle);
+    } else {
+        SystemConfig sysCfg;
+        loadSystem(sysCfg);
+        cfg.gmtOffsetSeconds = sysCfg.gmtOffsetSeconds;
+        cfg.daylightOffsetSeconds = sysCfg.daylightOffsetSeconds;
+    }
+    s_cachedTime = cfg;
     return true;
 }
 
 bool ConfigManager::saveTime(const TimeConfig& cfg) {
     s_cachedTime = cfg;
+    nvs_handle_t handle;
+    if (nvs_open("cbdos_time", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_str(handle, "server", cfg.ntpServer.c_str());
+        nvs_set_i32(handle, "offset", cfg.gmtOffsetSeconds);
+        nvs_set_i32(handle, "dst", cfg.daylightOffsetSeconds);
+        nvs_set_u8(handle, "enabled", cfg.enabled ? 1 : 0);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+    setTimezoneOffset(cfg.gmtOffsetSeconds);
     return true;
 }
 
@@ -615,6 +876,12 @@ bool ConfigManager::clearAllNvs() {
         nvs_commit(handle);
         nvs_close(handle);
     }
+    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_erase_all(handle);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+    s_cachedSys = SystemConfig{};
     s_cachedGateways.clear();
     s_cachedActiveGwId = "";
     return true;
@@ -622,6 +889,7 @@ bool ConfigManager::clearAllNvs() {
 
 #else
 // ─── Mock para entorno Emulator (PC Simulator) ───
+static SystemConfig mockSys;
 static WiFiConfig mockWiFi;
 static LoRaConfig mockLoRa;
 static FLRCConfig mockFLRC;
@@ -630,6 +898,48 @@ static std::string mockActiveGwId = "";
 
 bool ConfigManager::init() {
     return true;
+}
+
+bool ConfigManager::loadSystem(SystemConfig& cfg) {
+    cfg = mockSys;
+    return true;
+}
+
+bool ConfigManager::saveSystem(const SystemConfig& cfg) {
+    mockSys = cfg;
+    return true;
+}
+
+uint8_t ConfigManager::getBrightness() {
+    return mockSys.brightness;
+}
+
+void ConfigManager::setBrightness(uint8_t percent) {
+    mockSys.brightness = percent;
+}
+
+uint8_t ConfigManager::getVolume() {
+    return mockSys.volume;
+}
+
+void ConfigManager::setVolume(uint8_t percent) {
+    mockSys.volume = percent;
+}
+
+bool ConfigManager::isWifiAutoConnect() {
+    return mockSys.autoConnectWifi;
+}
+
+void ConfigManager::setWifiAutoConnect(bool enable) {
+    mockSys.autoConnectWifi = enable;
+}
+
+int32_t ConfigManager::getTimezoneOffset() {
+    return mockSys.gmtOffsetSeconds;
+}
+
+void ConfigManager::setTimezoneOffset(int32_t offsetSec) {
+    mockSys.gmtOffsetSeconds = offsetSec;
 }
 
 bool ConfigManager::loadWiFi(WiFiConfig& cfg) {

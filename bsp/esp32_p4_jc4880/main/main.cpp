@@ -7,6 +7,8 @@
 #include "cbdos/flasher.hpp"
 #include "cbdos/ui.hpp"
 #include "LVGL_Port.h"
+#include "../../core/src/network/ConfigManager.h"
+#include "../../core/src/network/TimeService.h"
 #include <esp_log.h>
 #include <nvs_flash.h>
 #include <freertos/FreeRTOS.h>
@@ -16,6 +18,7 @@ static const char* TAG = "CBDos_Main";
 
 static void uiUpdateTask(void* pvParameters) {
     while (true) {
+        TimeService::getInstance().update();
         if (LVGL_Port::getInstance().lock(pdMS_TO_TICKS(100))) {
             cbdos::ui::update();
             LVGL_Port::getInstance().unlock();
@@ -74,7 +77,17 @@ extern "C" void app_main(void) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando NVS Flash: %s", esp_err_to_name(nvsRet));
     }
 
-    
+    // Cargar configuraciones del sistema desde NVS
+    SystemConfig sysCfg;
+    ConfigManager::getInstance().loadSystem(sysCfg);
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Preferencias NVS: Brillo=%d%%, Vol=%d%%, Auto-WiFi=%s, TZ Offset=%ld", 
+                       sysCfg.brightness, sysCfg.volume, sysCfg.autoConnectWifi ? "SI" : "NO", (long)sysCfg.gmtOffsetSeconds);
+
+    // Inicializar Servicio de Hora NTP con zona horaria persistida
+    TimeConfig timeCfg;
+    ConfigManager::getInstance().loadTime(timeCfg);
+    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str());
+
     // 1. Inicializar Subsistema de Almacenamiento (MicroSD / Flash)
     if (!cbdos::storage::init()) {
         cbdos::system::log(cbdos::system::LogLevel::Warn, TAG, "Aviso: MicroSD no insertada o no montada al inicio");
@@ -85,6 +98,8 @@ extern "C" void app_main(void) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando Display");
         return;
     }
+    // Aplicar brillo configurado
+    cbdos::display::setBrightness(sysCfg.brightness);
     
     // 3. Inicializar Entrada Táctil a través de la API
     if (!cbdos::input::init()) {
@@ -95,6 +110,8 @@ extern "C" void app_main(void) {
     if (!cbdos::audio::init()) {
         cbdos::system::log(cbdos::system::LogLevel::Warn, TAG, "Aviso: Fallo al inicializar subsistema de audio");
     }
+    // Aplicar volumen configurado
+    cbdos::audio::setVolume(sysCfg.volume);
     
     // 5. Inicializar Puerto LVGL 9.5
     if (LVGL_Port::getInstance().init() != ESP_OK) {
@@ -112,10 +129,34 @@ extern "C" void app_main(void) {
         LVGL_Port::getInstance().unlock();
     }
 
-    // 7. Tarea periódica para refresco de métricas en tiempo real (reloj, RAM, etc.)
+    // 7. Autoconexión Wi-Fi en segundo plano si estaba activo
+    if (sysCfg.autoConnectWifi) {
+        xTaskCreatePinnedToCore([](void*) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            WiFiConfig wifiCfg;
+            if (ConfigManager::getInstance().loadWiFi(wifiCfg) && wifiCfg.ssid.length() > 0) {
+                cbdos::system::log(cbdos::system::LogLevel::Info, "AutoWiFi", "Iniciando conexion automatica a '%s'...", wifiCfg.ssid.c_str());
+                if (wifiCfg.useStaticIp) {
+                    cbdos::network::connectWifiStatic(
+                        wifiCfg.ssid.c_str(),
+                        wifiCfg.password.c_str(),
+                        wifiCfg.staticIp.c_str(),
+                        wifiCfg.gateway.c_str(),
+                        wifiCfg.subnet.length() > 0 ? wifiCfg.subnet.c_str() : "255.255.255.0",
+                        wifiCfg.dns1.c_str()
+                    );
+                } else {
+                    cbdos::network::connectWifi(wifiCfg.ssid.c_str(), wifiCfg.password.c_str());
+                }
+            }
+            vTaskDelete(nullptr);
+        }, "auto_wifi_task", 4096, nullptr, 1, nullptr, 0);
+    }
+
+    // 8. Tarea periódica para refresco de métricas en tiempo real (reloj, RAM, etc.)
     xTaskCreatePinnedToCore(uiUpdateTask, "ui_update_task", 4096, nullptr, 3, nullptr, 1);
 
-    // 8. Tarea de consola interactiva bajo demanda
+    // 9. Tarea de consola interactiva bajo demanda
     xTaskCreatePinnedToCore(consoleCommandTask, "cli_task", 4096, nullptr, 1, nullptr, 0);
 
     auto caps = cbdos::display::getCapabilities();

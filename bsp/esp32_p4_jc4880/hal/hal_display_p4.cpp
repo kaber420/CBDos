@@ -5,7 +5,7 @@
 namespace cbdos {
 namespace display {
 
-static uint8_t s_brightness = 100;
+static uint8_t s_brightness = 70;
 
 bool init() {
     return (DisplayHAL::getInstance().init() == ESP_OK);

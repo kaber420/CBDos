@@ -19,8 +19,8 @@ Se integrará en `core/src/network/ConfigManager.h` para que esté disponible en
 
 ```cpp
 struct SystemConfig {
-    uint8_t brightness = 80;          // Nivel de retroiluminación (10% a 100%)
-    uint8_t volume = 75;              // Nivel maestro de audio ES8311 (0% a 100%)
+    uint8_t brightness = 70;          // Nivel de retroiluminación (10% a 100%, 70% térmicamente eficiente)
+    uint8_t volume = 70;              // Nivel maestro de audio ES8311 (0% a 100%)
     bool autoConnectWifi = false;     // false = Offline Seguro | true = Conectar en arranque
     uint32_t screenTimeoutSeconds = 60;// Tiempo de apagado de pantalla en segundos (0 = desactivado)
     std::string defaultTheme = "dark"; // Tema visual ("dark", "cyberpunk", "retro")
@@ -33,8 +33,8 @@ struct SystemConfig {
 
 | Clave NVS | Tipo | Valor por Defecto | Descripción |
 | :--- | :--- | :--- | :--- |
-| `bright` | `uint8_t` | `80` | Porcentaje de brillo de pantalla |
-| `vol` | `uint8_t` | `75` | Porcentaje de volumen de salida de audio |
+| `bright` | `uint8_t` | `70` | Porcentaje de brillo de pantalla |
+| `vol` | `uint8_t` | `70` | Porcentaje de volumen de salida de audio |
 | `wifi_auto` | `uint8_t` | `0` (false) | 0: Modo manual/offline, 1: Conexión automática |
 | `scr_tout` | `uint32_t` | `60` | Tiempo de inactividad para suspender pantalla |
 | `theme` | `string` | `"dark"` | Identificador del tema visual activo |

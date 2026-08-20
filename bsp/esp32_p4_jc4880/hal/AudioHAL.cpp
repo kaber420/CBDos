@@ -25,7 +25,7 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
     ESP_LOGI(TAG, "=== Inicializando AudioHAL con esp_codec_dev (ESP32-P4 JC4880P443C) ===");
     currentSampleRate = sampleRate;
 
-    // 1. Configurar y habilitar Pin PA (Power Amplifier)
+    // 1. Configurar Pin PA (Power Amplifier) en nivel bajo para evitar pop
     if (BOARD_AUDIO_PA_GPIO >= 0) {
         gpio_config_t pa_conf = {
             .pin_bit_mask = (1ULL << BOARD_AUDIO_PA_GPIO),
@@ -35,8 +35,8 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
             .intr_type = GPIO_INTR_DISABLE,
         };
         gpio_config(&pa_conf);
-        gpio_set_level((gpio_num_t)BOARD_AUDIO_PA_GPIO, 1);
-        ESP_LOGI(TAG, "Amplificador de audio habilitado en GPIO %d", BOARD_AUDIO_PA_GPIO);
+        gpio_set_level((gpio_num_t)BOARD_AUDIO_PA_GPIO, 0);
+        ESP_LOGI(TAG, "Amplificador de audio configurado en silencio (GPIO %d)", BOARD_AUDIO_PA_GPIO);
     }
 
     // 2. Configurar Interfaz de Control I2C usando el bus compartido
@@ -138,14 +138,16 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
         return ret;
     }
 
+    // Habilitar PA una vez configurado y estabilizado el códec
+    if (BOARD_AUDIO_PA_GPIO >= 0) {
+        gpio_set_level((gpio_num_t)BOARD_AUDIO_PA_GPIO, 1);
+    }
+
     // 7. Aplicar volumen inicial
     setVolume(currentVolume);
 
     initialized = true;
-    ESP_LOGI(TAG, "AudioHAL (ES8311) listo y operativo a %lu Hz", sampleRate);
-
-    // Tocar melodía de bienvenida al arrancar
-    playStartupChime();
+    ESP_LOGI(TAG, "AudioHAL (ES8311) listo y operativo a %lu Hz (Arranque silencioso)", sampleRate);
 
     return ESP_OK;
 }

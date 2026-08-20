@@ -58,11 +58,18 @@ void setup() {
     cbdos::system::sleepMs(500);
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.0) [Target: ESP32-S3] ===");
     
+    // Cargar configuraciones del sistema desde NVS
+    SystemConfig sysCfg;
+    ConfigManager::getInstance().loadSystem(sysCfg);
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Preferencias NVS: Brillo=%d%%, Vol=%d%%, Auto-WiFi=%s", 
+                       sysCfg.brightness, sysCfg.volume, sysCfg.autoConnectWifi ? "SI" : "NO");
+
     // 1. Inicializar Subsistema de Pantalla a través de la API
     if (!cbdos::display::init()) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando Display en S3");
         return;
     }
+    cbdos::display::setBrightness(sysCfg.brightness);
     
     // 2. Inicializar Entrada Táctil
     if (!cbdos::input::init()) {
@@ -78,17 +85,19 @@ void setup() {
     ConfigManager::getInstance().loadTime(timeCfg);
     TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str());
 
-    WiFiConfig wifiCfg;
-    if (ConfigManager::getInstance().loadWiFi(wifiCfg) && wifiCfg.ssid.length() > 0) {
-        cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Auto-conectando a Wi-Fi: %s", wifiCfg.ssid.c_str());
-        if (wifiCfg.useStaticIp) {
-            IPAddress ip, gw, sub;
-            if (ip.fromString(wifiCfg.staticIp.c_str()) && gw.fromString(wifiCfg.gateway.c_str())) {
-                sub.fromString(wifiCfg.subnet.length() > 0 ? wifiCfg.subnet.c_str() : "255.255.255.0");
-                WiFi.config(ip, gw, sub);
+    if (sysCfg.autoConnectWifi) {
+        WiFiConfig wifiCfg;
+        if (ConfigManager::getInstance().loadWiFi(wifiCfg) && wifiCfg.ssid.length() > 0) {
+            cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Auto-conectando a Wi-Fi: %s", wifiCfg.ssid.c_str());
+            if (wifiCfg.useStaticIp) {
+                IPAddress ip, gw, sub;
+                if (ip.fromString(wifiCfg.staticIp.c_str()) && gw.fromString(wifiCfg.gateway.c_str())) {
+                    sub.fromString(wifiCfg.subnet.length() > 0 ? wifiCfg.subnet.c_str() : "255.255.255.0");
+                    WiFi.config(ip, gw, sub);
+                }
             }
+            WiFi.begin(wifiCfg.ssid.c_str(), wifiCfg.password.c_str());
         }
-        WiFi.begin(wifiCfg.ssid.c_str(), wifiCfg.password.c_str());
     }
 
     xTaskCreatePinnedToCore(networkTask, "NetworkTask", 8192, NULL, 1, NULL, 0);

@@ -68,7 +68,7 @@ esp_err_t DisplayHAL::initBacklight() {
     channel_conf.channel = LCD_LEDC_CHANNEL;
     channel_conf.intr_type = LEDC_INTR_DISABLE;
     channel_conf.timer_sel = LCD_LEDC_TIMER;
-    channel_conf.duty = 1023; // 100% brillo
+    channel_conf.duty = (currentBrightness * 1023) / 100;
     channel_conf.hpoint = 0;
     ret = ledc_channel_config(&channel_conf);
     if (ret != ESP_OK) {
@@ -76,7 +76,7 @@ esp_err_t DisplayHAL::initBacklight() {
         return ret;
     }
 
-    setBrightness(100);
+    setBrightness(currentBrightness);
     return ESP_OK;
 }
 
@@ -90,7 +90,7 @@ void DisplayHAL::setBrightness(uint8_t percent) {
 }
 
 void DisplayHAL::turnOn() {
-    setBrightness(currentBrightness > 0 ? currentBrightness : 100);
+    setBrightness(currentBrightness > 0 ? currentBrightness : 70);
 }
 
 void DisplayHAL::turnOff() {

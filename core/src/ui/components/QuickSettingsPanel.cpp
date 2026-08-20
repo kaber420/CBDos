@@ -4,6 +4,7 @@
 #include "cbdos/audio.hpp"
 #include "cbdos/network.hpp"
 #include "cbdos/system.hpp"
+#include "../../network/ConfigManager.h"
 #include <cstdio>
 
 namespace cbdos {
@@ -28,6 +29,7 @@ void QuickSettingsPanel::volume_slider_cb(lv_event_t* e) {
     int32_t val = lv_slider_get_value(slider);
     cbdos::audio::setVolume((uint8_t)val);
     if (code == LV_EVENT_RELEASED) {
+        ConfigManager::getInstance().setVolume((uint8_t)val);
         if (!cbdos::audio::getStats().isPlaying) {
             cbdos::audio::playBeep();
         }
@@ -35,17 +37,38 @@ void QuickSettingsPanel::volume_slider_cb(lv_event_t* e) {
 }
 
 void QuickSettingsPanel::brightness_slider_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t* slider = (lv_obj_t*)lv_event_get_target(e);
     int32_t val = lv_slider_get_value(slider);
     cbdos::display::setBrightness((uint8_t)val);
+    if (code == LV_EVENT_RELEASED) {
+        ConfigManager::getInstance().setBrightness((uint8_t)val);
+    }
 }
 
 void QuickSettingsPanel::wifi_switch_cb(lv_event_t* e) {
     lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
     if (sw) {
         bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        ConfigManager::getInstance().setWifiAutoConnect(checked);
         if (checked) {
-            cbdos::network::init();
+            WiFiConfig wifiCfg;
+            if (ConfigManager::getInstance().loadWiFi(wifiCfg) && wifiCfg.ssid.length() > 0) {
+                if (wifiCfg.useStaticIp) {
+                    cbdos::network::connectWifiStatic(
+                        wifiCfg.ssid.c_str(),
+                        wifiCfg.password.c_str(),
+                        wifiCfg.staticIp.c_str(),
+                        wifiCfg.gateway.c_str(),
+                        wifiCfg.subnet.length() > 0 ? wifiCfg.subnet.c_str() : "255.255.255.0",
+                        wifiCfg.dns1.c_str()
+                    );
+                } else {
+                    cbdos::network::connectWifi(wifiCfg.ssid.c_str(), wifiCfg.password.c_str());
+                }
+            } else {
+                cbdos::network::init();
+            }
         } else {
             cbdos::network::disconnectWifi();
         }
@@ -85,7 +108,7 @@ static lv_obj_t* createSliderRow(lv_obj_t* parent, const char* labelText,
     lv_obj_set_style_bg_color(slider, DefaultTheme::getPrimaryAccent(), LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider, 4, LV_PART_KNOB);
 
-    lv_obj_add_event_cb(slider, cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(slider, cb, LV_EVENT_ALL, NULL);
     return slider;
 }
 
@@ -157,7 +180,7 @@ void QuickSettingsPanel::toggle() {
     lv_obj_set_style_text_font(lblWifi, &lv_font_montserrat_12, 0);
 
     lv_obj_t* swWifi = lv_switch_create(rowWifi);
-    if (cbdos::network::isConnected()) {
+    if (cbdos::network::isConnected() || ConfigManager::getInstance().isWifiAutoConnect()) {
         lv_obj_add_state(swWifi, LV_STATE_CHECKED);
     }
     lv_obj_add_event_cb(swWifi, wifi_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
