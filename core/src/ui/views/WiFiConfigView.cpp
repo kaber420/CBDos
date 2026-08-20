@@ -2,12 +2,19 @@
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/network.hpp"
+#include "cbdos/system.hpp"
 #include <cstdio>
+
+static const char* TAG_WIFI_UI = "WiFiConfigView";
+
 
 namespace cbdos {
 namespace ui {
 
 WiFiConfig WiFiConfigView::currentCfg;
+lv_obj_t* WiFiConfigView::swEnableWifi = nullptr;
+lv_obj_t* WiFiConfigView::wifiSettingsBox = nullptr;
+lv_obj_t* WiFiConfigView::lblWifiStatusText = nullptr;
 lv_obj_t* WiFiConfigView::taSsid = nullptr;
 lv_obj_t* WiFiConfigView::taPass = nullptr;
 lv_obj_t* WiFiConfigView::btnTogglePass = nullptr;
@@ -20,6 +27,25 @@ lv_obj_t* WiFiConfigView::staticContainer = nullptr;
 
 WiFiConfigView::WiFiConfigView()
     : BaseView("WiFi") {
+}
+
+void WiFiConfigView::enable_wifi_event_cb(lv_event_t* e) {
+    if (!swEnableWifi) return;
+    bool isEnabled = lv_obj_has_state(swEnableWifi, LV_STATE_CHECKED);
+    if (isEnabled) {
+        if (wifiSettingsBox) lv_obj_remove_flag(wifiSettingsBox, LV_OBJ_FLAG_HIDDEN);
+        if (lblWifiStatusText) {
+            lv_label_set_text(lblWifiStatusText, "Estado: Wi-Fi Habilitado");
+            lv_obj_set_style_text_color(lblWifiStatusText, lv_color_hex(0x10B981), 0);
+        }
+    } else {
+        if (wifiSettingsBox) lv_obj_add_flag(wifiSettingsBox, LV_OBJ_FLAG_HIDDEN);
+        if (lblWifiStatusText) {
+            lv_label_set_text(lblWifiStatusText, "Estado: Desactivado (Modo Seguro Offline)");
+            lv_obj_set_style_text_color(lblWifiStatusText, lv_color_hex(0x9CA3AF), 0);
+        }
+        cbdos::network::disconnectWifi();
+    }
 }
 
 void WiFiConfigView::toggle_pass_event_cb(lv_event_t* e) {
@@ -46,8 +72,12 @@ void WiFiConfigView::save_event_cb(lv_event_t* e) {
     if (taIp) currentCfg.staticIp = lv_textarea_get_text(taIp);
     if (taGw) currentCfg.gateway = lv_textarea_get_text(taGw);
 
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG_WIFI_UI, "Boton Guardar presionado -> SSID: '%s', Pass: '%s'", 
+                       currentCfg.ssid.c_str(), (currentCfg.password.length() == 0) ? "(vacia)" : "******");
+
     if (ConfigManager::getInstance().saveWiFi(currentCfg)) {
         if (currentCfg.ssid.length() > 0) {
+            cbdos::system::log(cbdos::system::LogLevel::Info, TAG_WIFI_UI, "Llamando a connectWifi('%s')...", currentCfg.ssid.c_str());
             if (currentCfg.useStaticIp) {
                 cbdos::network::connectWifiStatic(
                     currentCfg.ssid.c_str(),
@@ -60,10 +90,13 @@ void WiFiConfigView::save_event_cb(lv_event_t* e) {
             } else {
                 cbdos::network::connectWifi(currentCfg.ssid.c_str(), currentCfg.password.c_str());
             }
+        } else {
+            cbdos::system::log(cbdos::system::LogLevel::Warn, TAG_WIFI_UI, "SSID vacio, no se intentara conexion");
         }
         UIManager::showToast("WiFi guardado correctamente");
         UIManager::getInstance().popView();
     } else {
+        cbdos::system::log(cbdos::system::LogLevel::Error, TAG_WIFI_UI, "Error al guardar en ConfigManager");
         UIManager::showToast("Error al guardar WiFi");
     }
 }
@@ -77,16 +110,52 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_size(m_container, LV_PCT(100), LV_PCT(100));
     lv_obj_set_flex_flow(m_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(m_container, 8, 0);
-    lv_obj_set_style_pad_row(m_container, 12, 0);
+    lv_obj_set_style_pad_row(m_container, 10, 0);
     lv_obj_set_style_bg_opa(m_container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(m_container, 0, 0);
 
+    // Fila Maestro: Interruptor General de Wi-Fi
+    lv_obj_t* masterRow = lv_obj_create(m_container);
+    lv_obj_set_width(masterRow, lv_pct(100));
+    lv_obj_set_height(masterRow, 50);
+    DefaultTheme::applyRaisedCard(masterRow, 10);
+    lv_obj_set_flex_flow(masterRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(masterRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(masterRow, 12, 0);
+    DefaultTheme::disableScroll(masterRow);
+
+    lv_obj_t* lblMaster = lv_label_create(masterRow);
+    lv_label_set_text(lblMaster, "Activar Wi-Fi (Coprocesador)");
+    lv_obj_set_style_text_color(lblMaster, DefaultTheme::getTextColor(), 0);
+    lv_obj_set_style_text_font(lblMaster, &lv_font_montserrat_14, 0);
+
+    swEnableWifi = lv_switch_create(masterRow);
+    lv_obj_add_event_cb(swEnableWifi, enable_wifi_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lblWifiStatusText = lv_label_create(m_container);
+    lv_label_set_text(lblWifiStatusText, "Estado: Desactivado (Modo Seguro Offline)");
+    lv_obj_set_style_text_color(lblWifiStatusText, lv_color_hex(0x9CA3AF), 0);
+    lv_obj_set_style_text_font(lblWifiStatusText, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_margin_left(lblWifiStatusText, 4, 0);
+
+    // Contenedor con todos los campos de configuración
+    wifiSettingsBox = lv_obj_create(m_container);
+    lv_obj_set_width(wifiSettingsBox, lv_pct(100));
+    lv_obj_set_height(wifiSettingsBox, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(wifiSettingsBox, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(wifiSettingsBox, 0, 0);
+    lv_obj_set_style_pad_row(wifiSettingsBox, 10, 0);
+    lv_obj_set_style_bg_opa(wifiSettingsBox, 0, 0);
+    lv_obj_set_style_border_width(wifiSettingsBox, 0, 0);
+    DefaultTheme::disableScroll(wifiSettingsBox);
+    lv_obj_add_flag(wifiSettingsBox, LV_OBJ_FLAG_HIDDEN); // Oculto por defecto hasta activar switch
+
     // SSID
-    lv_obj_t* lblSsid = lv_label_create(m_container);
+    lv_obj_t* lblSsid = lv_label_create(wifiSettingsBox);
     lv_label_set_text(lblSsid, "SSID (Nombre de Red):");
     lv_obj_set_style_text_color(lblSsid, DefaultTheme::getTextColor(), 0);
 
-    taSsid = lv_textarea_create(m_container);
+    taSsid = lv_textarea_create(wifiSettingsBox);
     lv_obj_set_width(taSsid, lv_pct(100));
     lv_textarea_set_one_line(taSsid, true);
     lv_textarea_set_text(taSsid, currentCfg.ssid.c_str());
@@ -94,11 +163,11 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     UIManager::attachKeyboard(taSsid);
 
     // Password
-    lv_obj_t* lblPass = lv_label_create(m_container);
+    lv_obj_t* lblPass = lv_label_create(wifiSettingsBox);
     lv_label_set_text(lblPass, "Password:");
     lv_obj_set_style_text_color(lblPass, DefaultTheme::getTextColor(), 0);
 
-    lv_obj_t* passRow = lv_obj_create(m_container);
+    lv_obj_t* passRow = lv_obj_create(wifiSettingsBox);
     lv_obj_set_width(passRow, lv_pct(100));
     lv_obj_set_height(passRow, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(passRow, 0, 0);
@@ -128,7 +197,7 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_center(lblTogglePass);
 
     // IP Estatica Toggle
-    lv_obj_t* rowSwitch = lv_obj_create(m_container);
+    lv_obj_t* rowSwitch = lv_obj_create(wifiSettingsBox);
     lv_obj_set_width(rowSwitch, lv_pct(100));
     lv_obj_set_height(rowSwitch, 44);
     lv_obj_set_style_bg_opa(rowSwitch, 0, 0);
@@ -147,8 +216,9 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     }
     lv_obj_add_event_cb(swStatic, switch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+
     // Contenedor para IP Estatica
-    staticContainer = lv_obj_create(m_container);
+    staticContainer = lv_obj_create(wifiSettingsBox);
     lv_obj_set_width(staticContainer, lv_pct(100));
     lv_obj_set_flex_flow(staticContainer, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(staticContainer, 0, 0);
@@ -183,7 +253,7 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     UIManager::attachKeyboard(taGw);
 
     // Botón Guardar
-    lv_obj_t* btnSave = lv_button_create(m_container);
+    lv_obj_t* btnSave = lv_button_create(wifiSettingsBox);
     lv_obj_set_width(btnSave, lv_pct(100));
     lv_obj_set_height(btnSave, 46);
     DefaultTheme::applyButton(btnSave, 14);
@@ -191,13 +261,14 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_add_event_cb(btnSave, save_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t* lblBtn = lv_label_create(btnSave);
-    lv_label_set_text(lblBtn, "Guardar Configuracion");
+    lv_label_set_text(lblBtn, "Guardar y Conectar");
     lv_obj_set_style_text_color(lblBtn, lv_color_hex(0x0F172A), 0);
     lv_obj_set_style_text_font(lblBtn, &lv_font_montserrat_16, 0);
     lv_obj_center(lblBtn);
 
     return true;
 }
+
 
 } // namespace ui
 } // namespace cbdos

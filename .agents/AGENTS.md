@@ -17,10 +17,17 @@ El proyecto opera bajo un modelo desacoplado:
 * **`core/`**: Núcleo agnóstico en C++ (UI LVGL 9.5, lógica de apps, decodificadores Helix, APIs de sistema).
 * **`bsp/`**: Capa de soporte de hardware (Board Support Package) por microcontrolador.
 
-### Target ESP32-P4 (JC4880P443C - 480x800 MIPI-DPI @ 60 FPS)
+### Target ESP32-P4: Guition JC4880P443C (Módulo JC-ESP32P4-M3 Rev 1.3)
+- **SoC Principal:** ESP32-P4 RISC-V Dual-Core @ 400 MHz (Chip Rev 1.3, 16 MB Flash, 32 MB Hexal-PSRAM).
+- **Coprocesador:** ESP32-C6-MINI (WiFi 6 / Bluetooth 5 vía SDIO Slot 1).
+- **Pantalla:** 4.3" IPS 480x800 MIPI-DPI (ST7701S) @ 60 FPS.
+- **Touch:** Goodix GT911 (I2C SDA=7 SCL=8 RST=3 INT=4).
+- **Audio:** Everest ES8311 (I2C SDA=7 SCL=8 + I2S MCLK=13 BCLK=12 WS=10 DOUT=9 PA=11).
+- **Almacenamiento:** MicroSD Slot 0 SDMMC 4-bit (GPIO 39-44) + LDO VO4 (3.3V).
 - **Framework:** ESP-IDF 5.5 nativo (CMake / Ninja).
 - **Ruta del BSP:** `bsp/esp32_p4_jc4880`
 - **Comandos estándar:**
+
   ```bash
   # Cargar entorno ESP-IDF y compilar
   . /home/kaber420/esp/esp-idf/export.sh
@@ -76,3 +83,8 @@ El proyecto opera bajo un modelo desacoplado:
 6. **Uso de OpenCode (Modelos externos):**
    - Usar `opencode run "<instrucción>"` para ahorrar tokens de contexto.
    - **Selección de modelo:** Para usar modelos específicos (como deepseek o mimo), indicarlo con `-m` (ej. `opencode run -m opencode/deepseek-v4-flash-free "<instrucción>"`).
+
+7. **Desacoplamiento Total del Arranque (Offline-First Estricto):**
+   - **ESTRICTAMENTE PROHIBIDO** inicializar la red (Wi-Fi, Bluetooth, ESP-Hosted, DHCP o tareas de fondo de red) de forma síncrona o automática en `app_main()` o durante el encendido del sistema.
+   - El sistema operativo CBDos **DEBE ser 100% funcional y autónomo** (pantalla, táctil, audio, almacenamiento MicroSD, interfaz gráfica LVGL) **con o sin red conectada**, sin depender de la presencia, alimentación o respuesta de ningún coprocesador inalámbrico (ESP32-C6).
+   - Toda inicialización de red debe ser **exclusivamente bajo demanda** cuando el usuario lo solicite explícitamente desde la UI o API.

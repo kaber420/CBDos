@@ -50,3 +50,15 @@ wallpapers/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# --- Notas de Investigación Interna y Laboratorio (Offline/Local) ---
+notes/
+**/notes/
+docs/internal/
+**/docs/internal/
+
+# --- Credenciales privadas ---
+*credenciales*
+*credentials*
+wifi_credentials.h
+

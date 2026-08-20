@@ -22,8 +22,12 @@ idf_component_register(
         "src/ui/views/WallpaperConfigView.cpp"
         "src/ui/views/StorageConfigView.cpp"
         "src/ui/views/MusicPlayerView.cpp"
+        "src/ui/views/FlasherView.cpp"
         "src/ui/modals/DiagnosticsModal.cpp"
+
+        "src/ui/modals/C6FlasherModal.cpp"
         "src/audio/AudioPlayer.cpp"
+
         "src/network/ConfigManager.cpp"
         "src/network/TimeService.cpp"
         ${HELIX_SRCS}

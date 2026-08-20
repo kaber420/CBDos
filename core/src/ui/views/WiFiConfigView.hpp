@@ -16,9 +16,13 @@ public:
 private:
     static void toggle_pass_event_cb(lv_event_t* e);
     static void switch_event_cb(lv_event_t* e);
+    static void enable_wifi_event_cb(lv_event_t* e);
     static void save_event_cb(lv_event_t* e);
 
     static WiFiConfig currentCfg;
+    static lv_obj_t* swEnableWifi;
+    static lv_obj_t* wifiSettingsBox;
+    static lv_obj_t* lblWifiStatusText;
     static lv_obj_t* taSsid;
     static lv_obj_t* taPass;
     static lv_obj_t* btnTogglePass;
@@ -29,6 +33,7 @@ private:
     static lv_obj_t* swStatic;
     static lv_obj_t* staticContainer;
 };
+
 
 } // namespace ui
 } // namespace cbdos

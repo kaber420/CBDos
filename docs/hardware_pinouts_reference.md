@@ -36,12 +36,45 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | | **SDMMC D1** | **GPIO 40** | SDMMC Data 1 | |
 | | **SDMMC D2** | **GPIO 41** | SDMMC Data 2 | |
 | | **SDMMC D3** | **GPIO 42** | SDMMC Data 3 | |
+| **Coprocesador Inalámbrico (ESP32-C6)** | **SDIO CLK** | **GPIO 18** | Bus SDIO 4-bit (Host) | Reloj SDIO hacia C6 |
+| | **SDIO CMD** | **GPIO 19** | Bus SDIO 4-bit | Línea de comando SDIO |
+| | **SDIO D0** | **GPIO 14** | Bus SDIO 4-bit | Línea de datos 0 |
+| | **SDIO D1** | **GPIO 15** | Bus SDIO 4-bit | Línea de datos 1 |
+| | **SDIO D2** | **GPIO 16** | Bus SDIO 4-bit | Línea de datos 2 |
+| | **SDIO D3** | **GPIO 17** | Bus SDIO 4-bit | Línea de datos 3 |
+| | **C6 Reset (RST)** | **GPIO 54** | Salida Digital | Reset hardware del ESP32-C6 |
 | **Consola Serial / Debug** | **UART TX** | **GPIO 38** | UART0 TX @ 115200 bps | Terminal interactivo / ESP-IDF Monitor |
 | | **UART RX** | **GPIO 37** | UART0 RX @ 115200 bps | |
 | **Alimentación LDO P4** | **LDO VO3** | Canal 3 | Salida 2.5V fija | Alimentación carril MIPI DSI |
 | | **LDO VO4** | Canal 4 | Salida 3.3V conmutable | Alimentación carril MicroSD / VDD_SD |
 
+### 📍 Conector de Expansión JP1 (Pin Header 2×13)
+| Pin Izq (P4 / Core) | Pin Der (C6 / Power) | Función / Propósito de Flasheo |
+| :--- | :--- | :--- |
+| **3V3** | **5V** | Alimentación principal |
+| **3V3** | **5V** | Alimentación principal |
+| **GND** | **GND** | Masa de referencia |
+| **GPIO 52** | **GPIO 33** | GPIOs de propósito general |
+| **GPIO 51** | **GPIO 31** | GPIOs de propósito general |
+| **GPIO 50** | **GPIO 30** | GPIOs de propósito general |
+| **GPIO 49** | **GPIO 29** | GPIOs de propósito general |
+| **GPIO 35** | **GND** | Masa de referencia |
+| **GPIO 34** | **ESP_3V3** | Alimentación carril C6 |
+| **GPIO 32** | **C6_U0RXD** | **Jumper 1 Horizontal** (P4 TX ➔ C6 RX) |
+| **GPIO 28** | **C6_U0TXD** | **Jumper 2 Horizontal** (P4 RX ➔ C6 TX) |
+| **I2C_SDA** | **C6_IO9** | **Cable a GND** para entrar en modo Bootloader del C6 |
+| **I2C_SCL** | **C6_CHIP_PU** | Línea Enable C6 (Dejar libre) |
+
+### 🔌 Flasheador Universal y Presets de Programación
+| Preset / Plataforma | TX (Host->Target) | RX (Host<-Target) | BOOT (IO0/IO9) | RST / EN | Baudrate | Firmware Origen |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ESP32-C6 Coprocesador (P4)** | **GPIO 32** | **GPIO 28** | **GPIO 34** | **GPIO 54** | 115200 | Embebido SDIO / MicroSD |
+| **ESP Externo (Header JP1 P4)** | **GPIO 32** | **GPIO 28** | **GPIO 34** | **GPIO 54** | 115200-921600 | `/sdcard/firmware.bin` |
+| **ESP Externo (JC3248W535 S3)** | **GPIO 15** | **GPIO 16** | **GPIO 0** | Manual / -1 | 115200 | `/sdcard/firmware.bin` |
+| **Personalizado / Manual** | Configurable | Configurable | Configurable | Configurable | Configurable | Embebido / MicroSD |
+
 ---
+
 
 ## 2. Target ESP32-S3: Guition JC3248W535 (3.5" 320×480 IPS QSPI)
 
@@ -64,7 +97,7 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | | **I2C SCL** | **GPIO 4** | I2C Maestro | |
 | | **Touch INT** | **GPIO 3** | Entrada Digital / Interrupción | |
 | | *Dirección I2C Touch* | `0x3B` / `0x38` | I2C 7-bit | Controlador integrado |
-| **Audio / Salida Sonido** | **Audio PWM / DAC** | **GPIO 17** | PWM / DAC Buzzer | Sonido de sistema / Beeps |
+| **Audio / Salida Sonido** | **I2S PDM TX (DAC) / Buzzer** | **GPIO 17** | Periférico I2S0 (Modo PDM TX Delta-Sigma) | Audio PCM 16-bit / Helix MP3 al altavoz |
 | **MicroSD (SPI / SDMMC)** | **SPI CS** | **GPIO 10** | Bus SPI / SD | Lector MicroSD |
 | | **SPI MOSI** | **GPIO 11** | SPI Bus | |
 | | **SPI MISO** | **GPIO 13** | SPI Bus | |

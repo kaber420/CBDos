@@ -1,6 +1,7 @@
 #include "DashboardView.hpp"
 #include "ConfigView.hpp"
 #include "MusicPlayerView.hpp"
+#include "FlasherView.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
@@ -15,10 +16,12 @@ static const char* TAG = "DashboardView";
 DashboardView::DashboardView()
     : BaseView("Dashboard") {
     m_apps = {
+        {"flasher", "Flasheador", LV_SYMBOL_DOWNLOAD, 0xF59E0B},
         {"music", "Musica", LV_SYMBOL_AUDIO, 0x00E5FF},
         {"config", "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD}
     };
 }
+
 
 bool DashboardView::onCreate(lv_obj_t* parent) {
     if (!parent) return false;
@@ -117,9 +120,12 @@ void DashboardView::cardClickedEventCb(lv_event_t* e) {
             UIManager::getInstance().pushView(std::make_shared<ConfigView>());
         } else if (strcmp(appId, "music") == 0) {
             UIManager::getInstance().pushView(std::make_shared<MusicPlayerView>());
+        } else if (strcmp(appId, "flasher") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<FlasherView>());
         }
     }
 }
+
 
 void DashboardView::onThemeChanged(cbdos::theme::ThemeType theme, const cbdos::theme::ThemePalette& palette) {
     if (!m_container || !lv_obj_is_valid(m_container)) return;

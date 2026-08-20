@@ -12,12 +12,18 @@
 ├─────────────────────────────────────────────────────────────┤
 │  CBDos API (cbdos::system, display, input, audio, network)  │  <- API Estándar C++
 ├─────────────────────────────────────────────────────────────┤
-│  BOARD SUPPORT PACKAGES (BSP / HAL)                         │
-│  ├─ bsp/esp32_p4_jc4880/  (ESP-IDF v5.x + ST7701S + GT911)  │  <- Target P4
-│  ├─ bsp/esp32_s3_jc3248/  (PlatformIO/Arduino + AXS15231)   │  <- Target S3
-│  └─ bsp/pc_simulator/     (SDL2 Linux/macOS/Windows)        │  <- Target PC
-└─────────────────────────────────────────────────────────────┘
-```
+## 🎯 Dispositivos y Targets Oficiales
+* **Guition JC4880P443C (JC-ESP32P4-M3 Rev 1.3):**
+  * ESP32-P4 RISC-V @ 400 MHz (32 MB PSRAM, 16 MB Flash).
+  * Pantalla IPS 4.3" 480×800 MIPI-DSI (ST7701S @ 60 FPS) + Touch GT911.
+  * Audio I2S + DAC ES8311 con amplificador integrado.
+  * Almacenamiento MicroSD SDMMC 4-bit (Slot 0).
+  * Coprocesador inalámbrico ESP32-C6-MINI (Wi-Fi 6 / BT 5 por SDIO Slot 1).
+* **Guition JC3248W535:**
+  * ESP32-S3 Xtensa @ 240 MHz (8 MB PSRAM, 16 MB Flash).
+  * Pantalla IPS 3.5" 320×480 QSPI (AXS15231B @ 30 FPS).
+  * Audio PDM TX / Helix MP3 + MicroSD SPI.
+
 
 ---
 

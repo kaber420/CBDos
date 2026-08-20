@@ -1,4 +1,6 @@
 #include "DiagnosticsModal.hpp"
+#include "C6FlasherModal.hpp"
+#include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
 #include "cbdos/network.hpp"
@@ -6,6 +8,8 @@
 #include "cbdos/storage.hpp"
 #include <cstdio>
 #include <time.h>
+
+
 
 namespace cbdos {
 namespace ui {
@@ -256,12 +260,54 @@ void DiagnosticsModal::show(lv_obj_t* parent) {
         addInfoRow(card, "Hora Sistema:", "Sin sincronizar", false);
     }
 
+    // Botón Probar Wi-Fi SDIO
+    lv_obj_t* btnTestWifi = lv_button_create(card);
+    lv_obj_set_size(btnTestWifi, lv_pct(100), 38);
+    DefaultTheme::applyButton(btnTestWifi, 10);
+    lv_obj_set_style_bg_color(btnTestWifi, lv_color_hex(0x2563EB), 0);
+    lv_obj_set_style_margin_top(btnTestWifi, 8, 0);
+
+    lv_obj_t* lblTw = lv_label_create(btnTestWifi);
+    lv_label_set_text(lblTw, "Probar Conexion C6 (SDIO)");
+    lv_obj_set_style_text_color(lblTw, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(lblTw);
+
+    auto test_wifi_cb = [](lv_event_t* e) {
+        cbdos::system::log(cbdos::system::LogLevel::Info, "Diagnostics", "Iniciando prueba manual de Wi-Fi con ESP32-C6 (GPIO 54 Reset)...");
+        bool ok = cbdos::network::connectWifi("romero24", "guzman420");
+        if (ok) {
+            UIManager::showToast("Iniciando comunicacion SDIO...");
+        } else {
+            UIManager::showToast("Fallo al iniciar SDIO");
+        }
+    };
+    lv_obj_add_event_cb(btnTestWifi, test_wifi_cb, LV_EVENT_CLICKED, nullptr);
+
+    // Botón Abrir Flasheador Autónomo C6
+    lv_obj_t* btnOpenFlasher = lv_button_create(card);
+
+    lv_obj_set_size(btnOpenFlasher, lv_pct(100), 38);
+    DefaultTheme::applyButton(btnOpenFlasher, 10);
+    lv_obj_set_style_bg_color(btnOpenFlasher, lv_color_hex(0x7C3AED), 0);
+    lv_obj_set_style_margin_top(btnOpenFlasher, 8, 0);
+
+    lv_obj_t* lblFl = lv_label_create(btnOpenFlasher);
+    lv_label_set_text(lblFl, "Abrir Flasheador Coprocesador C6");
+    lv_obj_set_style_text_color(lblFl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(lblFl);
+
+    auto open_flasher_cb = [](lv_event_t* e) {
+        DiagnosticsModal::hide();
+        C6FlasherModal::show();
+    };
+    lv_obj_add_event_cb(btnOpenFlasher, open_flasher_cb, LV_EVENT_CLICKED, nullptr);
+
     // Botón Cerrar
     lv_obj_t* btnClose = lv_button_create(card);
     lv_obj_set_size(btnClose, lv_pct(100), 38);
     DefaultTheme::applyButton(btnClose, 10);
     lv_obj_set_style_bg_color(btnClose, DefaultTheme::getPrimaryAccent(), 0);
-    lv_obj_set_style_margin_top(btnClose, 10, 0);
+    lv_obj_set_style_margin_top(btnClose, 6, 0);
 
     lv_obj_t* lblC = lv_label_create(btnClose);
     lv_label_set_text(lblC, "Cerrar Diagnostico");
@@ -269,6 +315,8 @@ void DiagnosticsModal::show(lv_obj_t* parent) {
     lv_obj_center(lblC);
 
     lv_obj_add_event_cb(btnClose, close_btn_cb, LV_EVENT_CLICKED, nullptr);
+
+
 }
 
 } // namespace ui

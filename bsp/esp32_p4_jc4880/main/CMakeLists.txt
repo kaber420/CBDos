@@ -11,6 +11,7 @@ idf_component_register(
         "../hal/TouchHAL.cpp"
         "../hal/AudioHAL.cpp"
         "../hal/LVGL_Port.cpp"
+        "../hal/C6FlasherService.cpp"
     INCLUDE_DIRS 
         "."
         "../hal"
@@ -19,6 +20,7 @@ idf_component_register(
         "esp_driver_i2c"
         "esp_driver_i2s"
         "esp_driver_gpio"
+        "esp_driver_uart"
         "esp_driver_ledc"
         "esp_driver_ppa"
         "esp_driver_tsens"
@@ -28,6 +30,7 @@ idf_component_register(
         "espressif__esp_lcd_touch_gt911"
         "espressif__esp_codec_dev"
         "espressif__esp_lvgl_port"
+        "espressif__esp-serial-flasher"
         "lvgl__lvgl"
         "esp_driver_sdmmc"
         "sdmmc"
@@ -43,4 +46,7 @@ idf_component_register(
         "spi_flash"
         "esp_mm"
         "freertos"
+    EMBED_FILES
+        "assets/c6_slave.bin"
 )
+
