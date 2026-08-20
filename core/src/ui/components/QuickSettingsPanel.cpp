@@ -23,9 +23,15 @@ void QuickSettingsPanel::mask_click_cb(lv_event_t* e) {
 }
 
 void QuickSettingsPanel::volume_slider_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t* slider = (lv_obj_t*)lv_event_get_target(e);
     int32_t val = lv_slider_get_value(slider);
     cbdos::audio::setVolume((uint8_t)val);
+    if (code == LV_EVENT_RELEASED) {
+        if (!cbdos::audio::getStats().isPlaying) {
+            cbdos::audio::playBeep();
+        }
+    }
 }
 
 void QuickSettingsPanel::brightness_slider_cb(lv_event_t* e) {
@@ -79,7 +85,7 @@ static lv_obj_t* createSliderRow(lv_obj_t* parent, const char* labelText,
     lv_obj_set_style_bg_color(slider, DefaultTheme::getPrimaryAccent(), LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider, 4, LV_PART_KNOB);
 
-    lv_obj_add_event_cb(slider, cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(slider, cb, LV_EVENT_ALL, NULL);
     return slider;
 }
 

@@ -188,6 +188,8 @@ void UIManager::pushView(std::shared_ptr<BaseView> view) {
     if (!view) return;
 
     closeKeyboard();
+    m_headerBar.clearRightAction();
+    m_headerBar.showWifi(true);
 
     if (!m_viewStack.empty()) {
         m_viewStack.back()->onHide();
@@ -215,6 +217,8 @@ void UIManager::popView() {
     }
 
     closeKeyboard();
+    m_headerBar.clearRightAction();
+    m_headerBar.showWifi(true);
 
     auto topView = m_viewStack.back();
     topView->onHide();

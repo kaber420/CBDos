@@ -33,12 +33,12 @@ esp_err_t TouchHAL::init(int h_res, int v_res) {
             .enable_internal_pullup = 1
         }
     };
-    i2c_master_bus_handle_t i2c_bus_handle = nullptr;
-    esp_err_t ret = i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle);
+    esp_err_t ret = i2c_new_master_bus(&i2c_bus_config, &i2cBusHandle);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Fallo al inicializar bus I2C maestro: %s", esp_err_to_name(ret));
         return ret;
     }
+    i2c_master_bus_handle_t i2c_bus_handle = i2cBusHandle;
 
     // 2. Pulso de Reset por Hardware para despertar el GT911
     if (BOARD_TOUCH_RST_GPIO >= 0) {

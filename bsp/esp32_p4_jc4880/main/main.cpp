@@ -2,6 +2,7 @@
 #include "cbdos/display.hpp"
 #include "cbdos/input.hpp"
 #include "cbdos/storage.hpp"
+#include "cbdos/audio.hpp"
 #include "cbdos/ui.hpp"
 #include "LVGL_Port.h"
 #include <esp_log.h>
@@ -38,8 +39,13 @@ extern "C" void app_main(void) {
     if (!cbdos::input::init()) {
         cbdos::system::log(cbdos::system::LogLevel::Warn, TAG, "Aviso: Touch no detectado o fallo inicializacion");
     }
+
+    // 4. Inicializar Subsistema de Audio (I2S + Códec ES8311)
+    if (!cbdos::audio::init()) {
+        cbdos::system::log(cbdos::system::LogLevel::Warn, TAG, "Aviso: Fallo al inicializar subsistema de audio");
+    }
     
-    // 4. Inicializar Puerto LVGL 9.5
+    // 5. Inicializar Puerto LVGL 9.5
     if (LVGL_Port::getInstance().init() != ESP_OK) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando LVGL 9.5 Port");
         return;

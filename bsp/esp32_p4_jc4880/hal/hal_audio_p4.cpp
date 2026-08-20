@@ -1,62 +1,78 @@
 #include "cbdos/audio.hpp"
+#include "AudioHAL.h"
+#include "AudioPlayer.hpp"
 
 namespace cbdos {
 namespace audio {
 
-static uint8_t s_volume = 75;
-static AudioStats s_stats = {
-    .isPlaying = false,
-    .codec = CodecType::None,
-    .sampleRate = 44100,
-    .channels = 2,
-    .bitRate = 128000,
-    .bufferPercent = 0
-};
-
 bool init() {
-    s_volume = 75;
+    AudioHAL::getInstance().init(44100);
     return true;
 }
 
 bool playStream(const char* url) {
-    if (!url) return false;
-    s_stats.isPlaying = true;
-    s_stats.codec = CodecType::MP3;
-    return true;
+    (void)url;
+    return false;
 }
 
 bool playFile(const char* filepath) {
-    if (!filepath) return false;
-    s_stats.isPlaying = true;
-    s_stats.codec = CodecType::WAV;
-    return true;
+    return AudioPlayer::getInstance().play(filepath);
 }
 
 void stop() {
-    s_stats.isPlaying = false;
-    s_stats.codec = CodecType::None;
+    AudioPlayer::getInstance().stop();
 }
 
 void pause() {
-    s_stats.isPlaying = false;
+    AudioPlayer::getInstance().pause();
 }
 
 void resume() {
-    s_stats.isPlaying = true;
+    AudioPlayer::getInstance().resume();
+}
+
+void seek(uint32_t seconds) {
+    AudioPlayer::getInstance().seek(seconds);
+}
+
+uint32_t getCurrentTimeSec() {
+    return AudioPlayer::getInstance().getCurrentTimeSec();
+}
+
+uint32_t getTotalTimeSec() {
+    return AudioPlayer::getInstance().getTotalTimeSec();
+}
+
+bool writeAudio(const void* src, size_t size) {
+    size_t written = 0;
+    return AudioHAL::getInstance().writeAudio(src, size, &written) == ESP_OK;
 }
 
 void setVolume(uint8_t volumePercent) {
-    if (volumePercent > 100) volumePercent = 100;
-    s_volume = volumePercent;
+    AudioHAL::getInstance().setVolume(volumePercent);
 }
 
 uint8_t getVolume() {
-    return s_volume;
+    return AudioHAL::getInstance().getVolume();
+}
+
+bool setSampleRate(uint32_t sampleRate) {
+    return AudioHAL::getInstance().setSampleRate(sampleRate) == ESP_OK;
+}
+
+void playTone(uint32_t freqHz, uint32_t durationMs) {
+    AudioHAL::getInstance().playTone(freqHz, durationMs);
+}
+
+void playBeep() {
+    AudioHAL::getInstance().playBeep();
 }
 
 AudioStats getStats() {
-    return s_stats;
+    return AudioPlayer::getInstance().getStats();
 }
 
 } // namespace audio
 } // namespace cbdos
+
+

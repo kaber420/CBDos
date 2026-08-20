@@ -98,8 +98,29 @@ bool HeaderBar::init(lv_obj_t* parent) {
     // Evento de click EXCLUSIVO en la zona central
     lv_obj_add_event_cb(centerBox, eventHandler, LV_EVENT_CLICKED, this);
 
-    // 4. Derecha: WiFi Status
-    m_labelWifi = lv_label_create(m_container);
+    // 4. Derecha: Contenedor derecho (WiFi Status o Botón de Acción Personalizado)
+    lv_obj_t* rightBox = lv_obj_create(m_container);
+    lv_obj_remove_flag(rightBox, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(rightBox, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(rightBox, 0, 0);
+    lv_obj_set_style_pad_all(rightBox, 0, 0);
+    lv_obj_set_size(rightBox, LV_SIZE_CONTENT, LV_PCT(100));
+    lv_obj_set_flex_flow(rightBox, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(rightBox, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    m_btnRightAction = lv_button_create(rightBox);
+    lv_obj_set_size(m_btnRightAction, 95, 30);
+    DefaultTheme::applyButton(m_btnRightAction, 10);
+    lv_obj_add_flag(m_btnRightAction, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(m_btnRightAction, rightActionEventHandler, LV_EVENT_CLICKED, this);
+
+    m_labelRightAction = lv_label_create(m_btnRightAction);
+    lv_label_set_text(m_labelRightAction, "");
+    lv_obj_set_style_text_font(m_labelRightAction, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(m_labelRightAction, DefaultTheme::getPrimaryAccent(), 0);
+    lv_obj_center(m_labelRightAction);
+
+    m_labelWifi = lv_label_create(rightBox);
     lv_label_set_text(m_labelWifi, LV_SYMBOL_WIFI);
     lv_obj_set_style_text_color(m_labelWifi, lv_color_hex(0x10B981), 0);
     lv_obj_set_style_text_font(m_labelWifi, &lv_font_montserrat_16, 0);
@@ -127,6 +148,31 @@ void HeaderBar::showBackButton(bool show, ClickCallback onBack) {
     }
 }
 
+void HeaderBar::showWifi(bool show) {
+    if (m_labelWifi && lv_obj_is_valid(m_labelWifi)) {
+        if (show) {
+            lv_obj_remove_flag(m_labelWifi, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(m_labelWifi, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+void HeaderBar::setRightAction(const char* label, ClickCallback onAction) {
+    m_onRightActionCb = onAction;
+    if (m_btnRightAction && lv_obj_is_valid(m_btnRightAction) && label) {
+        if (m_labelRightAction) lv_label_set_text(m_labelRightAction, label);
+        lv_obj_remove_flag(m_btnRightAction, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void HeaderBar::clearRightAction() {
+    m_onRightActionCb = nullptr;
+    if (m_btnRightAction && lv_obj_is_valid(m_btnRightAction)) {
+        lv_obj_add_flag(m_btnRightAction, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 void HeaderBar::eventHandler(lv_event_t* e) {
     auto* self = static_cast<HeaderBar*>(lv_event_get_user_data(e));
     if (self && self->m_onClickCb) {
@@ -138,6 +184,13 @@ void HeaderBar::backBtnEventHandler(lv_event_t* e) {
     auto* self = static_cast<HeaderBar*>(lv_event_get_user_data(e));
     if (self && self->m_onBackCb) {
         self->m_onBackCb();
+    }
+}
+
+void HeaderBar::rightActionEventHandler(lv_event_t* e) {
+    auto* self = static_cast<HeaderBar*>(lv_event_get_user_data(e));
+    if (self && self->m_onRightActionCb) {
+        self->m_onRightActionCb();
     }
 }
 

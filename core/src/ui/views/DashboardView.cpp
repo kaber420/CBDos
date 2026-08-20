@@ -1,5 +1,6 @@
 #include "DashboardView.hpp"
 #include "ConfigView.hpp"
+#include "MusicPlayerView.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
@@ -14,6 +15,7 @@ static const char* TAG = "DashboardView";
 DashboardView::DashboardView()
     : BaseView("Dashboard") {
     m_apps = {
+        {"music", "Musica", LV_SYMBOL_AUDIO, 0x00E5FF},
         {"config", "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD}
     };
 }
@@ -113,6 +115,8 @@ void DashboardView::cardClickedEventCb(lv_event_t* e) {
     if (appId) {
         if (strcmp(appId, "config") == 0) {
             UIManager::getInstance().pushView(std::make_shared<ConfigView>());
+        } else if (strcmp(appId, "music") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<MusicPlayerView>());
         }
     }
 }

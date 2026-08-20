@@ -19,21 +19,28 @@ public:
     void setOnClickCallback(ClickCallback cb);
     void setTitle(const char* title);
     void showBackButton(bool show, ClickCallback onBack = nullptr);
+    void showWifi(bool show);
+    void setRightAction(const char* label, ClickCallback onAction);
+    void clearRightAction();
 
     lv_obj_t* getContainer() const { return m_container; }
 
 private:
     static void eventHandler(lv_event_t* e);
     static void backBtnEventHandler(lv_event_t* e);
+    static void rightActionEventHandler(lv_event_t* e);
 
     lv_obj_t* m_container;
     lv_obj_t* m_labelTitle;
     lv_obj_t* m_btnBack;
     lv_obj_t* m_labelClock;
     lv_obj_t* m_labelWifi;
+    lv_obj_t* m_btnRightAction;
+    lv_obj_t* m_labelRightAction;
 
     ClickCallback m_onClickCb;
     ClickCallback m_onBackCb;
+    ClickCallback m_onRightActionCb;
     uint32_t m_lastUpdateMs;
 };
 

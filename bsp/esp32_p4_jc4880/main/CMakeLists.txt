@@ -9,6 +9,7 @@ idf_component_register(
         "../hal/hal_storage_p4.cpp"
         "../hal/DisplayHAL.cpp"
         "../hal/TouchHAL.cpp"
+        "../hal/AudioHAL.cpp"
         "../hal/LVGL_Port.cpp"
     INCLUDE_DIRS 
         "."
@@ -16,6 +17,7 @@ idf_component_register(
     REQUIRES 
         "core"
         "esp_driver_i2c"
+        "esp_driver_i2s"
         "esp_driver_gpio"
         "esp_driver_ledc"
         "esp_driver_ppa"
@@ -24,6 +26,7 @@ idf_component_register(
         "espressif__esp_lcd_st7701"
         "espressif__esp_lcd_touch"
         "espressif__esp_lcd_touch_gt911"
+        "espressif__esp_codec_dev"
         "espressif__esp_lvgl_port"
         "lvgl__lvgl"
         "esp_driver_sdmmc"

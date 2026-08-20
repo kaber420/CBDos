@@ -7,7 +7,15 @@
     "srcDir": "src",
     "flags": [
       "-I include",
-      "-I src/ui"
+      "-I src/ui",
+      "-I src/audio",
+      "-I src/audio/libhelix/src",
+      "-I src/audio/libhelix/src/utils",
+      "-I src/audio/libhelix/src/libhelix-mp3",
+      "-I src/audio/libhelix/src/libhelix-aac",
+      "-DESP32",
+      "-DUSE_DEFAULT_STDLIB",
+      "-DHELIX_LOGGING_ACTIVE=0"
     ]
   }
 }
