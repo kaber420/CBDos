@@ -81,6 +81,10 @@ bool init() {
         ESP_LOGE(TAG, "Fallo esp_event_loop_create_default: %s", esp_err_to_name(err));
     }
 
+    if (!s_sta_netif) {
+        s_sta_netif = esp_netif_create_default_wifi_sta();
+    }
+
     // Energizar carril C6 (GPIO 36 -> R44 -> ESP_3V3) y Reset (GPIO 54)
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -96,10 +100,6 @@ bool init() {
     vTaskDelay(pdMS_TO_TICKS(100));
     gpio_set_level(GPIO_NUM_54, 1); // Liberar Reset
     vTaskDelay(pdMS_TO_TICKS(500)); // Esperar que el C6 arranque su firmware esclavo
-
-    if (!s_sta_netif) {
-        s_sta_netif = esp_netif_create_default_wifi_sta();
-    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     err = esp_wifi_init(&cfg);
@@ -117,6 +117,8 @@ bool init() {
 
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_start();
+
+    s_sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
 
     s_initialized = true;
     s_status = NetStatus::Disconnected;

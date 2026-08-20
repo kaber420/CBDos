@@ -159,7 +159,7 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_width(taSsid, lv_pct(100));
     lv_textarea_set_one_line(taSsid, true);
     lv_textarea_set_text(taSsid, currentCfg.ssid.c_str());
-    DefaultTheme::applyRaisedCard(taSsid, 10);
+    DefaultTheme::applyTextArea(taSsid, 10);
     UIManager::attachKeyboard(taSsid);
 
     // Password
@@ -184,7 +184,7 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     passVisible = false;
     lv_textarea_set_password_mode(taPass, true);
     lv_textarea_set_text(taPass, currentCfg.password.c_str());
-    DefaultTheme::applyRaisedCard(taPass, 10);
+    DefaultTheme::applyTextArea(taPass, 10);
     UIManager::attachKeyboard(taPass);
 
     btnTogglePass = lv_button_create(passRow);
@@ -238,7 +238,7 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_width(taIp, lv_pct(100));
     lv_textarea_set_one_line(taIp, true);
     lv_textarea_set_text(taIp, currentCfg.staticIp.c_str());
-    DefaultTheme::applyRaisedCard(taIp, 10);
+    DefaultTheme::applyTextArea(taIp, 10);
     UIManager::attachKeyboard(taIp);
 
     lv_obj_t* lblGw = lv_label_create(staticContainer);
@@ -249,7 +249,7 @@ bool WiFiConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_width(taGw, lv_pct(100));
     lv_textarea_set_one_line(taGw, true);
     lv_textarea_set_text(taGw, currentCfg.gateway.c_str());
-    DefaultTheme::applyRaisedCard(taGw, 10);
+    DefaultTheme::applyTextArea(taGw, 10);
     UIManager::attachKeyboard(taGw);
 
     // Botón Guardar

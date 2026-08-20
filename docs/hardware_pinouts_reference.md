@@ -33,16 +33,17 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | **MicroSD (Slot SDMMC)** | **SDMMC CLK** | **GPIO 43** | SDMMC Slot 0 (Bus 4-bit) | Alimentado por LDO VO4 (3.3V) |
 | | **SDMMC CMD** | **GPIO 44** | SDMMC Slot 0 | Pull-up integrado |
 | | **SDMMC D0** | **GPIO 39** | SDMMC Data 0 | Velocidad estándar 20/40 MHz |
-| | **SDMMC D1** | **GPIO 40** | SDMMC Data 1 | |
+| | **SDMMC D1** | **GPIO 40** | SDMMC Data 1 | Slot 0 exclusivo de MicroSD |
 | | **SDMMC D2** | **GPIO 41** | SDMMC Data 2 | |
 | | **SDMMC D3** | **GPIO 42** | SDMMC Data 3 | |
-| **Coprocesador Inalámbrico (ESP32-C6)** | **SDIO CLK** | **GPIO 18** | Bus SDIO 4-bit (Host) | Reloj SDIO hacia C6 |
-| | **SDIO CMD** | **GPIO 19** | Bus SDIO 4-bit | Línea de comando SDIO |
-| | **SDIO D0** | **GPIO 14** | Bus SDIO 4-bit | Línea de datos 0 |
-| | **SDIO D1** | **GPIO 15** | Bus SDIO 4-bit | Línea de datos 1 |
-| | **SDIO D2** | **GPIO 16** | Bus SDIO 4-bit | Línea de datos 2 |
-| | **SDIO D3** | **GPIO 17** | Bus SDIO 4-bit | Línea de datos 3 |
+| **Coprocesador Inalámbrico (ESP32-C6)** | **SDIO CLK** | **GPIO 18** | Bus SDIO 4-bit (Host Slot 1) | Reloj SDIO hacia C6 (20 MHz) |
+| | **SDIO CMD** | **GPIO 19** | Bus SDIO 4-bit (Slot 1) | Línea de comando SDIO |
+| | **SDIO D0** | **GPIO 14** | Bus SDIO 4-bit (Slot 1) | Línea de datos 0 |
+| | **SDIO D1** | **GPIO 15** | Bus SDIO 4-bit (Slot 1) | Línea de datos 1 |
+| | **SDIO D2** | **GPIO 16** | Bus SDIO 4-bit (Slot 1) | Línea de datos 2 |
+| | **SDIO D3** | **GPIO 17** | Bus SDIO 4-bit (Slot 1) | Línea de datos 3 |
 | | **C6 Reset (RST)** | **GPIO 54** | Salida Digital | Reset hardware del ESP32-C6 |
+| | **C6 Power (ESP_3V3)** | **GPIO 36 / Pin 18** | VCC 3.3V | Carril de alimentación del C6 |
 | **Consola Serial / Debug** | **UART TX** | **GPIO 38** | UART0 TX @ 115200 bps | Terminal interactivo / ESP-IDF Monitor |
 | | **UART RX** | **GPIO 37** | UART0 RX @ 115200 bps | |
 | **Alimentación LDO P4** | **LDO VO3** | Canal 3 | Salida 2.5V fija | Alimentación carril MIPI DSI |

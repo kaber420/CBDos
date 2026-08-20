@@ -44,6 +44,7 @@ idf_component_register(
         "esp_timer"
         "freertos"
         "lvgl__lvgl"
+        "nvs_flash"
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC -DESP32 -DUSE_DEFAULT_STDLIB -DHELIX_LOGGING_ACTIVE=0)

@@ -8,6 +8,7 @@
 #include "cbdos/ui.hpp"
 #include "LVGL_Port.h"
 #include <esp_log.h>
+#include <nvs_flash.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -62,6 +63,16 @@ extern "C" void app_main(void) {
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.0) ===");
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Soporte Flasheador Coprocesador C6: %s", 
                        cbdos::flasher::isSupported() ? "HABILITADO" : "DESHABILITADO");
+
+    // 0. Inicializar NVS Flash para persistencia de configuraciones
+    esp_err_t nvsRet = nvs_flash_init();
+    if (nvsRet == ESP_ERR_NVS_NO_FREE_PAGES || nvsRet == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase();
+        nvsRet = nvs_flash_init();
+    }
+    if (nvsRet != ESP_OK) {
+        cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando NVS Flash: %s", esp_err_to_name(nvsRet));
+    }
 
     
     // 1. Inicializar Subsistema de Almacenamiento (MicroSD / Flash)

@@ -427,7 +427,201 @@ bool ConfigManager::loadActiveGateway(GatewayConfig& gw) {
 
 #else
 
-// ─── Mock para entorno Emulator (Native) ───
+// ─── Implementación para entorno ESP-IDF (ESP32-P4 / ESP-IDF) ───
+#if defined(ESP_PLATFORM)
+#include <nvs_flash.h>
+#include <nvs.h>
+#include <esp_log.h>
+
+static const char* TAG_CFG = "ConfigManager";
+static WiFiConfig s_cachedWiFi;
+static LoRaConfig s_cachedLoRa;
+static FLRCConfig s_cachedFLRC;
+static TimeConfig s_cachedTime;
+static std::vector<GatewayConfig> s_cachedGateways;
+static std::string s_cachedActiveGwId = "";
+
+bool ConfigManager::init() {
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase();
+        ret = nvs_flash_init();
+    }
+    return (ret == ESP_OK);
+}
+
+bool ConfigManager::loadWiFi(WiFiConfig& cfg) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("cbdos_wifi", NVS_READONLY, &handle);
+    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
+        init();
+        err = nvs_open("cbdos_wifi", NVS_READONLY, &handle);
+    }
+    if (err != ESP_OK) {
+        cfg = s_cachedWiFi;
+        return true;
+    }
+
+    char buf[128];
+    size_t len = sizeof(buf);
+
+    if (nvs_get_str(handle, "ssid", buf, &len) == ESP_OK) {
+        cfg.ssid = buf;
+    }
+    len = sizeof(buf);
+    if (nvs_get_str(handle, "pass", buf, &len) == ESP_OK) {
+        cfg.password = buf;
+    }
+    uint8_t staticIp = 0;
+    if (nvs_get_u8(handle, "static_en", &staticIp) == ESP_OK) {
+        cfg.useStaticIp = (staticIp != 0);
+    }
+    len = sizeof(buf);
+    if (nvs_get_str(handle, "ip", buf, &len) == ESP_OK) {
+        cfg.staticIp = buf;
+    }
+    len = sizeof(buf);
+    if (nvs_get_str(handle, "gw", buf, &len) == ESP_OK) {
+        cfg.gateway = buf;
+    }
+    len = sizeof(buf);
+    if (nvs_get_str(handle, "sub", buf, &len) == ESP_OK) {
+        cfg.subnet = buf;
+    }
+    len = sizeof(buf);
+    if (nvs_get_str(handle, "dns1", buf, &len) == ESP_OK) {
+        cfg.dns1 = buf;
+    }
+    len = sizeof(buf);
+    if (nvs_get_str(handle, "dns2", buf, &len) == ESP_OK) {
+        cfg.dns2 = buf;
+    }
+
+    nvs_close(handle);
+    s_cachedWiFi = cfg;
+    return true;
+}
+
+bool ConfigManager::saveWiFi(const WiFiConfig& cfg) {
+    s_cachedWiFi = cfg;
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("cbdos_wifi", NVS_READWRITE, &handle);
+    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
+        init();
+        err = nvs_open("cbdos_wifi", NVS_READWRITE, &handle);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG_CFG, "Error abriendo NVS para guardar WiFi: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    nvs_set_str(handle, "ssid", cfg.ssid.c_str());
+    nvs_set_str(handle, "pass", cfg.password.c_str());
+    nvs_set_u8(handle, "static_en", cfg.useStaticIp ? 1 : 0);
+    nvs_set_str(handle, "ip", cfg.staticIp.c_str());
+    nvs_set_str(handle, "gw", cfg.gateway.c_str());
+    nvs_set_str(handle, "sub", cfg.subnet.c_str());
+    nvs_set_str(handle, "dns1", cfg.dns1.c_str());
+    nvs_set_str(handle, "dns2", cfg.dns2.c_str());
+
+    err = nvs_commit(handle);
+    nvs_close(handle);
+    return (err == ESP_OK);
+}
+
+bool ConfigManager::loadLoRa(LoRaConfig& cfg) {
+    cfg = s_cachedLoRa;
+    return true;
+}
+
+bool ConfigManager::saveLoRa(const LoRaConfig& cfg) {
+    s_cachedLoRa = cfg;
+    return true;
+}
+
+bool ConfigManager::loadFLRC(FLRCConfig& cfg) {
+    cfg = s_cachedFLRC;
+    return true;
+}
+
+bool ConfigManager::saveFLRC(const FLRCConfig& cfg) {
+    s_cachedFLRC = cfg;
+    return true;
+}
+
+bool ConfigManager::loadTime(TimeConfig& cfg) {
+    cfg = s_cachedTime;
+    return true;
+}
+
+bool ConfigManager::saveTime(const TimeConfig& cfg) {
+    s_cachedTime = cfg;
+    return true;
+}
+
+bool ConfigManager::importGateway(const std::string& encPath, const std::string& pin, std::string& errorOut) {
+    if (pin == "1234") {
+        GatewayConfig gw;
+        gw.id = "gw_mock_" + std::to_string(s_cachedGateways.size() + 1);
+        gw.name = "Mock Gateway";
+        gw.address = "127.0.0.1";
+        gw.mqttPort = 1883;
+        gw.authToken = "auth-mock-token-abc";
+        s_cachedGateways.push_back(gw);
+        return true;
+    }
+    errorOut = "PIN incorrecto (usa 1234).";
+    return false;
+}
+
+bool ConfigManager::removeGateway(const std::string& gwId) {
+    for (auto it = s_cachedGateways.begin(); it != s_cachedGateways.end(); ++it) {
+        if (it->id == gwId) {
+            s_cachedGateways.erase(it);
+            if (s_cachedActiveGwId == gwId) s_cachedActiveGwId = "";
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<GatewayConfig> ConfigManager::listGateways() {
+    return s_cachedGateways;
+}
+
+bool ConfigManager::setActiveGateway(const std::string& gwId) {
+    s_cachedActiveGwId = gwId;
+    return true;
+}
+
+bool ConfigManager::loadActiveGateway(GatewayConfig& gw) {
+    for (const auto& item : s_cachedGateways) {
+        if (item.id == s_cachedActiveGwId) {
+            gw = item;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ConfigManager::clearLegacyConfig() {
+    return true;
+}
+
+bool ConfigManager::clearAllNvs() {
+    nvs_handle_t handle;
+    if (nvs_open("cbdos_wifi", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_erase_all(handle);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+    s_cachedGateways.clear();
+    s_cachedActiveGwId = "";
+    return true;
+}
+
+#else
+// ─── Mock para entorno Emulator (PC Simulator) ───
 static WiFiConfig mockWiFi;
 static LoRaConfig mockLoRa;
 static FLRCConfig mockFLRC;
@@ -535,5 +729,7 @@ bool ConfigManager::clearAllNvs() {
     return true;
 }
 
-#endif
+#endif // ESP_PLATFORM
+
+#endif // ARDUINO
 

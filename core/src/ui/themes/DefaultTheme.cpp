@@ -55,3 +55,12 @@ void DefaultTheme::applyButton(lv_obj_t* obj, int32_t radius) {
     lv_obj_set_style_border_width(obj, 1, LV_STATE_PRESSED);
     lv_obj_set_style_border_opa(obj, LV_OPA_COVER, LV_STATE_PRESSED);
 }
+
+void DefaultTheme::applyTextArea(lv_obj_t* obj, int32_t radius) {
+    applyRaisedCard(obj, radius);
+    lv_obj_set_style_text_color(obj, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(obj, lv_color_hex(0x94A3B8), LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0x00F5D4), LV_PART_CURSOR);
+    lv_obj_set_style_border_color(obj, lv_color_hex(0x00F5D4), LV_STATE_FOCUSED);
+}
+

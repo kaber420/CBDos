@@ -9,6 +9,7 @@ public:
     static void applyRaisedCard(lv_obj_t* obj, int32_t radius = 16);
     static void applySunkenCard(lv_obj_t* obj, int32_t radius = 16);
     static void applyButton(lv_obj_t* obj, int32_t radius = 20);
+    static void applyTextArea(lv_obj_t* obj, int32_t radius = 10);
     static void disableScroll(lv_obj_t* obj);
 
     static lv_color_t getBgColor() { return lv_color_hex(0x161821); }
