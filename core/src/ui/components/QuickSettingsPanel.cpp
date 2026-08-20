@@ -85,7 +85,7 @@ static lv_obj_t* createSliderRow(lv_obj_t* parent, const char* labelText,
     lv_obj_set_style_bg_color(slider, DefaultTheme::getPrimaryAccent(), LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider, 4, LV_PART_KNOB);
 
-    lv_obj_add_event_cb(slider, cb, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(slider, cb, LV_EVENT_VALUE_CHANGED, NULL);
     return slider;
 }
 

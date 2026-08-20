@@ -148,8 +148,13 @@ void MusicPlayerView::scanAudioFilesSD() {
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
         if (lower.ends_with(".mp3") || lower.ends_with(".wav") || lower.ends_with(".aac") || lower.ends_with(".m4a")) {
             std::string fullPath = dir + "/" + fname;
-            m_playlist.push_back({fname, fullPath});
-            printf("[MusicPlayerView] Cancion agregada: %s\n", fullPath.c_str());
+            std::string displayName = fname;
+            size_t dotPos = displayName.find_last_of('.');
+            if (dotPos != std::string::npos) {
+                displayName = displayName.substr(0, dotPos);
+            }
+            m_playlist.push_back({displayName, fullPath});
+            printf("[MusicPlayerView] Cancion agregada: %s\n", displayName.c_str());
         }
     };
 

@@ -103,6 +103,80 @@ void AudioPlayer::stop() {
     m_isPlaying = false;
 }
 
+static uint32_t getID3v2Size(FILE* f) {
+    if (!f) return 0;
+    uint8_t header[10];
+    fseek(f, 0, SEEK_SET);
+    if (fread(header, 1, 10, f) == 10) {
+        if (header[0] == 'I' && header[1] == 'D' && header[2] == '3') {
+            uint32_t id3Size = ((header[6] & 0x7F) << 21) |
+                               ((header[7] & 0x7F) << 14) |
+                               ((header[8] & 0x7F) << 7)  |
+                                (header[9] & 0x7F);
+            uint32_t totalOffset = id3Size + 10;
+            ESP_LOGI(TAG, "ID3v2 detectado: saltando %lu bytes de metadatos/caratula", totalOffset);
+            return totalOffset;
+        }
+    }
+    fseek(f, 0, SEEK_SET);
+    return 0;
+}
+
+// Sondea la pista MP3 para extraer frecuencia, canales y bitrate antes de iniciar el streaming (de espOS32)
+static int probeMP3SampleRate(FILE* f, uint32_t id3Offset, uint8_t* outChans, uint32_t* outBitrate) {
+    if (!f) return 44100;
+    HMP3Decoder dec = MP3InitDecoder();
+    if (!dec) return 44100;
+
+    const int PROBE_SIZE = 4096;
+    uint8_t* probeBuf = (uint8_t*)malloc(PROBE_SIZE);
+    if (!probeBuf) {
+        MP3FreeDecoder(dec);
+        return 44100;
+    }
+
+    fseek(f, id3Offset, SEEK_SET);
+    int bytesRead = fread(probeBuf, 1, PROBE_SIZE, f);
+    fseek(f, id3Offset, SEEK_SET);
+
+    if (bytesRead <= 0) {
+        free(probeBuf);
+        MP3FreeDecoder(dec);
+        return 44100;
+    }
+
+    uint8_t* ptr = probeBuf;
+    int left = bytesRead;
+
+    int offset = MP3FindSyncWord(ptr, left);
+    if (offset < 0) {
+        free(probeBuf);
+        MP3FreeDecoder(dec);
+        return 44100;
+    }
+    ptr += offset;
+    left -= offset;
+
+    int16_t* tmpBuf = (int16_t*)malloc(MAX_NCHAN * MAX_NGRAN * MAX_NSAMP * sizeof(int16_t));
+    int sampRate = 44100;
+    if (tmpBuf) {
+        int err = MP3Decode(dec, &ptr, &left, tmpBuf, 0);
+        if (err == ERR_MP3_NONE) {
+            MP3FrameInfo info;
+            MP3GetLastFrameInfo(dec, &info);
+            if (info.samprate > 0) sampRate = info.samprate;
+            if (outChans) *outChans = (uint8_t)info.nChans;
+            if (outBitrate) *outBitrate = (uint32_t)info.bitrate;
+            ESP_LOGI(TAG, "[Audio Probe] %d Hz, %d canales, %d kbps",
+                     info.samprate, info.nChans, info.bitrate / 1000);
+        }
+        free(tmpBuf);
+    }
+    free(probeBuf);
+    MP3FreeDecoder(dec);
+    return sampRate;
+}
+
 bool AudioPlayer::play(const char* filepath) {
     if (!filepath) return false;
 
@@ -138,6 +212,18 @@ bool AudioPlayer::play(const char* filepath) {
     ESP_LOGI(TAG, "Iniciando Helix Audio Player para: %s (Tamano: %lu KB, Formato: %d)",
              filepath, m_fileSize / 1024, (int)m_format);
 
+    // Si es MP3, ejecutar el Probe previo de espOS32 y configurar el I2S de inmediato
+    if (m_format == AudioFormat::MP3) {
+        uint32_t id3 = getID3v2Size(m_file);
+        uint8_t chans = 2;
+        uint32_t br = 128000;
+        int realRate = probeMP3SampleRate(m_file, id3, &chans, &br);
+        m_sampleRate = realRate;
+        m_channels = chans;
+        m_bitrate = br;
+        cbdos::audio::setSampleRate(m_sampleRate);
+    }
+
     xTaskCreatePinnedToCore(playbackTask, "helix_audio_task", 8192, this, 4, &m_taskHandle, 0);
 
     xSemaphoreGive(m_mutex);
@@ -168,25 +254,6 @@ void AudioPlayer::runPlayback() {
     m_isPaused = false;
     m_taskHandle = nullptr;
     ESP_LOGI(TAG, "Reproduccion finalizada");
-}
-
-static uint32_t getID3v2Size(FILE* f) {
-    if (!f) return 0;
-    uint8_t header[10];
-    fseek(f, 0, SEEK_SET);
-    if (fread(header, 1, 10, f) == 10) {
-        if (header[0] == 'I' && header[1] == 'D' && header[2] == '3') {
-            uint32_t id3Size = ((header[6] & 0x7F) << 21) |
-                               ((header[7] & 0x7F) << 14) |
-                               ((header[8] & 0x7F) << 7)  |
-                                (header[9] & 0x7F);
-            uint32_t totalOffset = id3Size + 10;
-            ESP_LOGI(TAG, "ID3v2 detectado: saltando %lu bytes de metadatos/caratula", totalOffset);
-            return totalOffset;
-        }
-    }
-    fseek(f, 0, SEEK_SET);
-    return 0;
 }
 
 void AudioPlayer::runMp3Playback() {
@@ -255,12 +322,16 @@ void AudioPlayer::runMp3Playback() {
 
         int offset = MP3FindSyncWord(readPtr, bytesLeft);
         if (offset < 0) {
-            // No descartar todo el buffer: conservar los últimos 3 bytes por si la palabra de sincronía está en el límite
+            if (eofReached) {
+                // Fin del archivo alcanzado
+                break;
+            }
             if (bytesLeft > 3) {
                 memmove(inBuf, readPtr + bytesLeft - 3, 3);
                 bytesLeft = 3;
             }
             readPtr = inBuf;
+            taskYIELD();
             continue;
         }
 
@@ -272,12 +343,9 @@ void AudioPlayer::runMp3Playback() {
             MP3FrameInfo info;
             MP3GetLastFrameInfo(hMP3Decoder, &info);
             
-            // Reconfigurar frecuencia I2S por hardware si es distinta a la actual
             if (info.samprate > 0 && info.samprate != m_sampleRate) {
                 m_sampleRate = info.samprate;
                 cbdos::audio::setSampleRate(m_sampleRate);
-                ESP_LOGI(TAG, "Hardware I2S reconfigurado a: %lu Hz, %d ch, %d kbps",
-                         m_sampleRate, info.nChans, info.bitrate / 1000);
             }
             m_channels = info.nChans;
             m_bitrate = info.bitrate;
@@ -317,39 +385,38 @@ void AudioPlayer::runMp3Playback() {
 }
 
 void AudioPlayer::runWavPlayback() {
-    char riffHeader[12];
+    uint8_t riffHeader[12];
     if (fread(riffHeader, 1, 12, m_file) != 12 || memcmp(riffHeader, "RIFF", 4) != 0) {
+        ESP_LOGE(TAG, "Formato WAV invalido: No se encontro cabecera RIFF");
         return;
     }
 
     uint32_t dataSize = m_fileSize - 44;
-    uint32_t byteRate = 44100 * 2 * 2;
+    uint32_t byteRate = 176400; // 44.1kHz * 16-bit * 2ch por defecto
 
     bool dataFound = false;
     while (!dataFound && !feof(m_file)) {
-        char chunkId[4];
-        uint32_t chunkSize = 0;
-        if (fread(chunkId, 1, 4, m_file) != 4) break;
-        if (fread(&chunkSize, 4, 1, m_file) != 1) break;
+        uint8_t chunkHeader[8];
+        if (fread(chunkHeader, 1, 8, m_file) != 8) break;
+        uint32_t chunkSize = *(uint32_t*)(chunkHeader + 4);
 
-        if (memcmp(chunkId, "fmt ", 4) == 0) {
-            uint16_t audioFmt = 0, numCh = 0, bitsPerSample = 16;
-            uint32_t sampleRate = 44100, bRate = 0;
-            fread(&audioFmt, 2, 1, m_file);
-            fread(&numCh, 2, 1, m_file);
-            fread(&sampleRate, 4, 1, m_file);
-            fread(&bRate, 4, 1, m_file);
-            fseek(m_file, 2, SEEK_CUR);
-            fread(&bitsPerSample, 2, 1, m_file);
-            if (chunkSize > 16) fseek(m_file, chunkSize - 16, SEEK_CUR);
-
+        if (memcmp(chunkHeader, "fmt ", 4) == 0) {
+            uint8_t fmtData[16];
+            fread(fmtData, 1, 16, m_file);
+            uint16_t numCh = *(uint16_t*)(fmtData + 2);
+            uint32_t sampleRate = *(uint32_t*)(fmtData + 4);
+            byteRate = *(uint32_t*)(fmtData + 8);
+            
             m_sampleRate = sampleRate;
             m_channels = numCh;
-            byteRate = (bRate > 0) ? bRate : (sampleRate * numCh * bitsPerSample / 8);
-        } else if (memcmp(chunkId, "data", 4) == 0) {
+            cbdos::audio::setSampleRate(m_sampleRate);
+            
+            if (chunkSize > 16) {
+                fseek(m_file, chunkSize - 16, SEEK_CUR);
+            }
+        } else if (memcmp(chunkHeader, "data", 4) == 0) {
             dataSize = chunkSize;
             dataFound = true;
-            break;
         } else {
             fseek(m_file, chunkSize, SEEK_CUR);
         }
@@ -358,8 +425,9 @@ void AudioPlayer::runWavPlayback() {
     m_totalTimeSec = (byteRate > 0) ? (dataSize / byteRate) : 0;
     uint32_t dataStart = ftell(m_file);
 
-    const size_t CHUNK_SIZE = 2048;
-    uint8_t buffer[CHUNK_SIZE];
+    const size_t CHUNK_SIZE = 4096;
+    uint8_t* pcmBuf = (uint8_t*)malloc(CHUNK_SIZE);
+    if (!pcmBuf) return;
 
     while (!m_stopRequested && m_file) {
         if (m_isPaused) {
@@ -368,31 +436,34 @@ void AudioPlayer::runWavPlayback() {
         }
 
         if (m_seekRequestSec >= 0) {
-            uint32_t targetByte = m_seekRequestSec * byteRate;
+            uint32_t targetByte = (uint32_t)m_seekRequestSec * byteRate;
             if (targetByte > dataSize) targetByte = dataSize;
             fseek(m_file, dataStart + targetByte, SEEK_SET);
             m_bytesProcessed = targetByte;
             m_seekRequestSec = -1;
         }
 
-        size_t nRead = fread(buffer, 1, CHUNK_SIZE, m_file);
+        size_t nRead = fread(pcmBuf, 1, CHUNK_SIZE, m_file);
         if (nRead == 0) break;
 
-        cbdos::audio::writeAudio(buffer, nRead);
+        cbdos::audio::writeAudio(pcmBuf, nRead);
         m_bytesProcessed += nRead;
         if (byteRate > 0) {
             m_currentSec = m_bytesProcessed / byteRate;
         }
     }
+
+    free(pcmBuf);
 }
 
 AudioStats AudioPlayer::getStats() const {
     AudioStats stats;
     stats.isPlaying = m_isPlaying && !m_isPaused;
-    if (m_isPlaying) {
-        stats.codec = (m_format == AudioFormat::MP3) ? CodecType::MP3 : (m_format == AudioFormat::AAC ? CodecType::AAC : CodecType::WAV);
-    } else {
-        stats.codec = CodecType::None;
+    switch (m_format) {
+        case AudioFormat::MP3: stats.codec = CodecType::MP3; break;
+        case AudioFormat::AAC: stats.codec = CodecType::AAC; break;
+        case AudioFormat::WAV: stats.codec = CodecType::WAV; break;
+        default: stats.codec = CodecType::None; break;
     }
     stats.sampleRate = m_sampleRate;
     stats.channels = m_channels;

@@ -160,6 +160,8 @@ esp_err_t AudioHAL::setSampleRate(uint32_t sampleRate) {
     fs.sample_rate = sampleRate;
     fs.mclk_multiple = 256;
 
+    // Cerrar primero para forzar la reconfiguración del reloj PLL en el hardware I2S y en el códec
+    esp_codec_dev_close(playDevHandle);
     esp_err_t ret = esp_codec_dev_open(playDevHandle, &fs);
     if (ret == ESP_OK) {
         currentSampleRate = sampleRate;
@@ -170,6 +172,7 @@ esp_err_t AudioHAL::setSampleRate(uint32_t sampleRate) {
 
 void AudioHAL::setVolume(uint8_t volumePercent) {
     if (volumePercent > 100) volumePercent = 100;
+    if (currentVolume == volumePercent && initialized) return;
     currentVolume = volumePercent;
 
     if (playDevHandle) {
