@@ -1,6 +1,8 @@
 #include "cbdos/system.hpp"
 #include "cbdos/display.hpp"
 #include "cbdos/input.hpp"
+#include "cbdos/audio.hpp"
+#include "cbdos/storage.hpp"
 #include "cbdos/network.hpp"
 #include "cbdos/ui.hpp"
 #include "../../core/src/network/ConfigManager.h"
@@ -28,7 +30,9 @@ static void lvgl_display_flush_cb(lv_display_t *display, const lv_area_t *area, 
     JC3248W535_Display& drv = get_s3_display_driver();
     if (drv.getCanvas()) {
         drv.getCanvas()->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map, w, h);
-        drv.flush();
+        if (lv_display_flush_is_last(display)) {
+            drv.flush();
+        }
     }
     lv_display_flush_ready(display);
 }
@@ -108,14 +112,17 @@ void setup() {
     
     auto caps = cbdos::display::getCapabilities();
     
-    // Búferes para LVGL (en PSRAM)
-    size_t buf_size = caps.width * 40 * sizeof(lv_color_t);
-    lv_color_t* buf1 = (lv_color_t*)ps_malloc(buf_size);
-    if (!buf1) buf1 = (lv_color_t*)malloc(buf_size);
+    // Búferes para LVGL (en SRAM interna para máximo rendimiento con doble búfer Ping-Pong)
+    size_t buf_lines = 32;
+    size_t buf_size = caps.width * buf_lines * sizeof(lv_color_t);
+    lv_color_t* buf1 = (lv_color_t*)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    lv_color_t* buf2 = (lv_color_t*)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!buf1) buf1 = (lv_color_t*)ps_malloc(buf_size);
+    if (!buf2) buf2 = (lv_color_t*)ps_malloc(buf_size);
 
     s_lv_display = lv_display_create(caps.width, caps.height);
     lv_display_set_color_format(s_lv_display, LV_COLOR_FORMAT_RGB565);
-    lv_display_set_buffers(s_lv_display, buf1, nullptr, buf_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_buffers(s_lv_display, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(s_lv_display, lvgl_display_flush_cb);
 
     // Configurar Input Táctil y vincularlo explícitamente al display en LVGL 9
@@ -124,7 +131,12 @@ void setup() {
     lv_indev_set_read_cb(s_lv_indev, lvgl_touch_read_cb);
     lv_indev_set_display(s_lv_indev, s_lv_display);
 
-    // 5. Inicializar Sistema de Interfaz Gráfica Universal (Fase 1)
+    // 5. Inicializar Almacenamiento MicroSD SPI (VFS LVGL A:) y Audio I2S
+    cbdos::storage::init();
+    cbdos::audio::init();
+    cbdos::audio::setVolume(sysCfg.volume);
+
+    // 6. Inicializar Sistema de Interfaz Gráfica Universal (Fase 1)
     if (!cbdos::ui::init()) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando UI Core en S3");
         return;
@@ -134,7 +146,12 @@ void setup() {
 }
 
 void loop() {
-    lv_timer_handler();
+    uint32_t time_till_next = lv_timer_handler();
     cbdos::ui::update();
-    cbdos::system::sleepMs(5);
+    if (time_till_next > 10) time_till_next = 10;
+    if (time_till_next > 0) {
+        cbdos::system::sleepMs(time_till_next);
+    } else {
+        cbdos::system::sleepMs(1);
+    }
 }

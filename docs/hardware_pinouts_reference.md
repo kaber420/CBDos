@@ -50,26 +50,29 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | | **LDO VO4** | Canal 4 | Salida 3.3V conmutable | Alimentación carril MicroSD / VDD_SD |
 
 ### 📍 Conector de Expansión JP1 (Pin Header 2×13)
-| Pin Izq (P4 / Core) | Pin Der (C6 / Power) | Función / Propósito de Flasheo |
+
+![Diagrama de Flasheo ESP32-C6](images/esp32_c6_flasher_diagram.png)
+
+| Pin Izq (P4 / Host) | Pin Der (C6 / Power) | Función / Conexión de Flasheo |
 | :--- | :--- | :--- |
-| **3V3** | **5V** | Alimentación principal |
-| **3V3** | **5V** | Alimentación principal |
-| **GND** | **GND** | Masa de referencia |
-| **GPIO 52** | **GPIO 33** | GPIOs de propósito general |
-| **GPIO 51** | **GPIO 31** | GPIOs de propósito general |
-| **GPIO 50** | **GPIO 30** | GPIOs de propósito general |
-| **GPIO 49** | **GPIO 29** | GPIOs de propósito general |
-| **GPIO 35** | **GND** | Masa de referencia |
-| **GPIO 34** | **ESP_3V3** | Alimentación carril C6 |
-| **GPIO 32** | **C6_U0RXD** | **Jumper 1 Horizontal** (P4 TX ➔ C6 RX) |
-| **GPIO 28** | **C6_U0TXD** | **Jumper 2 Horizontal** (P4 RX ➔ C6 TX) |
-| **I2C_SDA** | **C6_IO9** | **Cable a GND** para entrar en modo Bootloader del C6 |
-| **I2C_SCL** | **C6_CHIP_PU** | Línea Enable C6 (Dejar libre) |
+| **3V3** (Pin 1) | **5V** (Pin 2) | Alimentación principal |
+| **3V3** (Pin 3) | **5V** (Pin 4) | **Cable Naranja** ➔ conectado a **ESP_3V3** (Alimenta el C6) |
+| **GND** (Pin 5) | **GND** (Pin 6) | Masa de referencia |
+| **GPIO 52** (Pin 7) | **GPIO 33** (Pin 8) | GPIOs de propósito general |
+| **GPIO 51** (Pin 9) | **GPIO 31** (Pin 10) | GPIOs de propósito general |
+| **GPIO 50** (Pin 11) | **GPIO 30** (Pin 12) | GPIOs de propósito general |
+| **GPIO 49** (Pin 13) | **GPIO 29** (Pin 14) | GPIOs de propósito general |
+| **GPIO 35** (Pin 15) | **GND** (Pin 16) | Masa de referencia |
+| **GPIO 34** (Pin 17) | **ESP_3V3** (Pin 18) | **GPIO 34 (Cable Celeste)** ➔ a **C6_IO9** (Auto-Bootloader) \| **ESP_3V3 (Cable Naranja)** ➔ a **3V3** |
+| **GPIO 32** (Pin 19) | **C6_U0RXD** (Pin 20) | **Jumper 1 Horizontal Verde** (P4 TX ➔ C6 RX) |
+| **GPIO 28** (Pin 21) | **C6_U0TXD** (Pin 22) | **Jumper 2 Horizontal Magenta** (P4 RX 🠄 C6 TX) |
+| **I2C_SDA** (Pin 23) | **C6_IO9** (Pin 24) | **C6_IO9 (Cable Celeste)** ➔ conectado a **GPIO 34** |
+| **I2C_SCL** (Pin 25) | **C6_CHIP_PU** (Pin 26) | Línea Enable C6 (Controlada por GPIO 54 interno / Dejar libre) |
 
 ### 🔌 Flasheador Universal y Presets de Programación
 | Preset / Plataforma | TX (Host->Target) | RX (Host<-Target) | BOOT (IO0/IO9) | RST / EN | Baudrate | Firmware Origen |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ESP32-C6 Coprocesador (P4)** | **GPIO 32** | **GPIO 28** | **GPIO 34** | **GPIO 54** | 115200 | Embebido SDIO / MicroSD |
+| **ESP32-C6 Coprocesador (P4)** | **GPIO 32** | **GPIO 28** | **GPIO 34** | **GPIO 54** | 115200 / 460800 | Embebido SDIO / MicroSD |
 | **ESP Externo (Header JP1 P4)** | **GPIO 32** | **GPIO 28** | **GPIO 34** | **GPIO 54** | 115200-921600 | `/sdcard/firmware.bin` |
 | **ESP Externo (JC3248W535 S3)** | **GPIO 15** | **GPIO 16** | **GPIO 0** | Manual / -1 | 115200 | `/sdcard/firmware.bin` |
 | **Personalizado / Manual** | Configurable | Configurable | Configurable | Configurable | Configurable | Embebido / MicroSD |
@@ -97,9 +100,9 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | **Touchscreen (AXS15231B)** | **I2C SDA** | **GPIO 8** | I2C Maestro (Puerto 0) | Touch integrado en controlador AXS |
 | | **I2C SCL** | **GPIO 4** | I2C Maestro | |
 | | **Touch INT** | **GPIO 3** | Entrada Digital / Interrupción | |
-| | *Dirección I2C Touch* | `0x3B` / `0x38` | I2C 7-bit | Controlador integrado |
-| **Audio / Salida Sonido** | **I2S PDM TX (DAC) / Buzzer** | **GPIO 17** | Periférico I2S0 (Modo PDM TX Delta-Sigma) | Audio PCM 16-bit / Helix MP3 al altavoz |
-| **MicroSD (SPI / SDMMC)** | **SPI CS** | **GPIO 10** | Bus SPI / SD | Lector MicroSD |
+| **Audio / Salida Sonido (I2S)** | **I2S BCLK (Bit Clock)** | **GPIO 42** | I2S0 TX Master | Bit clock estéreo 16-bit |
+| | **I2S WS / LRC (Word Select)** | **GPIO 2** | I2S0 TX Master | Frame Sync (44.1 kHz / 48 kHz) |
+| | **I2S DOUT (Data Out)** | **GPIO 41** | I2S0 Data Out | Audio PCM 16-bit / Helix MP3 al altavoz |
 | | **SPI MOSI** | **GPIO 11** | SPI Bus | |
 | | **SPI MISO** | **GPIO 13** | SPI Bus | |
 | | **SPI SCK** | **GPIO 12** | SPI Bus | |

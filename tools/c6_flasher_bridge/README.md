@@ -24,18 +24,22 @@ Esta guía explica paso a paso cómo programar el coprocesador **ESP32-C6** en l
 [Pin 25]  I2C_SCL                │  [Pin 26]  C6_CHIP_PU (Reset C6)
 ```
 
+![Diagrama de Flasheo ESP32-C6](../../docs/images/esp32_c6_flasher_diagram.png)
+
 ---
 
-## 🔌 1. Conexiones Físicas de Cables / Jumpers
+## 🔌 1. Conexiones Físicas de Cables / Jumpers en JP1
 
-Para flashear el C6 se requieren **4 conexiones temporales**:
+Para flashear el C6 se requieren las siguientes conexiones:
 
-| Cable | De (Origen) | A (Destino) | Función |
+| Cable / Jumper | De (Origen / Lado Izq) | A (Destino / Lado Der) | Función |
 | :--- | :--- | :--- | :--- |
-| **Cable 1 (Energía):** | `3V3` (Pin 1 o 3 Izq) | `ESP_3V3` (Pin 18 Der) | Alimenta eléctricamente el C6 |
-| **Jumper 2 (Horizontal):** | `GPIO 32` (Pin 19 Izq) | `C6_U0RXD` (Pin 20 Der) | Canal de datos RX hacia el C6 |
-| **Jumper 3 (Horizontal):** | `GPIO 28` (Pin 21 Izq) | `C6_U0TXD` (Pin 22 Der) | Canal de datos TX desde el C6 |
-| **Cable 4 (Modo BOOT):** | `C6_IO9` (Pin 24 Der) | `GND` (Pin 16 Der o Pin 5 Izq) | Pone al C6 en modo Bootloader |
+| 🟧 **Cable Naranja:** | `3V3` (Pin 3) | `ESP_3V3` (Pin 18) | Alimenta eléctricamente el C6 (3.3V) |
+| 🟩 **Jumper Verde (Horizontal):** | `GPIO 32` (Pin 19) | `C6_U0RXD` (Pin 20) | Canal de datos TX del P4 ➔ RX del C6 |
+| 🟪 **Jumper Magenta (Horizontal):** | `GPIO 28` (Pin 21) | `C6_U0TXD` (Pin 22) | Canal de datos RX del P4 🠄 TX del C6 |
+| 🟦 **Cable Celeste (Modo BOOT):** | `GPIO 34` (Pin 17) | `C6_IO9` (Pin 24) | Control automático de entrada a Bootloader |
+
+> ℹ️ **Control de Reset (CHIP_PU):** La línea `C6_CHIP_PU` (Pin 26) está conectada **internamente en la placa PCB al GPIO 54 del ESP32-P4**. Esto permite resetear el coprocesador de forma controlada por software sin necesidad de un jumper manual en el pin 26.
 
 ---
 

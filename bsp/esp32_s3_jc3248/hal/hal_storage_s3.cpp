@@ -1,5 +1,6 @@
 #include "cbdos/storage.hpp"
 #include <Arduino.h>
+#include <SPI.h>
 #include <FS.h>
 #include <SD.h>
 #include <lvgl.h>
@@ -7,6 +8,7 @@
 namespace cbdos {
 namespace storage {
 
+static SPIClass* s_sdSPI = nullptr;
 static bool s_sdMounted = false;
 static bool s_lvfsRegistered = false;
 
@@ -91,6 +93,7 @@ static lv_fs_res_t fs_tell(lv_fs_drv_t * drv, void * file_p, uint32_t * pos_p) {
 
 static void initLvfsDriver() {
     if (s_lvfsRegistered) return;
+    if (!lv_is_initialized()) return;
     static lv_fs_drv_t fs_drv;
     lv_fs_drv_init(&fs_drv);
     fs_drv.letter = 'A';
@@ -104,30 +107,47 @@ static void initLvfsDriver() {
     s_lvfsRegistered = true;
 }
 
-bool init() {
-    if (SD.cardType() != CARD_NONE) {
-        s_sdMounted = true;
-        initLvfsDriver();
-    }
-    return true;
-}
-
 bool mountSd() {
-    if (SD.cardType() != CARD_NONE) {
-        s_sdMounted = true;
-        initLvfsDriver();
+    if (s_sdMounted && SD.cardType() != CARD_NONE) {
         return true;
     }
+
+    if (!s_sdSPI) {
+        s_sdSPI = new SPIClass(HSPI);
+        s_sdSPI->begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS (HSPI / SPI3_HOST para no colisionar con FSPI)
+    }
+
+    bool mounted = SD.begin(10, *s_sdSPI, 10000000, "/sdcard"); // Intento 1: 10MHz en /sdcard
+    if (!mounted) {
+        Serial.println("[StorageHAL-S3] SD 10MHz fallo, reintentando a 4MHz...");
+        mounted = SD.begin(10, *s_sdSPI, 4000000, "/sdcard"); // Intento 2: 4MHz en /sdcard
+    }
+
+    if (mounted) {
+        s_sdMounted = true;
+        initLvfsDriver();
+        Serial.println("[StorageHAL-S3] MicroSD montada exitosamente");
+        return true;
+    }
+
+    s_sdMounted = false;
+    Serial.println("[StorageHAL-S3] WARN: No se detecto tarjeta MicroSD");
     return false;
 }
 
+bool init() {
+    mountSd();
+    return true;
+}
+
 bool unmountSd() {
+    SD.end();
     s_sdMounted = false;
     return true;
 }
 
 bool isSdMounted() {
-    return (SD.cardType() != CARD_NONE);
+    return s_sdMounted && (SD.cardType() != CARD_NONE);
 }
 
 StorageStats getFlashStats() {

@@ -194,6 +194,16 @@ bool AudioPlayer::play(const char* filepath) {
 
     FILE* f = fopen(filepath, "rb");
     if (!f) {
+        std::string altPath = filepath;
+        if (altPath.rfind("/sdcard/", 0) == 0) {
+            altPath = "/sd/" + altPath.substr(8);
+            f = fopen(altPath.c_str(), "rb");
+        } else if (altPath.rfind("/sd/", 0) == 0) {
+            altPath = "/sdcard/" + altPath.substr(4);
+            f = fopen(altPath.c_str(), "rb");
+        }
+    }
+    if (!f) {
         ESP_LOGE(TAG, "No se pudo abrir el archivo: %s", filepath);
         xSemaphoreGive(m_mutex);
         return false;

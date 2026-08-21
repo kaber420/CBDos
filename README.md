@@ -85,43 +85,45 @@
 
 ## 🔧 Herramienta: C6 Flasher Bridge
 
-El ESP32-P4 incluye una herramienta en `tools/c6_flasher_bridge/` que convierte el propio **ESP32-P4 en un puente UART** para flashear el coprocesador **ESP32-C6-MINI** sin necesidad de un adaptador USB-Serie externo.
+El ESP32-P4 incluye soporte para flashear el coprocesador inalámbrico **ESP32-C6-MINI** sin necesidad de un adaptador USB-Serie externo, tanto mediante la app integrada **Flasher** en CBDos como a través del puente UART en `tools/c6_flasher_bridge/`.
 
-La placa expone la cabecera **JP1 (2×13 pines)** que da acceso a los pines UART del C6 y a sus líneas de reset y boot, permitiendo el flasheo con solo 4 jumpers/cables temporales.
+La placa Guition JC4880P443C expone la cabecera **JP1 (2×13 pines)** que da acceso a las líneas de alimentación, UART y BOOT del C6.
 
-### Conexiones requeridas en JP1
+![Diagrama de Conexiones de Flasheo ESP32-C6 en JP1](docs/images/esp32_c6_flasher_diagram.png)
 
-```
-   COLUMNA IZQUIERDA              COLUMNA DERECHA
-   ─────────────────              ───────────────
-[Pin  1]  3V3  ─────────────────► [Pin 18]  ESP_3V3   (Alimenta el C6)
-[Pin 19]  GPIO32 ───────────────► [Pin 20]  C6_U0RXD  (Datos TX → C6)
-[Pin 21]  GPIO28 ───────────────► [Pin 22]  C6_U0TXD  (Datos RX ← C6)
-[Pin 24]  C6_IO9 ───────────────► [Pin 16]  GND        (Modo Bootloader)
-```
+### 🔌 Conexiones Requeridas en la Cabecera JP1
 
-### Procedimiento rápido
+| Cable / Jumper | Origen (Lado P4 / Izq) | Destino (Lado C6 / Der) | Función |
+| :--- | :--- | :--- | :--- |
+| 🟧 **Cable Naranja** | `3V3` (Pin 3) | `ESP_3V3` (Pin 18) | **Alimentación:** Proporciona 3.3V al carril de potencia del C6 |
+| 🟩 **Jumper Verde** | `GPIO 32` (Pin 19) | `C6_U0RXD` (Pin 20) | **UART TX:** Transmisión de firmware P4 ➔ C6 |
+| 🟪 **Jumper Magenta** | `GPIO 28` (Pin 21) | `C6_U0TXD` (Pin 22) | **UART RX:** Recepción y sincronización P4 🠄 C6 |
+| 🟦 **Cable Celeste** | `GPIO 34` (Pin 17) | `C6_IO9` (Pin 24) | **Auto-Bootloader:** Control automático del modo descarga (BOOT) |
+
+> ℹ️ **Nota de Hardware sobre Reset:** La línea **`C6_CHIP_PU` (Pin 26 / Reset del C6)** está unida de **manera interna en la PCB al GPIO 54 del ESP32-P4**. Por lo tanto, el sistema gestiona el reset hardware del coprocesador de forma automática y **no es necesario puentear el pin 26 externamente**.
+
+### Procedimiento Rápido
 
 ```bash
-# 1. Grabar el firmware puente en el P4
+# 1. Grabar el firmware puente en el P4 (o usar la app Flasher desde CBDos)
 cd tools/c6_flasher_bridge
 idf.py -p /dev/ttyACM0 flash
 
-# 2. Conectar los 4 jumpers en JP1 (ver tabla arriba)
-#    Tocar C6_IO9 → GND durante 2 seg para entrar en modo bootloader
+# 2. Conectar los jumpers y cables en JP1 según el diagrama
 
 # 3. Flashear el firmware SDIO al C6
 python -m esptool --chip esp32c6 -p /dev/ttyACM0 -b 115200 \
   --connect-attempts 30 --before no_reset \
   write_flash 0x0 bsp/esp32_c6_slave/build/network_adapter.bin
 
-# 4. Retirar jumpers TX/RX y el cable de boot; dejar SOLO 3V3 → ESP_3V3
+# 4. Retirar los jumpers TX/RX y el cable de Boot (GPIO34 -> IO9);
+#    DEJAR SIEMPRE CONECTADO el cable naranja 3V3 -> ESP_3V3 para mantener alimentado el C6.
 #    Volver a flashear CBDos en el P4:
 cd bsp/esp32_p4_jc4880
 idf.py -p /dev/ttyACM0 flash
 ```
 
-> 📖 Guía completa con diagrama de pines: [`tools/c6_flasher_bridge/README.md`](tools/c6_flasher_bridge/README.md)
+> 📖 Guía completa y mapa de registros: [`docs/hardware_pinouts_reference.md`](docs/hardware_pinouts_reference.md) y [`tools/c6_flasher_bridge/README.md`](tools/c6_flasher_bridge/README.md)
 
 ---
 
