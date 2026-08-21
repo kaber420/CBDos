@@ -1,4 +1,4 @@
-# Reglas del Proyecto y Guía de Desarrollo (CBDos v0.2.0)
+# Reglas del Proyecto y Guía de Desarrollo (CBDos v0.2.1)
 
 ## 📂 1. Directorio del Código Fuente Original (Fuente de la Verdad Absoluta)
 - **Ruta del Proyecto Original:** `/home/kaber420/Documentos/proyectos/espOS32`

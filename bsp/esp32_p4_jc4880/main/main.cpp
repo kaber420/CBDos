@@ -63,7 +63,7 @@ static void consoleCommandTask(void* pvParameters) {
 
 extern "C" void app_main(void) {
 
-    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.0) ===");
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) ===");
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Soporte Flasheador Coprocesador C6: %s", 
                        cbdos::flasher::isSupported() ? "HABILITADO" : "DESHABILITADO");
 

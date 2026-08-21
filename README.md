@@ -1,8 +1,8 @@
-# 🦾 CyBerDeck OS — CBDos v0.2.0
+# 🦾 CyBerDeck OS — CBDos v0.2.1
 
 **CyBerDeck OS (CBDos)** es un sistema operativo embebido modular, agnóstico y *offline-first* diseñado para cyberdecks, consolas portátiles y dispositivos multimedia basados en microcontroladores ESP32. Arquitectura `core/` desacoplado de cualquier SDK de hardware, UI en **LVGL v9.5** y soporte multi-target simultáneo.
 
-> **Estado general:** Migración activa desde `espOS32` → `CBDos v0.2.0`. El núcleo `core/`, el motor de UI, el reproductor de audio y las vistas principales están portados y operativos. Se están portando activamente `RadioView` y `FlasherView`. La integración del driver ES8311 y la validación SDMMC en el target P4 están en curso.
+> **Estado general:** CBDos v0.2.1. El núcleo `core/`, el motor de UI, el reproductor de audio, emuladores y las vistas principales están portados y operativos. Soporte completo multi-target ESP32-P4 y ESP32-S3.
 
 ---
 
@@ -224,3 +224,13 @@ idf.py build
 - **Fuente de la verdad:** `/home/kaber420/Documentos/proyectos/espOS32`. Toda lógica se porta desde allí; prohibido reinventar desde cero.
 - **Verificación dual-target:** Cada cambio en `core/` debe compilar en **ambos** entornos (`idf.py build` y `pio run`).
 - **Documentar hardware:** Cualquier pin, bus o registro descubierto se registra inmediatamente en `docs/hardware_pinouts_reference.md`.
+
+---
+
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia **GNU General Public License v3.0 (GPLv3)**.  
+Copyright (C) 2026 **kaber420** (<https://github.com/kaber420/CBD-os>).
+
+Consulta el archivo [`LICENSE`](LICENSE) para obtener los términos y condiciones completos, o visita <https://www.gnu.org/licenses/gpl-3.0.html>.
+

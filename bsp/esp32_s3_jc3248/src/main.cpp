@@ -56,7 +56,7 @@ static void networkTask(void* param) {
 void setup() {
     Serial.begin(115200);
     cbdos::system::sleepMs(500);
-    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.0) [Target: ESP32-S3] ===");
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) [Target: ESP32-S3] ===");
     
     // Cargar configuraciones del sistema desde NVS
     SystemConfig sysCfg;

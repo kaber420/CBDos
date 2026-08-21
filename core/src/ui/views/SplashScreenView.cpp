@@ -73,7 +73,7 @@ bool SplashScreenView::onCreate(lv_obj_t* parent) {
 
     // 3. Subtítulo de Versión
     lv_obj_t* lblSub = lv_label_create(m_container);
-    lv_label_set_text(lblSub, "v0.2.0 - Universal Core");
+    lv_label_set_text(lblSub, "v0.2.1 - Universal Core");
     lv_obj_set_style_text_color(lblSub, lv_color_hex(0x9D4EDD), 0);
     lv_obj_set_style_text_font(lblSub, &lv_font_montserrat_14, 0);
 

@@ -3,6 +3,7 @@
 #include "WallpaperConfigView.hpp"
 #include "StorageConfigView.hpp"
 #include "../modals/DiagnosticsModal.hpp"
+#include "../modals/AboutModal.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "../../network/ConfigManager.h"
@@ -96,6 +97,8 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
             UIManager::getInstance().pushView(std::make_shared<WallpaperConfigView>());
         } else if (id == 6) {
             DiagnosticsModal::show();
+        } else if (id == 8) {
+            AboutModal::show();
         }
     }
 }
@@ -125,10 +128,11 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
         {"Almacenamiento", "Gestion de MicroSD, Flash y USB", 2},
         {"Fondo de Pantalla", "Elegir wallpaper de SD o Flash", 5},
         {"Sistema", "Diagnostico de hardware y memoria", 6},
+        {"Acerca de CBDos", "v0.2.1, Licencia GPLv3 y Repo", 8},
         {"Resetear NVS", "Manten presionado 3s para borrar", 7}
     };
 
-    for (int i = 0; i < 5; i++) {
+    for (size_t i = 0; i < sizeof(options) / sizeof(options[0]); i++) {
         lv_obj_t* card = lv_button_create(m_container);
         lv_obj_set_width(card, lv_pct(100));
         lv_obj_set_height(card, 60);
