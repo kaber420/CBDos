@@ -55,6 +55,9 @@ namespace storage {
     }
     __attribute__((weak)) std::vector<FileEntry> listDir(const char*) { return {}; }
     __attribute__((weak)) bool fileExists(const char*) { return false; }
+    __attribute__((weak)) std::string readFile(const char*) { return ""; }
+    __attribute__((weak)) bool writeFile(const char*, const std::string&) { return false; }
+    __attribute__((weak)) bool deleteFile(const char*) { return false; }
     __attribute__((weak)) size_t getFreeBytes(StorageType type) {
         return (type == StorageType::InternalFlash) ? (16 * 1024 * 1024) : 0;
     }

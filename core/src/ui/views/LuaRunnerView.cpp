@@ -1,4 +1,5 @@
 #include "LuaRunnerView.hpp"
+#include "TextEditorView.hpp"
 #include "../../lua/LuaRunner.hpp"
 #include "cbdos/storage.hpp"
 #include "cbdos/display.hpp"
@@ -478,6 +479,9 @@ bool LuaRunnerView::onCreate(lv_obj_t* parent) {
 
     // Configurar HeaderBar para esta app
     UIManager::getInstance().getHeaderBar().showWifi(false);
+    UIManager::getInstance().getHeaderBar().setRightAction(LV_SYMBOL_EDIT, [this]() {
+        UIManager::getInstance().pushView(std::make_shared<TextEditorView>(this->m_activeScript));
+    });
 
     // Contenedor principal de la vista
     m_container = lv_obj_create(parent);

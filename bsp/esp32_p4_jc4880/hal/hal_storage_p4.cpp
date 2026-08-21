@@ -223,6 +223,74 @@ bool fileExists(const char* path) {
     return (stat(fullPath.c_str(), &st) == 0);
 }
 
+std::string readFile(const char* path) {
+    std::string content = "";
+    if (!s_sdMounted) {
+        if (!mountSd()) return content;
+    }
+
+    std::string fullPath = normalizePath(path);
+    FILE* f = fopen(fullPath.c_str(), "rb");
+    if (!f) {
+        ESP_LOGW(TAG, "readFile: No se pudo abrir %s", fullPath.c_str());
+        return content;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (sz > 0) {
+        content.resize(sz);
+        size_t bytesRead = fread(&content[0], 1, sz, f);
+        content.resize(bytesRead);
+    }
+    fclose(f);
+    return content;
+}
+
+bool writeFile(const char* path, const std::string& content) {
+    if (!s_sdMounted) {
+        if (!mountSd()) return false;
+    }
+
+    std::string fullPath = normalizePath(path);
+
+    // Asegurar directorios padres si la ruta contiene subcarpetas
+    size_t lastSlash = fullPath.rfind('/');
+    if (lastSlash != std::string::npos && lastSlash > 0) {
+        for (size_t i = 1; i <= lastSlash; i++) {
+            if (fullPath[i] == '/' || i == lastSlash) {
+                std::string currentDir = fullPath.substr(0, i);
+                struct stat st;
+                if (stat(currentDir.c_str(), &st) != 0) {
+                    mkdir(currentDir.c_str(), 0777);
+                }
+            }
+        }
+    }
+
+    FILE* f = fopen(fullPath.c_str(), "wb");
+    if (!f) {
+        ESP_LOGE(TAG, "writeFile: Error al crear %s", fullPath.c_str());
+        return false;
+    }
+
+    bool ok = true;
+    if (!content.empty()) {
+        size_t written = fwrite(content.data(), 1, content.size(), f);
+        ok = (written == content.size());
+    }
+    fclose(f);
+    return ok;
+}
+
+bool deleteFile(const char* path) {
+    if (!s_sdMounted) return false;
+    std::string fullPath = normalizePath(path);
+    return (remove(fullPath.c_str()) == 0);
+}
+
 size_t getFreeBytes(StorageType type) {
     if (type == StorageType::InternalFlash) return (size_t)getFlashStats().freeBytes;
     if (type == StorageType::SdCard) return (size_t)getSdCardStats().freeBytes;

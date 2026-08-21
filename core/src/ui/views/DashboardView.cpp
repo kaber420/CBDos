@@ -1,9 +1,11 @@
 #include "DashboardView.hpp"
 #include "ConfigView.hpp"
 #include "MusicPlayerView.hpp"
+#include "GalleryListView.hpp"
 #include "FlasherView.hpp"
 #include "RadioView.hpp"
 #include "LuaRunnerView.hpp"
+#include "TextEditorView.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
@@ -13,12 +15,12 @@
 namespace cbdos {
 namespace ui {
 
-static const char* TAG = "DashboardView";
-
 DashboardView::DashboardView()
     : BaseView("Dashboard") {
     m_apps = {
+        {"gallery", "Galeria", LV_SYMBOL_IMAGE, 0xEC4899},
         {"lua", "Lua Runner", LV_SYMBOL_FILE, 0x06B6D4},
+        {"editor", "Editor", LV_SYMBOL_EDIT, 0x3B82F6},
         {"radio", "Radio Online", LV_SYMBOL_WIFI, 0x10B981},
         {"flasher", "Flasheador", LV_SYMBOL_DOWNLOAD, 0xF59E0B},
         {"music", "Musica", LV_SYMBOL_AUDIO, 0x00E5FF},
@@ -120,8 +122,12 @@ void DashboardView::createCards() {
 void DashboardView::cardClickedEventCb(lv_event_t* e) {
     const char* appId = static_cast<const char*>(lv_event_get_user_data(e));
     if (appId) {
-        if (strcmp(appId, "lua") == 0) {
+        if (strcmp(appId, "gallery") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<GalleryListView>());
+        } else if (strcmp(appId, "lua") == 0) {
             UIManager::getInstance().pushView(std::make_shared<LuaRunnerView>());
+        } else if (strcmp(appId, "editor") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<TextEditorView>());
         } else if (strcmp(appId, "radio") == 0) {
             UIManager::getInstance().pushView(std::make_shared<RadioView>());
         } else if (strcmp(appId, "config") == 0) {

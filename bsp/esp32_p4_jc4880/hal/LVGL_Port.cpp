@@ -150,7 +150,7 @@ esp_err_t LVGL_Port::init(int h_res, int v_res) {
     BaseType_t res = xTaskCreatePinnedToCore(
         lvglTask,
         "lvgl_task",
-        8 * 1024,
+        32 * 1024,
         this,
         5,
         &taskHandle,

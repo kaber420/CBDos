@@ -26,9 +26,12 @@ idf_component_register(
         "src/ui/views/WallpaperConfigView.cpp"
         "src/ui/views/StorageConfigView.cpp"
         "src/ui/views/MusicPlayerView.cpp"
+        "src/ui/views/GalleryListView.cpp"
+        "src/ui/views/GalleryView.cpp"
         "src/ui/views/RadioView.cpp"
         "src/ui/views/FlasherView.cpp"
         "src/ui/views/LuaRunnerView.cpp"
+        "src/ui/views/TextEditorView.cpp"
         "src/ui/modals/DiagnosticsModal.cpp"
 
         "src/ui/modals/C6FlasherModal.cpp"

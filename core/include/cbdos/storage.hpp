@@ -37,6 +37,9 @@ StorageStats getUsbStats();
 
 std::vector<FileEntry> listDir(const char* path);
 bool fileExists(const char* path);
+std::string readFile(const char* path);
+bool writeFile(const char* path, const std::string& content);
+bool deleteFile(const char* path);
 size_t getFreeBytes(StorageType type);
 size_t getTotalBytes(StorageType type);
 
