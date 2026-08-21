@@ -43,6 +43,7 @@ idf_component_register(
         "nvs_flash"
         "esp_timer"
         "esp_partition"
+        "app_update"
         "spi_flash"
         "esp_mm"
         "freertos"

@@ -6,6 +6,9 @@
 #include "RadioView.hpp"
 #include "LuaRunnerView.hpp"
 #include "TextEditorView.hpp"
+#include "CartridgeView.hpp"
+#include "FileManagerView.hpp"
+#include "UtilitiesView.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
@@ -19,6 +22,9 @@ DashboardView::DashboardView()
     : BaseView("Dashboard") {
     m_apps = {
         {"gallery", "Galeria", LV_SYMBOL_IMAGE, 0xEC4899},
+        {"files", "Archivos", LV_SYMBOL_DIRECTORY, 0xF77F00},
+        {"utilities", "Utilidades", LV_SYMBOL_LIST, 0x00F5D4},
+        {"cartridge", "Cartuchos", LV_SYMBOL_PLAY, 0x3F68D9},
         {"lua", "Lua Runner", LV_SYMBOL_FILE, 0x06B6D4},
         {"editor", "Editor", LV_SYMBOL_EDIT, 0x3B82F6},
         {"radio", "Radio Online", LV_SYMBOL_WIFI, 0x10B981},
@@ -124,6 +130,12 @@ void DashboardView::cardClickedEventCb(lv_event_t* e) {
     if (appId) {
         if (strcmp(appId, "gallery") == 0) {
             UIManager::getInstance().pushView(std::make_shared<GalleryListView>());
+        } else if (strcmp(appId, "files") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<FileManagerView>());
+        } else if (strcmp(appId, "utilities") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<UtilitiesView>());
+        } else if (strcmp(appId, "cartridge") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<CartridgeView>());
         } else if (strcmp(appId, "lua") == 0) {
             UIManager::getInstance().pushView(std::make_shared<LuaRunnerView>());
         } else if (strcmp(appId, "editor") == 0) {

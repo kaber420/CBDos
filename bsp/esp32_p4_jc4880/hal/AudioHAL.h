@@ -54,3 +54,13 @@ private:
     bool initialized = false;
     uint32_t currentSampleRate = 44100;
 };
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+    bool Board_Audio_Init(uint32_t sampleRate);
+    void Board_Audio_SetVolume(uint8_t volumePercent);
+    int Board_Audio_Write(const void* data, size_t size);
+#ifdef __cplusplus
+}
+#endif

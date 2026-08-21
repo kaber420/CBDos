@@ -57,6 +57,33 @@ notes/
 docs/internal/
 **/docs/internal/
 
+# --- Cartuchos y Emuladores Externos (Gestionados en Repo Separado / Releases) ---
+cartridges/
+**/cartridges/
+bsp/esp32_s3_jc3248/lib/doomgeneric/
+bsp/esp32_s3_jc3248/lib/peanut_gb/
+
+# --- ROMs, WADs y Partidas Guardadas (Cartridges/Juegos) ---
+*.wad
+*.WAD
+*.nes
+*.NES
+*.gb
+*.GB
+*.gbc
+*.GBC
+*.rom
+*.ROM
+*.sav
+*.SAV
+*.state
+*.dsv
+
+# --- Configuración autogenerada de subproyectos ESP-IDF ---
+**/sdkconfig
+!**/sdkconfig.defaults
+**/sdkconfig.old
+
 # --- Credenciales privadas ---
 *credenciales*
 *credentials*

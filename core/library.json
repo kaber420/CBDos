@@ -8,6 +8,8 @@
     "flags": [
       "-I include",
       "-I src/ui",
+      "-I src/ui/views",
+      "-I src/ui/views/utilities",
       "-I src/audio",
       "-I src/audio/libhelix/src",
       "-I src/audio/libhelix/src/utils",

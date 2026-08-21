@@ -51,10 +51,10 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
         return ESP_FAIL;
     }
 
-    // 3. Configurar Interfaz de Datos I2S con buffers DMA profundos para evitar cortes por MicroSD
+    // 3. Configurar Interfaz de Datos I2S con buffers DMA de baja latencia
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(BOARD_AUDIO_I2S_PORT, I2S_ROLE_MASTER);
-    chan_cfg.dma_desc_num = 8;
-    chan_cfg.dma_frame_num = 1024;
+    chan_cfg.dma_desc_num = 6;
+    chan_cfg.dma_frame_num = 256;
     chan_cfg.auto_clear = true;
     i2s_chan_handle_t tx_handle = nullptr;
     esp_err_t ret = i2s_new_channel(&chan_cfg, &tx_handle, nullptr);
@@ -255,4 +255,18 @@ void AudioHAL::playStartupChime() {
     playTone(784, 100); // Sol5
     vTaskDelay(pdMS_TO_TICKS(10));
     playTone(1046, 160);// Do6
+}
+
+extern "C" bool Board_Audio_Init(uint32_t sampleRate) {
+    return AudioHAL::getInstance().init(sampleRate) == ESP_OK;
+}
+
+extern "C" void Board_Audio_SetVolume(uint8_t volumePercent) {
+    AudioHAL::getInstance().setVolume(volumePercent);
+}
+
+extern "C" int Board_Audio_Write(const void* data, size_t size) {
+    size_t written = 0;
+    AudioHAL::getInstance().writeAudio(data, size, &written, portMAX_DELAY);
+    return (int)written;
 }

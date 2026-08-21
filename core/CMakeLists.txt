@@ -32,6 +32,14 @@ idf_component_register(
         "src/ui/views/FlasherView.cpp"
         "src/ui/views/LuaRunnerView.cpp"
         "src/ui/views/TextEditorView.cpp"
+        "src/ui/views/FileManagerView.cpp"
+        "src/ui/views/CartridgeView.cpp"
+        "src/ui/views/UtilitiesView.cpp"
+        "src/ui/views/utilities/CalculatorApp.cpp"
+        "src/ui/views/utilities/StopwatchApp.cpp"
+        "src/ui/views/utilities/PomodoroApp.cpp"
+        "src/ui/views/utilities/TodoApp.cpp"
+        "src/cartridge/CartridgeManager.cpp"
         "src/ui/modals/DiagnosticsModal.cpp"
 
         "src/ui/modals/C6FlasherModal.cpp"
@@ -48,6 +56,9 @@ idf_component_register(
     INCLUDE_DIRS 
         "include"
         "src/ui"
+        "src/ui/views"
+        "src/ui/views/utilities"
+        "src/cartridge"
         "src/audio"
         "src/audio/libhelix/src"
         "src/audio/libhelix/src/utils"
@@ -64,6 +75,8 @@ idf_component_register(
         "json"
         "esp_http_client"
         "driver"
+        "app_update"
+        "esp_partition"
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC -DESP32 -DUSE_DEFAULT_STDLIB -DHELIX_LOGGING_ACTIVE=0)

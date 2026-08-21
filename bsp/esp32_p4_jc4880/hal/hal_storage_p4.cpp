@@ -26,18 +26,21 @@ static sdmmc_card_t* s_cardHandle = nullptr;
 static esp_ldo_channel_handle_t s_sdLdoHandle = nullptr;
 
 static void ensureLdoPower() {
-    if (!s_sdLdoHandle) {
-        esp_ldo_channel_config_t sd_ldo_cfg = {};
-        sd_ldo_cfg.chan_id = BOARD_DISP_SD_LDO_CH;
-        sd_ldo_cfg.voltage_mv = 3300;
-        esp_err_t ret = esp_ldo_acquire_channel(&sd_ldo_cfg, &s_sdLdoHandle);
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "LDO VO4 (3.3V) para MicroSD energizado correctamente");
-        } else {
-            ESP_LOGW(TAG, "Aviso: no se pudo adquirir canal LDO %d (puede estar activo): %s", 
-                     BOARD_DISP_SD_LDO_CH, esp_err_to_name(ret));
-        }
+    if (s_sdLdoHandle) {
+        esp_ldo_release_channel(s_sdLdoHandle);
+        s_sdLdoHandle = nullptr;
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
+    esp_ldo_channel_config_t sd_ldo_cfg = {};
+    sd_ldo_cfg.chan_id = BOARD_DISP_SD_LDO_CH;
+    sd_ldo_cfg.voltage_mv = 3300;
+    esp_err_t ret = esp_ldo_acquire_channel(&sd_ldo_cfg, &s_sdLdoHandle);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "LDO VO4 (3.3V) para MicroSD energizado (Power-Cycle OK)");
+    } else {
+        ESP_LOGW(TAG, "Aviso LDO VO4: %s", esp_err_to_name(ret));
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
 }
 
 bool mountSd() {
