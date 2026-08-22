@@ -11,6 +11,7 @@ public:
     static void pauseUI(uint32_t seconds = 0);
     static void resumeUI();
     static bool isUIPaused();
+    static bool checkAndClearNeedsRefresh();
 
 private:
     static void registerAudioAPI(lua_State* L);

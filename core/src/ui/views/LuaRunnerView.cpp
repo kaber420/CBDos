@@ -319,6 +319,17 @@ void LuaRunnerView::btnStopCb(lv_event_t* e) {
     self->updateStatusBadge();
 }
 
+void LuaRunnerView::btnEditCb(lv_event_t* e) {
+    LuaRunnerView* self = static_cast<LuaRunnerView*>(lv_event_get_user_data(e));
+    if (!self) return;
+
+    if (self->m_activeScript.empty()) {
+        UIManager::getInstance().pushView(std::make_shared<TextEditorView>());
+    } else {
+        UIManager::getInstance().pushView(std::make_shared<TextEditorView>(self->m_activeScript));
+    }
+}
+
 void LuaRunnerView::btnClearCb(lv_event_t* e) {
     LuaRunnerView* self = static_cast<LuaRunnerView*>(lv_event_get_user_data(e));
     if (!self) return;
@@ -479,9 +490,7 @@ bool LuaRunnerView::onCreate(lv_obj_t* parent) {
 
     // Configurar HeaderBar para esta app
     UIManager::getInstance().getHeaderBar().showWifi(false);
-    UIManager::getInstance().getHeaderBar().setRightAction(LV_SYMBOL_EDIT, [this]() {
-        UIManager::getInstance().pushView(std::make_shared<TextEditorView>(this->m_activeScript));
-    });
+    UIManager::getInstance().getHeaderBar().clearRightAction();
 
     // Contenedor principal de la vista
     m_container = lv_obj_create(parent);
@@ -540,7 +549,7 @@ bool LuaRunnerView::onCreate(lv_obj_t* parent) {
     DefaultTheme::disableScroll(dock);
 
     auto caps = cbdos::display::getCapabilities();
-    int32_t btnW = (caps.width >= 480) ? 90 : 64;
+    int32_t btnW = (caps.width >= 480) ? 80 : 54;
 
     // Botón Run (Play)
     lv_obj_t* btnRun = lv_button_create(dock);
@@ -563,6 +572,16 @@ bool LuaRunnerView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_text_color(lblStop, lv_color_hex(0xFF5252), 0);
     lv_obj_center(lblStop);
     lv_obj_add_event_cb(btnStop, btnStopCb, LV_EVENT_CLICKED, this);
+
+    // Botón Editar
+    lv_obj_t* btnEdit = lv_button_create(dock);
+    lv_obj_set_size(btnEdit, btnW, 44);
+    DefaultTheme::applyButton(btnEdit, 8);
+    lv_obj_t* lblEdit = lv_label_create(btnEdit);
+    lv_label_set_text(lblEdit, LV_SYMBOL_EDIT);
+    lv_obj_set_style_text_color(lblEdit, lv_color_hex(0xFFB800), 0);
+    lv_obj_center(lblEdit);
+    lv_obj_add_event_cb(btnEdit, btnEditCb, LV_EVENT_CLICKED, this);
 
     // Botón Cargar SD
     lv_obj_t* btnSd = lv_button_create(dock);

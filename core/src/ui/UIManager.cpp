@@ -4,6 +4,7 @@
 #include "WallpaperManager.h"
 #include "themes/DefaultTheme.h"
 #include "cbdos/system.hpp"
+#include "../../lua/LuaBridge.hpp"
 
 namespace cbdos {
 
@@ -115,6 +116,14 @@ bool UIManager::init(lv_obj_t* rootScreen) {
 
 void UIManager::update() {
     if (!m_initialized) return;
+
+    if (LuaBridge::checkAndClearNeedsRefresh()) {
+        lv_obj_t* scr = lv_screen_active();
+        if (scr && lv_obj_is_valid(scr)) {
+            lv_obj_invalidate(scr);
+            lv_refr_now(NULL);
+        }
+    }
 
     // Actualizar barra de estado
     m_headerBar.update();

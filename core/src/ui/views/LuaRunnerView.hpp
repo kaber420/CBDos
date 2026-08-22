@@ -23,6 +23,7 @@ private:
     static void timerCb(lv_timer_t* timer);
     static void btnRunCb(lv_event_t* e);
     static void btnStopCb(lv_event_t* e);
+    static void btnEditCb(lv_event_t* e);
     static void btnSdCb(lv_event_t* e);
     static void btnClearCb(lv_event_t* e);
     static void btnCreateDemoCb(lv_event_t* e);

@@ -1,6 +1,7 @@
 #include "LVGL_Port.h"
 #include "DisplayHAL.h"
 #include "TouchHAL.h"
+#include "../../core/src/lua/LuaBridge.hpp"
 #include <esp_log.h>
 #include <esp_heap_caps.h>
 #include <esp_cache.h>
@@ -34,28 +35,35 @@ void LVGL_Port::unlock() {
 }
 
 void LVGL_Port::flushCallback(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
-    esp_lcd_panel_handle_t panel_handle = DisplayHAL::getInstance().getPanelHandle();
-    if (panel_handle) {
-        int w = DisplayHAL::getInstance().getWidth();
-        int h = DisplayHAL::getInstance().getHeight();
-        size_t fb_bytes = (size_t)w * h * sizeof(uint16_t);
+    if (!LuaBridge::isUIPaused()) {
+        esp_lcd_panel_handle_t panel_handle = DisplayHAL::getInstance().getPanelHandle();
+        if (panel_handle) {
+            int w = DisplayHAL::getInstance().getWidth();
+            int h = DisplayHAL::getInstance().getHeight();
+            size_t fb_bytes = (size_t)w * h * sizeof(uint16_t);
 
-        static int flush_count = 0;
-        if (flush_count < 10) {
-            ESP_LOGI(TAG, "flushCallback #%d (area: %d,%d a %d,%d, buf: %p)", flush_count, area->x1, area->y1, area->x2, area->y2, px_map);
-            flush_count++;
+            static int flush_count = 0;
+            if (flush_count < 10) {
+                ESP_LOGI(TAG, "flushCallback #%d (area: %d,%d a %d,%d, buf: %p)", flush_count, area->x1, area->y1, area->x2, area->y2, px_map);
+                flush_count++;
+            }
+
+            // Asegurar coherencia de memoria caché antes de que el motor DPI transmita
+            esp_cache_msync(px_map, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+
+            // Notificar al controlador DPI para intercambiar y escanear este fotograma
+            esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, w, h, px_map);
         }
-
-        // Asegurar coherencia de memoria caché antes de que el motor DPI transmita
-        esp_cache_msync(px_map, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
-
-        // Notificar al controlador DPI para intercambiar y escanear este fotograma
-        esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, w, h, px_map);
     }
     lv_display_flush_ready(disp);
 }
 
 void LVGL_Port::touchReadCallback(lv_indev_t* indev, lv_indev_data_t* data) {
+    if (LuaBridge::isUIPaused()) {
+        data->state = LV_INDEV_STATE_RELEASED;
+        return;
+    }
+
     uint16_t x = 0;
     uint16_t y = 0;
     bool pressed = false;

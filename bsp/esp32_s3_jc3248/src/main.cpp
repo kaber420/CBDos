@@ -7,6 +7,7 @@
 #include "cbdos/ui.hpp"
 #include "../../core/src/network/ConfigManager.h"
 #include "../../core/src/network/TimeService.h"
+#include "../../core/src/lua/LuaBridge.hpp"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <lvgl.h>
@@ -24,13 +25,14 @@ static uint32_t lvgl_tick_get_cb(void) {
 }
 
 static void lvgl_display_flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *px_map) {
-    uint32_t w = (area->x2 - area->x1 + 1);
-    uint32_t h = (area->y2 - area->y1 + 1);
+    // Si la UI está pausada (ej: script gráfico de Lua corriendo), no sobreescribir el canvas de hardware
+    if (!LuaBridge::isUIPaused()) {
+        uint32_t w = (area->x2 - area->x1 + 1);
+        uint32_t h = (area->y2 - area->y1 + 1);
 
-    JC3248W535_Display& drv = get_s3_display_driver();
-    if (drv.getCanvas()) {
-        drv.getCanvas()->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map, w, h);
-        if (lv_display_flush_is_last(display)) {
+        JC3248W535_Display& drv = get_s3_display_driver();
+        if (drv.getCanvas()) {
+            drv.getCanvas()->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)px_map, w, h);
             drv.flush();
         }
     }
@@ -38,6 +40,12 @@ static void lvgl_display_flush_cb(lv_display_t *display, const lv_area_t *area, 
 }
 
 static void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data) {
+    // Si la UI está pausada por Lua, ceder el control táctil exclusivo al script
+    if (LuaBridge::isUIPaused()) {
+        data->state = LV_INDEV_STATE_REL;
+        return;
+    }
+
     cbdos::input::TouchPoint tp;
     if (cbdos::input::getTouch(tp) && tp.isPressed) {
         data->state = LV_INDEV_STATE_PR;
@@ -112,17 +120,17 @@ void setup() {
     
     auto caps = cbdos::display::getCapabilities();
     
-    // Búferes para LVGL (en SRAM interna para máximo rendimiento con doble búfer Ping-Pong)
-    size_t buf_lines = 32;
-    size_t buf_size = caps.width * buf_lines * sizeof(lv_color_t);
-    lv_color_t* buf1 = (lv_color_t*)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    lv_color_t* buf2 = (lv_color_t*)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (!buf1) buf1 = (lv_color_t*)ps_malloc(buf_size);
-    if (!buf2) buf2 = (lv_color_t*)ps_malloc(buf_size);
+    // Asignar memoria para el buffer de pantalla completa en PSRAM externa (307 KB) idéntico a espOS32
+    uint32_t buf_size = 320 * 480 * 2;
+    uint8_t *buf = (uint8_t *)ps_malloc(buf_size);
+    if (!buf) {
+        buf_size = 480 * 40 * 2;
+        buf = (uint8_t *)malloc(buf_size);
+    }
 
     s_lv_display = lv_display_create(caps.width, caps.height);
     lv_display_set_color_format(s_lv_display, LV_COLOR_FORMAT_RGB565);
-    lv_display_set_buffers(s_lv_display, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_buffers(s_lv_display, buf, NULL, buf_size, LV_DISPLAY_RENDER_MODE_FULL);
     lv_display_set_flush_cb(s_lv_display, lvgl_display_flush_cb);
 
     // Configurar Input Táctil y vincularlo explícitamente al display en LVGL 9
@@ -130,6 +138,10 @@ void setup() {
     lv_indev_set_type(s_lv_indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(s_lv_indev, lvgl_touch_read_cb);
     lv_indev_set_display(s_lv_indev, s_lv_display);
+    lv_timer_t* indev_timer = lv_indev_get_read_timer(s_lv_indev);
+    if (indev_timer) {
+        lv_timer_set_period(indev_timer, 10);
+    }
 
     // 5. Inicializar Almacenamiento MicroSD SPI (VFS LVGL A:) y Audio I2S
     cbdos::storage::init();
@@ -146,6 +158,19 @@ void setup() {
 }
 
 void loop() {
+    if (LuaBridge::checkAndClearNeedsRefresh()) {
+        lv_obj_t* scr = lv_screen_active();
+        if (scr && lv_obj_is_valid(scr)) {
+            lv_obj_invalidate(scr);
+            lv_refr_now(NULL);
+        }
+    }
+
+    if (LuaBridge::isUIPaused()) {
+        cbdos::system::sleepMs(10);
+        return;
+    }
+
     uint32_t time_till_next = lv_timer_handler();
     cbdos::ui::update();
     if (time_till_next > 10) time_till_next = 10;

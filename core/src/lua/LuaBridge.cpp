@@ -25,13 +25,9 @@ extern "C" {
 // ─────────────────────────────────────────────────────────────────────────────
 static volatile uint32_t s_uiPausedUntil = 0;
 static volatile bool s_uiPausedIndefinite = false;
-static bool s_isDisplayLocked = false;
+static volatile bool s_needsScreenRefresh = false;
 
 void LuaBridge::pauseUI(uint32_t seconds) {
-    if (!s_isDisplayLocked) {
-        cbdos::display::lock(500);
-        s_isDisplayLocked = true;
-    }
     if (seconds == 0) {
         s_uiPausedIndefinite = true;
         s_uiPausedUntil = 0;
@@ -42,19 +38,20 @@ void LuaBridge::pauseUI(uint32_t seconds) {
 }
 
 void LuaBridge::resumeUI() {
+    bool wasPaused = s_uiPausedIndefinite || (s_uiPausedUntil > 0);
     s_uiPausedIndefinite = false;
     s_uiPausedUntil = 0;
-    if (s_isDisplayLocked) {
-        cbdos::display::unlock();
-        s_isDisplayLocked = false;
+    if (wasPaused) {
+        s_needsScreenRefresh = true;
     }
-    // Forzar redibujado de la pantalla de LVGL
-    if (lv_is_initialized()) {
-        lv_obj_t* scr = lv_screen_active();
-        if (scr) {
-            lv_obj_invalidate(scr);
-        }
+}
+
+bool LuaBridge::checkAndClearNeedsRefresh() {
+    if (s_needsScreenRefresh) {
+        s_needsScreenRefresh = false;
+        return true;
     }
+    return false;
 }
 
 bool LuaBridge::isUIPaused() {
@@ -281,8 +278,13 @@ static int lua_list_dir(lua_State* L) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Graphics 2D Canvas Engine (Direct Framebuffer Access & Primitives)
+// Graphics API (Exact espOS32 Legacy Canvas & Hardware Integration)
 // ─────────────────────────────────────────────────────────────────────────────
+#ifdef ARDUINO
+#include <JC3248W535.h>
+extern JC3248W535_Display& get_s3_display_driver();
+extern JC3248W535_Touch& get_s3_touch_driver();
+
 static inline uint16_t toRGB565(uint32_t c) {
     uint8_t r = (c >> 16) & 0xFF;
     uint8_t g = (c >> 8) & 0xFF;
@@ -290,253 +292,167 @@ static inline uint16_t toRGB565(uint32_t c) {
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
-// Tabla de fuente bitmap 5x7 ASCII básica (32 a 126)
-static const uint8_t font5x7[] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, //   (space)
-    0x00, 0x00, 0x5F, 0x00, 0x00, // !
-    0x00, 0x07, 0x00, 0x07, 0x00, // "
-    0x14, 0x7F, 0x14, 0x7F, 0x14, // #
-    0x24, 0x2A, 0x7F, 0x2A, 0x12, // $
-    0x23, 0x13, 0x08, 0x64, 0x62, // %
-    0x36, 0x49, 0x55, 0x22, 0x50, // &
-    0x00, 0x05, 0x03, 0x00, 0x00, // '
-    0x00, 0x1C, 0x22, 0x41, 0x00, // (
-    0x00, 0x41, 0x22, 0x1C, 0x00, // )
-    0x08, 0x2A, 0x1C, 0x2A, 0x08, // *
-    0x08, 0x08, 0x3E, 0x08, 0x08, // +
-    0x00, 0x50, 0x30, 0x00, 0x00, // ,
-    0x08, 0x08, 0x08, 0x08, 0x08, // -
-    0x00, 0x60, 0x60, 0x00, 0x00, // .
-    0x20, 0x10, 0x08, 0x04, 0x02, // /
-    0x3E, 0x51, 0x49, 0x45, 0x3E, // 0
-    0x00, 0x42, 0x7F, 0x40, 0x00, // 1
-    0x42, 0x61, 0x51, 0x49, 0x46, // 2
-    0x21, 0x41, 0x45, 0x4B, 0x31, // 3
-    0x18, 0x14, 0x12, 0x7F, 0x10, // 4
-    0x27, 0x45, 0x45, 0x45, 0x39, // 5
-    0x3C, 0x4A, 0x49, 0x49, 0x30, // 6
-    0x01, 0x71, 0x09, 0x05, 0x03, // 7
-    0x36, 0x49, 0x49, 0x49, 0x36, // 8
-    0x06, 0x49, 0x49, 0x29, 0x1E, // 9
-    0x00, 0x36, 0x36, 0x00, 0x00, // :
-    0x00, 0x56, 0x36, 0x00, 0x00, // ;
-    0x00, 0x08, 0x14, 0x22, 0x41, // <
-    0x14, 0x14, 0x14, 0x14, 0x14, // =
-    0x41, 0x22, 0x14, 0x08, 0x00, // >
-    0x02, 0x01, 0x51, 0x09, 0x06, // ?
-    0x32, 0x49, 0x79, 0x41, 0x3E, // @
-    0x7E, 0x11, 0x11, 0x11, 0x7E, // A
-    0x7F, 0x49, 0x49, 0x49, 0x36, // B
-    0x3E, 0x41, 0x41, 0x41, 0x22, // C
-    0x7F, 0x41, 0x41, 0x22, 0x1C, // D
-    0x7F, 0x49, 0x49, 0x49, 0x41, // E
-    0x7F, 0x09, 0x09, 0x01, 0x01, // F
-    0x3E, 0x41, 0x41, 0x51, 0x32, // G
-    0x7F, 0x08, 0x08, 0x08, 0x7F, // H
-    0x00, 0x41, 0x7F, 0x41, 0x00, // I
-    0x20, 0x40, 0x41, 0x3F, 0x01, // J
-    0x7F, 0x08, 0x14, 0x22, 0x41, // K
-    0x7F, 0x40, 0x40, 0x40, 0x40, // L
-    0x7F, 0x02, 0x04, 0x02, 0x7F, // M
-    0x7F, 0x04, 0x08, 0x10, 0x7F, // N
-    0x3E, 0x41, 0x41, 0x41, 0x3E, // O
-    0x7F, 0x09, 0x09, 0x09, 0x06, // P
-    0x3E, 0x41, 0x51, 0x21, 0x5E, // Q
-    0x7F, 0x09, 0x19, 0x29, 0x46, // R
-    0x46, 0x49, 0x49, 0x49, 0x31, // S
-    0x01, 0x01, 0x7F, 0x01, 0x01, // T
-    0x3F, 0x40, 0x40, 0x40, 0x3F, // U
-    0x1F, 0x20, 0x40, 0x20, 0x1F, // V
-    0x7F, 0x20, 0x18, 0x20, 0x7F, // W
-    0x63, 0x14, 0x08, 0x14, 0x63, // X
-    0x03, 0x04, 0x78, 0x04, 0x03, // Y
-    0x61, 0x51, 0x49, 0x45, 0x43, // Z
-    0x00, 0x00, 0x7F, 0x41, 0x41, // [
-    0x02, 0x04, 0x08, 0x10, 0x20, // backslash
-    0x41, 0x41, 0x7F, 0x00, 0x00, // ]
-    0x04, 0x02, 0x01, 0x02, 0x04, // ^
-    0x40, 0x40, 0x40, 0x40, 0x40, // _
-    0x00, 0x01, 0x02, 0x04, 0x00, // `
-    0x20, 0x54, 0x54, 0x54, 0x78, // a
-    0x7F, 0x48, 0x44, 0x44, 0x38, // b
-    0x38, 0x44, 0x44, 0x44, 0x20, // c
-    0x38, 0x44, 0x44, 0x48, 0x7F, // d
-    0x38, 0x54, 0x54, 0x54, 0x18, // e
-    0x08, 0x7E, 0x09, 0x01, 0x02, // f
-    0x08, 0x14, 0x54, 0x54, 0x3C, // g
-    0x7F, 0x08, 0x04, 0x04, 0x78, // h
-    0x00, 0x44, 0x7D, 0x40, 0x00, // i
-    0x20, 0x40, 0x44, 0x3D, 0x00, // j
-    0x00, 0x7F, 0x10, 0x28, 0x44, // k
-    0x00, 0x41, 0x7F, 0x40, 0x00, // l
-    0x7C, 0x04, 0x18, 0x04, 0x78, // m
-    0x7C, 0x08, 0x04, 0x04, 0x78, // n
-    0x38, 0x44, 0x44, 0x44, 0x38, // o
-    0x7C, 0x14, 0x14, 0x14, 0x08, // p
-    0x08, 0x14, 0x14, 0x18, 0x7C, // q
-    0x7C, 0x08, 0x04, 0x04, 0x08, // r
-    0x48, 0x54, 0x54, 0x54, 0x20, // s
-    0x04, 0x3F, 0x44, 0x40, 0x20, // t
-    0x3C, 0x40, 0x40, 0x20, 0x7C, // u
-    0x1C, 0x20, 0x40, 0x20, 0x1C, // v
-    0x3C, 0x40, 0x30, 0x40, 0x3C, // w
-    0x44, 0x28, 0x10, 0x28, 0x44, // x
-    0x0C, 0x50, 0x50, 0x50, 0x3C, // y
-    0x44, 0x64, 0x54, 0x4C, 0x44, // z
-    0x00, 0x08, 0x36, 0x41, 0x00, // {
-    0x00, 0x00, 0x7F, 0x00, 0x00, // |
-    0x00, 0x41, 0x36, 0x08, 0x00, // }
-    0x08, 0x08, 0x2A, 0x1C, 0x08  // ~
-};
-
-static inline void setPixel(int x, int y, uint16_t col565, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    if (x >= 0 && x < w && y >= 0 && y < h) {
-        int idx = y * w + x;
-        if (fb0) fb0[idx] = col565;
-        if (fb1) fb1[idx] = col565;
+static int lua_gfx_clear(lua_State* L) {
+    uint32_t col = (uint32_t)luaL_optinteger(L, 1, 0x000000);
+    auto& drv = get_s3_display_driver();
+    if (drv.getCanvas()) {
+        drv.getCanvas()->fillScreen(toRGB565(col));
+        drv.flush();
     }
+    return 0;
 }
 
-static void drawHLine(int x, int y, int len, uint16_t col565, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    if (y < 0 || y >= h) return;
-    int xStart = std::max(0, x);
-    int xEnd = std::min(w, x + len);
-    for (int i = xStart; i < xEnd; i++) {
-        int idx = y * w + i;
-        if (fb0) fb0[idx] = col565;
-        if (fb1) fb1[idx] = col565;
-    }
-}
-
-static void drawVLine(int x, int y, int len, uint16_t col565, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    if (x < 0 || x >= w) return;
-    int yStart = std::max(0, y);
-    int yEnd = std::min(h, y + len);
-    for (int j = yStart; j < yEnd; j++) {
-        int idx = j * w + x;
-        if (fb0) fb0[idx] = col565;
-        if (fb1) fb1[idx] = col565;
-    }
-}
-
-static void drawRect(int x, int y, int rw, int rh, uint16_t col565, bool filled, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    if (filled) {
-        int yStart = std::max(0, y);
-        int yEnd = std::min(h, y + rh);
-        for (int j = yStart; j < yEnd; j++) {
-            drawHLine(x, j, rw, col565, w, h, fb0, fb1);
-        }
-    } else {
-        drawHLine(x, y, rw, col565, w, h, fb0, fb1);
-        drawHLine(x, y + rh - 1, rw, col565, w, h, fb0, fb1);
-        drawVLine(x, y, rh, col565, w, h, fb0, fb1);
-        drawVLine(x + rw - 1, y, rh, col565, w, h, fb0, fb1);
-    }
-}
-
-static void drawLine(int x0, int y0, int x1, int y1, uint16_t col565, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    int dx = abs(x1 - x0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int dy = -abs(y1 - y0);
-    int sy = (y0 < y1) ? 1 : -1;
-    int err = dx + dy;
-
-    while (true) {
-        setPixel(x0, y0, col565, w, h, fb0, fb1);
-        if (x0 == x1 && y0 == y1) break;
-        int e2 = 2 * err;
-        if (e2 >= dy) { err += dy; x0 += sx; }
-        if (e2 <= dx) { err += dx; y0 += sy; }
-    }
-}
-
-static void drawCircle(int cx, int cy, int r, uint16_t col565, bool filled, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    int f = 1 - r;
-    int ddF_x = 1;
-    int ddF_y = -2 * r;
-    int x = 0;
-    int y = r;
-
-    if (filled) {
-        drawHLine(cx - r, cy, 2 * r + 1, col565, w, h, fb0, fb1);
-    } else {
-        setPixel(cx, cy + r, col565, w, h, fb0, fb1);
-        setPixel(cx, cy - r, col565, w, h, fb0, fb1);
-        setPixel(cx + r, cy, col565, w, h, fb0, fb1);
-        setPixel(cx - r, cy, col565, w, h, fb0, fb1);
-    }
-
-    while (x < y) {
-        if (f >= 0) {
-            y--;
-            ddF_y += 2;
-            f += ddF_y;
-        }
-        x++;
-        ddF_x += 2;
-        f += ddF_x;
-
+static int lua_gfx_draw_rect(lua_State* L) {
+    int x = (int)luaL_checkinteger(L, 1);
+    int y = (int)luaL_checkinteger(L, 2);
+    int w = (int)luaL_checkinteger(L, 3);
+    int h = (int)luaL_checkinteger(L, 4);
+    uint32_t col = (uint32_t)luaL_checkinteger(L, 5);
+    bool filled = lua_toboolean(L, 6);
+    auto& drv = get_s3_display_driver();
+    if (drv.getCanvas()) {
         if (filled) {
-            drawHLine(cx - x, cy + y, 2 * x + 1, col565, w, h, fb0, fb1);
-            drawHLine(cx - x, cy - y, 2 * x + 1, col565, w, h, fb0, fb1);
-            drawHLine(cx - y, cy + x, 2 * y + 1, col565, w, h, fb0, fb1);
-            drawHLine(cx - y, cy - x, 2 * y + 1, col565, w, h, fb0, fb1);
+            drv.getCanvas()->fillRect(x, y, w, h, toRGB565(col));
         } else {
-            setPixel(cx + x, cy + y, col565, w, h, fb0, fb1);
-            setPixel(cx - x, cy + y, col565, w, h, fb0, fb1);
-            setPixel(cx + x, cy - y, col565, w, h, fb0, fb1);
-            setPixel(cx - x, cy - y, col565, w, h, fb0, fb1);
-            setPixel(cx + y, cy + x, col565, w, h, fb0, fb1);
-            setPixel(cx - y, cy + x, col565, w, h, fb0, fb1);
-            setPixel(cx + y, cy - x, col565, w, h, fb0, fb1);
-            setPixel(cx - y, cy - x, col565, w, h, fb0, fb1);
+            drv.getCanvas()->drawRect(x, y, w, h, toRGB565(col));
         }
+        drv.flush();
     }
+    return 0;
 }
 
-static void drawChar(int x, int y, char c, uint16_t col565, int size, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    if (c < 32 || c > 126) c = '?';
-    int fontIdx = (c - 32) * 5;
-
-    for (int col = 0; col < 5; col++) {
-        uint8_t line = font5x7[fontIdx + col];
-        for (int row = 0; row < 7; row++) {
-            if (line & 0x01) {
-                if (size == 1) {
-                    setPixel(x + col, y + row, col565, w, h, fb0, fb1);
-                } else {
-                    drawRect(x + (col * size), y + (row * size), size, size, col565, true, w, h, fb0, fb1);
-                }
-            }
-            line >>= 1;
-        }
-    }
-}
-
-static void drawText(int x, int y, const char* str, uint16_t col565, int size, int w, int h, uint16_t* fb0, uint16_t* fb1) {
-    if (!str) return;
-    int cursorX = x;
-    int cursorY = y;
-    int charW = 6 * size;
-    int charH = 8 * size;
-
-    while (*str) {
-        if (*str == '\n') {
-            cursorX = x;
-            cursorY += charH;
-        } else if (*str == '\r') {
-            // ignorar
+static int lua_gfx_draw_circle(lua_State* L) {
+    int x = (int)luaL_checkinteger(L, 1);
+    int y = (int)luaL_checkinteger(L, 2);
+    int r = (int)luaL_checkinteger(L, 3);
+    uint32_t col = (uint32_t)luaL_checkinteger(L, 4);
+    bool filled = lua_toboolean(L, 5);
+    auto& drv = get_s3_display_driver();
+    if (drv.getCanvas()) {
+        if (filled) {
+            drv.getCanvas()->fillCircle(x, y, r, toRGB565(col));
         } else {
-            drawChar(cursorX, cursorY, *str, col565, size, w, h, fb0, fb1);
-            cursorX += charW;
+            drv.getCanvas()->drawCircle(x, y, r, toRGB565(col));
         }
-        str++;
+        drv.flush();
     }
+    return 0;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Lua GFX Bindings
-// ─────────────────────────────────────────────────────────────────────────────
+static int lua_gfx_draw_line(lua_State* L) {
+    int x0 = (int)luaL_checkinteger(L, 1);
+    int y0 = (int)luaL_checkinteger(L, 2);
+    int x1 = (int)luaL_checkinteger(L, 3);
+    int y1 = (int)luaL_checkinteger(L, 4);
+    uint32_t col = (uint32_t)luaL_checkinteger(L, 5);
+    auto& drv = get_s3_display_driver();
+    if (drv.getCanvas()) {
+        drv.getCanvas()->drawLine(x0, y0, x1, y1, toRGB565(col));
+        drv.flush();
+    }
+    return 0;
+}
+
+static int lua_gfx_draw_text(lua_State* L) {
+    int x = (int)luaL_checkinteger(L, 1);
+    int y = (int)luaL_checkinteger(L, 2);
+    const char* text = luaL_checkstring(L, 3);
+    uint32_t col = (uint32_t)luaL_optinteger(L, 4, 0xFFFFFF);
+    int size = (int)luaL_optinteger(L, 5, 1);
+    auto& drv = get_s3_display_driver();
+    if (drv.getCanvas()) {
+        drv.getCanvas()->setCursor(x, y);
+        drv.getCanvas()->setTextColor(toRGB565(col));
+        drv.getCanvas()->setTextSize(size);
+        drv.getCanvas()->print(text);
+        drv.flush();
+    }
+    return 0;
+}
+
+static int lua_gfx_touch(lua_State* L) {
+    ::TouchPoint tp;
+    auto& touchDrv = get_s3_touch_driver();
+    bool touched = touchDrv.read(tp) && tp.touched;
+    lua_newtable(L);
+    lua_pushboolean(L, touched);
+    lua_setfield(L, -2, "touched");
+    lua_pushinteger(L, tp.x);
+    lua_setfield(L, -2, "x");
+    lua_pushinteger(L, tp.y);
+    lua_setfield(L, -2, "y");
+    return 1;
+}
+
+static int lua_gfx_flush(lua_State* L) {
+    (void)L;
+    auto& drv = get_s3_display_driver();
+    drv.flush();
+    return 0;
+}
+
+#else
+// Fallback para ESP32-P4
+static inline uint16_t toRGB565(uint32_t c) {
+    uint8_t r = (c >> 16) & 0xFF;
+    uint8_t g = (c >> 8) & 0xFF;
+    uint8_t b = c & 0xFF;
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+}
+
+static int lua_gfx_clear(lua_State* L) {
+    uint32_t col = (uint32_t)luaL_optinteger(L, 1, 0x000000);
+    uint16_t col565 = toRGB565(col);
+    auto caps = cbdos::display::getCapabilities();
+    uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
+    size_t totalPixels = caps.width * caps.height;
+    if (fb0) {
+        for (size_t i = 0; i < totalPixels; i++) fb0[i] = col565;
+    }
+    cbdos::display::flush();
+    return 0;
+}
+
+static int lua_gfx_draw_rect(lua_State* L) {
+    (void)L;
+    return 0;
+}
+
+static int lua_gfx_draw_circle(lua_State* L) {
+    (void)L;
+    return 0;
+}
+
+static int lua_gfx_draw_line(lua_State* L) {
+    (void)L;
+    return 0;
+}
+
+static int lua_gfx_draw_text(lua_State* L) {
+    (void)L;
+    return 0;
+}
+
+static int lua_gfx_touch(lua_State* L) {
+    cbdos::input::TouchPoint tp;
+    bool touched = cbdos::input::getTouch(tp);
+    lua_newtable(L);
+    lua_pushboolean(L, touched && tp.isPressed);
+    lua_setfield(L, -2, "touched");
+    lua_pushinteger(L, tp.x);
+    lua_setfield(L, -2, "x");
+    lua_pushinteger(L, tp.y);
+    lua_setfield(L, -2, "y");
+    return 1;
+}
+
+static int lua_gfx_flush(lua_State* L) {
+    (void)L;
+    cbdos::display::flush();
+    return 0;
+}
+#endif
+
 static int lua_gfx_width(lua_State* L) {
     auto caps = cbdos::display::getCapabilities();
     lua_pushinteger(L, caps.width);
@@ -572,105 +488,6 @@ static int lua_gfx_resume_ui(lua_State* L) {
 static int lua_gfx_is_ui_paused(lua_State* L) {
     lua_pushboolean(L, LuaBridge::isUIPaused());
     return 1;
-}
-
-static int lua_gfx_touch(lua_State* L) {
-    cbdos::input::TouchPoint tp;
-    bool touched = cbdos::input::getTouch(tp);
-    lua_newtable(L);
-    lua_pushboolean(L, touched && tp.isPressed);
-    lua_setfield(L, -2, "touched");
-    lua_pushinteger(L, tp.x);
-    lua_setfield(L, -2, "x");
-    lua_pushinteger(L, tp.y);
-    lua_setfield(L, -2, "y");
-    return 1;
-}
-
-static int lua_gfx_flush(lua_State* L) {
-    (void)L;
-    cbdos::display::flush();
-    return 0;
-}
-
-static int lua_gfx_clear(lua_State* L) {
-    uint32_t col = (uint32_t)luaL_optinteger(L, 1, 0x000000);
-    uint16_t col565 = toRGB565(col);
-    auto caps = cbdos::display::getCapabilities();
-    uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
-    uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-
-    size_t totalPixels = caps.width * caps.height;
-    if (fb0) {
-        for (size_t i = 0; i < totalPixels; i++) fb0[i] = col565;
-    }
-    if (fb1 && fb1 != fb0) {
-        for (size_t i = 0; i < totalPixels; i++) fb1[i] = col565;
-    }
-    cbdos::display::flush();
-    return 0;
-}
-
-static int lua_gfx_draw_rect(lua_State* L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    int rw = (int)luaL_checkinteger(L, 3);
-    int rh = (int)luaL_checkinteger(L, 4);
-    uint32_t col = (uint32_t)luaL_checkinteger(L, 5);
-    bool filled = lua_toboolean(L, 6);
-
-    auto caps = cbdos::display::getCapabilities();
-    uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
-    uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawRect(x, y, rw, rh, toRGB565(col), filled, caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
-    cbdos::display::flush();
-    return 0;
-}
-
-static int lua_gfx_draw_circle(lua_State* L) {
-    int cx = (int)luaL_checkinteger(L, 1);
-    int cy = (int)luaL_checkinteger(L, 2);
-    int r = (int)luaL_checkinteger(L, 3);
-    uint32_t col = (uint32_t)luaL_checkinteger(L, 4);
-    bool filled = lua_toboolean(L, 5);
-
-    auto caps = cbdos::display::getCapabilities();
-    uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
-    uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawCircle(cx, cy, r, toRGB565(col), filled, caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
-    cbdos::display::flush();
-    return 0;
-}
-
-static int lua_gfx_draw_line(lua_State* L) {
-    int x0 = (int)luaL_checkinteger(L, 1);
-    int y0 = (int)luaL_checkinteger(L, 2);
-    int x1 = (int)luaL_checkinteger(L, 3);
-    int y1 = (int)luaL_checkinteger(L, 4);
-    uint32_t col = (uint32_t)luaL_checkinteger(L, 5);
-
-    auto caps = cbdos::display::getCapabilities();
-    uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
-    uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawLine(x0, y0, x1, y1, toRGB565(col), caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
-    cbdos::display::flush();
-    return 0;
-}
-
-static int lua_gfx_draw_text(lua_State* L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    const char* text = luaL_checkstring(L, 3);
-    uint32_t col = (uint32_t)luaL_optinteger(L, 4, 0xFFFFFF);
-    int size = (int)luaL_optinteger(L, 5, 1);
-    if (size < 1) size = 1;
-
-    auto caps = cbdos::display::getCapabilities();
-    uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
-    uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawText(x, y, text, toRGB565(col), size, caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
-    cbdos::display::flush();
-    return 0;
 }
 
 void LuaBridge::registerGfxAPI(lua_State* L) {
