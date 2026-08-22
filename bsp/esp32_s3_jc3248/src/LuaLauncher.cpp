@@ -4,6 +4,7 @@
 // Se compila exclusivamente en [env:lua] (app1 / offset 0x510000).
 // Dedica el 100% de la CPU al motor de juego sin sobrecarga de LVGL.
 // Soporta carga de juegos .p8, .p8.png y scripts .lua desde la MicroSD.
+// Incluye menú in-game: volumen, selector de juegos y salida a CBDos OS.
 // ==========================================================================
 
 #include <Arduino.h>
@@ -37,6 +38,28 @@ static uint16_t* s_p8RenderBuf = nullptr;   // 128x128 = 32 KB
 static uint16_t* s_s3ScaledCanvas = nullptr; // 320x320 = 204.8 KB en PSRAM
 static bool s_sdMounted = false;
 static bool s_loadingRom = false;
+static bool s_menuOpen = false;
+static bool s_changeGameRequested = false;
+
+// ─── Retorno Confiable a CBDos OS ─────────────────────────────────────────
+static void rebootToCBDos() {
+    Serial.println("[LUA S3] Retornando a CBDos OS (app0)...");
+    const esp_partition_t* app0 = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, 
+        ESP_PARTITION_SUBTYPE_APP_OTA_0, 
+        NULL
+    );
+    if (!app0) {
+        app0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
+    }
+    if (app0) {
+        esp_ota_set_boot_partition(app0);
+        esp_restart();
+    } else {
+        Serial.println("[LUA S3] Fallback: Reiniciando...");
+        esp_restart();
+    }
+}
 
 // ─── Configuración I2S Audio para ESP32-S3 (JC3248W535) ───────────────────
 #define I2S_NUM         I2S_NUM_0
@@ -85,40 +108,47 @@ static void core0_task(void* pvParameters) {
             g_cartState.touchY.store(tp.y, std::memory_order_relaxed);
             g_cartState.touchPressed.store(true, std::memory_order_relaxed);
 
-            // Mapeo Gamepad S3 (Portrait 320x480)
-            uint16_t state = 0;
-            
-            // D-Pad: Cruceta real en cruz (Centro en cx=70, cy=390)
-            if (tp.x >= 15 && tp.x <= 125 && tp.y >= 340 && tp.y <= 440) {
-                int dx = tp.x - 70;
-                int dy = tp.y - 390;
-                if (std::abs(dx) > std::abs(dy)) {
-                    if (dx < -10) state |= BTN_LEFT;
-                    else if (dx > 10) state |= BTN_RIGHT;
-                } else {
-                    if (dy < -10) state |= BTN_UP;
-                    else if (dy > 10) state |= BTN_DOWN;
+            // Si el menú modal está abierto, los toques se gestionan en la UI modal
+            if (!s_menuOpen) {
+                uint16_t state = 0;
+                
+                // D-Pad: Cruceta real en cruz (Centro en cx=70, cy=390)
+                if (tp.x >= 15 && tp.x <= 125 && tp.y >= 340 && tp.y <= 440) {
+                    int dx = tp.x - 70;
+                    int dy = tp.y - 390;
+                    if (std::abs(dx) > std::abs(dy)) {
+                        if (dx < -10) state |= BTN_LEFT;
+                        else if (dx > 10) state |= BTN_RIGHT;
+                    } else {
+                        if (dy < -10) state |= BTN_UP;
+                        else if (dy > 10) state |= BTN_DOWN;
+                    }
                 }
-            }
 
-            // Botón O (cx=205, cy=405)
-            int dOx = tp.x - 205, dOy = tp.y - 405;
-            if (dOx * dOx + dOy * dOy <= 32 * 32) {
-                state |= BTN_O;
-            }
+                // Botón O (cx=205, cy=405)
+                int dOx = tp.x - 205, dOy = tp.y - 405;
+                if (dOx * dOx + dOy * dOy <= 32 * 32) {
+                    state |= BTN_O;
+                }
 
-            // Botón X (cx=265, cy=365)
-            int dXx = tp.x - 265, dXy = tp.y - 365;
-            if (dXx * dXx + dXy * dXy <= 32 * 32) {
-                state |= BTN_X;
-            }
+                // Botón X (cx=265, cy=365)
+                int dXx = tp.x - 265, dXy = tp.y - 365;
+                if (dXx * dXx + dXy * dXy <= 32 * 32) {
+                    state |= BTN_X;
+                }
 
-            // Botón Salir a CBDos (arriba derecha)
-            if (tp.x > 240 && tp.y < 50) {
-                state |= BTN_PAUSE;
-                g_cartState.exitToCBDosRequested.store(true);
+                // Botón MENU Gamepad (Centro Y: 322..348, X: 115..205)
+                if (tp.x >= 115 && tp.x <= 205 && tp.y >= 322 && tp.y <= 348) {
+                    s_menuOpen = true;
+                }
+
+                // Botón Salir a CBDos (arriba derecha X > 240, Y < 45)
+                if (tp.x > 240 && tp.y < 45) {
+                    g_cartState.exitToCBDosRequested.store(true);
+                }
+
+                g_cartState.btnState.store(state, std::memory_order_relaxed);
             }
-            g_cartState.btnState.store(state, std::memory_order_relaxed);
         } else {
             g_cartState.touchPressed.store(false, std::memory_order_relaxed);
             g_cartState.btnState.store(0, std::memory_order_relaxed);
@@ -129,7 +159,7 @@ static void core0_task(void* pvParameters) {
         size_t written = 0;
         i2s_write(I2S_NUM, pcmBuffer, 256 * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(20));
 
-        // 3. E/S Asíncrona MicroSD (solo si no estamos cargando una ROM)
+        // 3. E/S Asíncrona MicroSD
         if (!s_loadingRom) {
             AsyncFS::getInstance().updateCore0();
         }
@@ -170,7 +200,6 @@ static std::vector<std::string> scanSDGames() {
                     String fullPath = String(dirPath);
                     if (!fullPath.endsWith("/")) fullPath += "/";
                     fullPath += name;
-                    // Evitar duplicados
                     if (std::find(games.begin(), games.end(), fullPath.c_str()) == games.end()) {
                         games.push_back(fullPath.c_str());
                     }
@@ -202,7 +231,7 @@ static std::string showGameSelector(const std::vector<std::string>& gameList) {
         canvas->setCursor(15, 12);
         canvas->print("PICO-8 ROMS");
 
-        // Botón Salir
+        // Botón Salir a CBDos
         canvas->fillRoundRect(245, 8, 68, 28, 5, 0xA800);
         canvas->drawRoundRect(245, 8, 68, 28, 5, 0xF800);
         canvas->setTextSize(1);
@@ -216,8 +245,9 @@ static std::string showGameSelector(const std::vector<std::string>& gameList) {
             canvas->fillRoundRect(10, y, 300, 40, 6, (i % 2 == 0) ? 0x18C8 : 0x212B);
             canvas->drawRoundRect(10, y, 300, 40, 6, 0x4A69);
 
-            // Icono
+            // Icono de cartucho
             canvas->fillRect(20, y + 10, 20, 20, 0xFBB7);
+            canvas->fillRect(22, y + 14, 16, 12, 0x0000);
 
             // Nombre
             std::string path = gameList[i];
@@ -236,8 +266,15 @@ static std::string showGameSelector(const std::vector<std::string>& gameList) {
 
         // Detectar toque
         if (g_cartState.touchPressed.load(std::memory_order_relaxed)) {
+            int tx = g_cartState.touchX.load(std::memory_order_relaxed);
             int ty = g_cartState.touchY.load(std::memory_order_relaxed);
 
+            // Botón CBDos en cabecera
+            if (tx >= 240 && ty <= 45) {
+                rebootToCBDos();
+            }
+
+            // Toque en lista
             if (ty >= 55) {
                 int clicked = scrollOffset + (ty - 55) / 48;
                 if (clicked >= 0 && clicked < (int)gameList.size()) {
@@ -248,6 +285,10 @@ static std::string showGameSelector(const std::vector<std::string>& gameList) {
         }
 
         delay(50);
+    }
+
+    if (g_cartState.exitToCBDosRequested.load()) {
+        rebootToCBDos();
     }
 
     return "";
@@ -305,6 +346,8 @@ void setup() {
 
 // ─── Loop Principal (Core 1) ──────────────────────────────────────────────
 void loop() {
+    s_changeGameRequested = false;
+
     // 1. Escanear y seleccionar juego si hay SD
     std::string selectedGame;
     auto games = scanSDGames();
@@ -331,7 +374,6 @@ void loop() {
             File f = SD.open(selectedGame.c_str(), FILE_READ);
             if (f) {
                 size_t fsize = f.size();
-                Serial.printf("[ROM] Tamaño del archivo: %u bytes\n", (unsigned int)fsize);
                 std::vector<uint8_t> buffer(fsize);
                 
                 size_t bytesRead = 0;
@@ -342,7 +384,6 @@ void loop() {
                     bytesRead += rd;
                 }
                 f.close();
-                Serial.printf("[ROM] Leídos: %u bytes\n", (unsigned int)bytesRead);
 
                 if (selectedGame.rfind(".png") != std::string::npos || selectedGame.rfind(".PNG") != std::string::npos) {
                     if (cart.loadFromP8PngBytes(buffer.data(), bytesRead)) {
@@ -388,24 +429,27 @@ void loop() {
     const TickType_t delayTicks = pdMS_TO_TICKS(16); // ~60 FPS
     uint16_t prevBtnState = 0;
 
-    while (!g_cartState.exitToCBDosRequested.load()) {
+    while (!g_cartState.exitToCBDosRequested.load() && !s_changeGameRequested) {
         // Actualizar flanco de subida para btnp()
         uint16_t currentBtn = g_cartState.btnState.load(std::memory_order_relaxed);
         uint16_t pressedBtn = currentBtn & ~prevBtnState;
         prevBtnState = currentBtn;
         g_cartState.btnpState.store(pressedBtn, std::memory_order_relaxed);
 
-        if (lua.hasFunction("_update60")) lua.runFunction("_update60");
-        else if (lua.hasFunction("_update")) lua.runFunction("_update");
+        // Si el menú modal no está abierto, actualizar lógica del juego
+        if (!s_menuOpen) {
+            if (lua.hasFunction("_update60")) lua.runFunction("_update60");
+            else if (lua.hasFunction("_update")) lua.runFunction("_update");
 
-        if (lua.hasFunction("_draw")) lua.runFunction("_draw");
+            if (lua.hasFunction("_draw")) lua.runFunction("_draw");
 
-        // Convertir VRAM a RGB565
-        P8Api::blitToRGB565(s_p8RenderBuf, 128);
+            // Convertir VRAM a RGB565
+            P8Api::blitToRGB565(s_p8RenderBuf, 128);
 
-        // Escalar de 128x128 a 320x320
-        if (s_s3ScaledCanvas) {
-            scale128to320(s_p8RenderBuf, s_s3ScaledCanvas);
+            // Escalar de 128x128 a 320x320
+            if (s_s3ScaledCanvas) {
+                scale128to320(s_p8RenderBuf, s_s3ScaledCanvas);
+            }
         }
 
         // Volcar al Canvas de la pantalla
@@ -429,10 +473,18 @@ void loop() {
             // Flechas en relieve del D-Pad
             canvas->setTextSize(1);
             canvas->setTextColor(0xAD55);
-            canvas->setCursor(67, 350); canvas->print("^"); // Arriba
-            canvas->setCursor(67, 420); canvas->print("v"); // Abajo
-            canvas->setCursor(32, 386); canvas->print("<"); // Izquierda
-            canvas->setCursor(102, 386); canvas->print(">"); // Derecha
+            canvas->setCursor(67, 350); canvas->print("^");
+            canvas->setCursor(67, 420); canvas->print("v");
+            canvas->setCursor(32, 386); canvas->print("<");
+            canvas->setCursor(102, 386); canvas->print(">");
+
+            // ─── Botón MENU Central (X: 120..200, Y: 324..346) ───
+            canvas->fillRoundRect(120, 324, 80, 22, 5, 0x212B);
+            canvas->drawRoundRect(120, 324, 80, 22, 5, 0x07FF);
+            canvas->setTextSize(1);
+            canvas->setTextColor(0x07FF);
+            canvas->setCursor(140, 331);
+            canvas->print("MENU");
 
             // ─── Botones de Acción PICO-8 (🅾️ y ❎ en Diagonal) ───
             canvas->fillCircle(205, 405, 22, 0xFBB7);
@@ -455,6 +507,98 @@ void loop() {
             canvas->setTextColor(0xFFFF);
             canvas->setCursor(256, 15);
             canvas->print("CBDos");
+
+            // ─── Ventana Modal de Ajustes / Menú ───
+            if (s_menuOpen) {
+                // Fondo oscurecido
+                canvas->fillRoundRect(30, 80, 260, 230, 10, 0x10A8);
+                canvas->drawRoundRect(30, 80, 260, 230, 10, 0x07FF);
+
+                // Título
+                canvas->setTextSize(2);
+                canvas->setTextColor(0xFD00);
+                canvas->setCursor(65, 95);
+                canvas->print("AJUSTES P8");
+
+                // Control de Volumen (Y: 130..160)
+                uint8_t curVol = P8Synth::getInstance().getMasterVolume();
+                canvas->setTextSize(1);
+                canvas->setTextColor(0xFFFF);
+                canvas->setCursor(45, 140);
+                canvas->printf("VOL: %3d%%", curVol);
+
+                // Botón [-] Vol (X: 140..170)
+                canvas->fillRoundRect(140, 132, 35, 25, 4, 0x3186);
+                canvas->drawRoundRect(140, 132, 35, 25, 4, 0xFFFF);
+                canvas->setTextSize(2);
+                canvas->setTextColor(0xFFFF);
+                canvas->setCursor(152, 136);
+                canvas->print("-");
+
+                // Botón [+] Vol (X: 190..225)
+                canvas->fillRoundRect(190, 132, 35, 25, 4, 0x3186);
+                canvas->drawRoundRect(190, 132, 35, 25, 4, 0xFFFF);
+                canvas->setCursor(200, 136);
+                canvas->print("+");
+
+                // Botón [ 🔁 CAMBIAR JUEGO ] (Y: 175..205)
+                canvas->fillRoundRect(45, 175, 230, 30, 6, 0x18C8);
+                canvas->drawRoundRect(45, 175, 230, 30, 6, 0x07E0);
+                canvas->setTextSize(1);
+                canvas->setTextColor(0x07E0);
+                canvas->setCursor(85, 185);
+                canvas->print("ELEGIR OTRO JUEGO");
+
+                // Botón [ 🏠 SALIR A CBDOS ] (Y: 220..250)
+                canvas->fillRoundRect(45, 220, 230, 30, 6, 0xA800);
+                canvas->drawRoundRect(45, 220, 230, 30, 6, 0xF800);
+                canvas->setTextColor(0xFFFF);
+                canvas->setCursor(95, 230);
+                canvas->print("SALIR A CBDOS");
+
+                // Botón [ ▶️ REANUDAR ] (Y: 265..295)
+                canvas->fillRoundRect(45, 265, 230, 30, 6, 0x212B);
+                canvas->drawRoundRect(45, 265, 230, 30, 6, 0x7BEF);
+                canvas->setTextColor(0xFFFF);
+                canvas->setCursor(120, 275);
+                canvas->print("REANUDAR");
+
+                // Gestión táctil dentro del modal
+                if (g_cartState.touchPressed.load(std::memory_order_relaxed)) {
+                    int tx = g_cartState.touchX.load(std::memory_order_relaxed);
+                    int ty = g_cartState.touchY.load(std::memory_order_relaxed);
+
+                    // Botón Vol -
+                    if (tx >= 140 && tx <= 175 && ty >= 132 && ty <= 157) {
+                        int v = (int)curVol - 10;
+                        if (v < 0) v = 0;
+                        P8Synth::getInstance().setMasterVolume((uint8_t)v);
+                        delay(120);
+                    }
+                    // Botón Vol +
+                    if (tx >= 190 && tx <= 225 && ty >= 132 && ty <= 157) {
+                        int v = (int)curVol + 10;
+                        if (v > 100) v = 100;
+                        P8Synth::getInstance().setMasterVolume((uint8_t)v);
+                        delay(120);
+                    }
+                    // Cambiar juego
+                    if (tx >= 45 && tx <= 275 && ty >= 175 && ty <= 205) {
+                        s_menuOpen = false;
+                        s_changeGameRequested = true;
+                        delay(200);
+                    }
+                    // Salir a CBDos
+                    if (tx >= 45 && tx <= 275 && ty >= 220 && ty <= 250) {
+                        rebootToCBDos();
+                    }
+                    // Reanudar
+                    if (tx >= 45 && tx <= 275 && ty >= 265 && ty <= 295) {
+                        s_menuOpen = false;
+                        delay(200);
+                    }
+                }
+            }
         }
 
         s_display.flush();
@@ -462,12 +606,7 @@ void loop() {
         vTaskDelayUntil(&lastTick, delayTicks);
     }
 
-    // Salir a CBDos (Factory / app0)
-    Serial.println("[LUA S3] Retornando a CBDos...");
-    const esp_partition_t* factory = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
-    if (factory) {
-        esp_ota_set_boot_partition(factory);
-        esp_restart();
+    if (g_cartState.exitToCBDosRequested.load()) {
+        rebootToCBDos();
     }
-    while (1) delay(1000);
 }
