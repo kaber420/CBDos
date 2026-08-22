@@ -3,6 +3,7 @@
 //
 // Se compila exclusivamente en [env:lua] (app1 / offset 0x510000).
 // Dedica el 100% de la CPU al motor de juego sin sobrecarga de LVGL.
+// Soporta carga de juegos .p8, .p8.png y scripts .lua desde la MicroSD.
 // ==========================================================================
 
 #include <Arduino.h>
@@ -13,6 +14,9 @@
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
 #include <driver/i2s.h>
+#include <vector>
+#include <string>
+#include <algorithm>
 
 #include "SharedState.hpp"
 #include "AsyncFS.hpp"
@@ -27,10 +31,12 @@ CartridgeSharedState g_cartState;
 
 static JC3248W535_Display s_display;
 static JC3248W535_Touch   s_touch;
+static SPIClass*          s_sdSPI = nullptr;
 
 static uint16_t* s_p8RenderBuf = nullptr;   // 128x128 = 32 KB
 static uint16_t* s_s3ScaledCanvas = nullptr; // 320x320 = 204.8 KB en PSRAM
 static bool s_sdMounted = false;
+static bool s_loadingRom = false;
 
 // ─── Configuración I2S Audio para ESP32-S3 (JC3248W535) ───────────────────
 #define I2S_NUM         I2S_NUM_0
@@ -123,8 +129,10 @@ static void core0_task(void* pvParameters) {
         size_t written = 0;
         i2s_write(I2S_NUM, pcmBuffer, 256 * 2 * sizeof(int16_t), &written, pdMS_TO_TICKS(20));
 
-        // 3. E/S Asíncrona MicroSD
-        AsyncFS::getInstance().updateCore0();
+        // 3. E/S Asíncrona MicroSD (solo si no estamos cargando una ROM)
+        if (!s_loadingRom) {
+            AsyncFS::getInstance().updateCore0();
+        }
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
@@ -141,6 +149,108 @@ static void scale128to320(const uint16_t* src128, uint16_t* dst320) {
             dstRow[dx] = srcRow[sx];
         }
     }
+}
+
+// ─── Escaneo de Juegos en MicroSD ─────────────────────────────────────────
+static std::vector<std::string> scanSDGames() {
+    std::vector<std::string> games;
+    if (!s_sdMounted) return games;
+
+    const char* dirs[] = {"/p8", "/games/p8", "/games/lua", "/games", "/"};
+
+    for (const char* dirPath : dirs) {
+        File root = SD.open(dirPath);
+        if (!root || !root.isDirectory()) continue;
+
+        File file = root.openNextFile();
+        while (file) {
+            if (!file.isDirectory()) {
+                String name = file.name();
+                if (name.endsWith(".p8") || name.endsWith(".png") || name.endsWith(".lua")) {
+                    String fullPath = String(dirPath);
+                    if (!fullPath.endsWith("/")) fullPath += "/";
+                    fullPath += name;
+                    // Evitar duplicados
+                    if (std::find(games.begin(), games.end(), fullPath.c_str()) == games.end()) {
+                        games.push_back(fullPath.c_str());
+                    }
+                }
+            }
+            file = root.openNextFile();
+        }
+    }
+
+    std::sort(games.begin(), games.end());
+    return games;
+}
+
+// ─── Selector Táctil de Juegos ────────────────────────────────────────────
+static std::string showGameSelector(const std::vector<std::string>& gameList) {
+    if (!s_display.getCanvas() || gameList.empty()) return "";
+
+    int selectedIdx = -1;
+    int scrollOffset = 0;
+
+    while (selectedIdx < 0 && !g_cartState.exitToCBDosRequested.load()) {
+        auto canvas = s_display.getCanvas();
+        canvas->fillScreen(0x0845); // Azul Cyberdeck oscuro
+
+        // Cabecera
+        canvas->fillRect(0, 0, 320, 45, 0x10A8);
+        canvas->setTextSize(2);
+        canvas->setTextColor(0xFD00); // Amarillo retro
+        canvas->setCursor(15, 12);
+        canvas->print("PICO-8 ROMS");
+
+        // Botón Salir
+        canvas->fillRoundRect(245, 8, 68, 28, 5, 0xA800);
+        canvas->drawRoundRect(245, 8, 68, 28, 5, 0xF800);
+        canvas->setTextSize(1);
+        canvas->setTextColor(0xFFFF);
+        canvas->setCursor(256, 17);
+        canvas->print("CBDos");
+
+        // Lista de juegos
+        int y = 55;
+        for (size_t i = scrollOffset; i < gameList.size() && y < 450; i++) {
+            canvas->fillRoundRect(10, y, 300, 40, 6, (i % 2 == 0) ? 0x18C8 : 0x212B);
+            canvas->drawRoundRect(10, y, 300, 40, 6, 0x4A69);
+
+            // Icono
+            canvas->fillRect(20, y + 10, 20, 20, 0xFBB7);
+
+            // Nombre
+            std::string path = gameList[i];
+            size_t slash = path.rfind('/');
+            std::string name = (slash != std::string::npos) ? path.substr(slash + 1) : path;
+
+            canvas->setTextSize(1);
+            canvas->setTextColor(0xFFFF);
+            canvas->setCursor(50, y + 15);
+            canvas->print(name.c_str());
+
+            y += 48;
+        }
+
+        s_display.flush();
+
+        // Detectar toque
+        if (g_cartState.touchPressed.load(std::memory_order_relaxed)) {
+            int ty = g_cartState.touchY.load(std::memory_order_relaxed);
+
+            if (ty >= 55) {
+                int clicked = scrollOffset + (ty - 55) / 48;
+                if (clicked >= 0 && clicked < (int)gameList.size()) {
+                    selectedIdx = clicked;
+                    return gameList[selectedIdx];
+                }
+            }
+        }
+
+        delay(50);
+    }
+
+    return "";
 }
 
 // ─── Setup ────────────────────────────────────────────────────────────────
@@ -165,13 +275,24 @@ void setup() {
     // 4. Inicializar Audio I2S
     initI2S();
 
-    // 5. Inicializar MicroSD
+    // 5. Inicializar MicroSD en bus SPI dedicado HSPI (Pines 12, 13, 11, 10 @ 10 MHz)
     pinMode(10, OUTPUT);
     digitalWrite(10, HIGH);
     delay(50);
-    s_sdMounted = SD.begin(10, SPI, 40000000);
+
+    s_sdSPI = new SPIClass(HSPI);
+    s_sdSPI->begin(12, 13, 11, 10); // SCK=12, MISO=13, MOSI=11, SS=10
+    
+    for (int retry = 0; retry < 5 && !s_sdMounted; retry++) {
+        s_sdMounted = SD.begin(10, *s_sdSPI, 10000000);
+        if (!s_sdMounted) {
+            s_sdMounted = SD.begin(10, *s_sdSPI, 4000000);
+        }
+        if (!s_sdMounted) delay(100);
+    }
+
     if (s_sdMounted) {
-        Serial.println("[SD] MicroSD montada con éxito");
+        Serial.println("[SD] MicroSD montada correctamente en bus HSPI");
     } else {
         Serial.println("[SD] Aviso: No se detectó MicroSD");
     }
@@ -179,32 +300,101 @@ void setup() {
     // 6. Lanzar Tarea Core 0 para Audio y Touch
     xTaskCreatePinnedToCore(core0_task, "s3_audio_touch", 8192, NULL, 6, NULL, 0);
 
-    Serial.println("[Setup] Hardware listo. Iniciando bucle en Core 1.");
+    Serial.println("[Setup] Hardware listo.");
 }
 
 // ─── Loop Principal (Core 1) ──────────────────────────────────────────────
 void loop() {
+    // 1. Escanear y seleccionar juego si hay SD
+    std::string selectedGame;
+    auto games = scanSDGames();
+    if (!games.empty()) {
+        selectedGame = showGameSelector(games);
+    }
+
+    // 2. Inicializar VM Lua
     LuaContext lua;
     lua.init(true);
 
     P8Cartridge cart;
-    std::string defaultCode = "function _init() cls(1) t=0 end\n"
-                              "function _update60() t+=1 end\n"
-                              "function _draw() cls(1) print('CBDOS PICO-8 S3', 30, 40, 7) circfill(64+cos(t/30)*20, 64+sin(t/30)*20, 10, 8+flr(t/10)%8) end\n";
+    bool isPico8 = true;
 
-    cart.loadFromP8String(defaultCode);
-    P8Api::init(&cart);
-    P8Api::registerAll(lua.getRawState());
-    P8Synth::getInstance().init(&cart, 44100);
+    if (!selectedGame.empty()) {
+        Serial.printf("[ROM] Cargando: %s\n", selectedGame.c_str());
+        s_loadingRom = true;
 
-    std::string err;
-    lua.loadAndRunString(cart.getLuaCode(), &err);
+        if (selectedGame.rfind(".lua") == selectedGame.length() - 4) {
+            isPico8 = false;
+        }
+
+        if (isPico8) {
+            File f = SD.open(selectedGame.c_str(), FILE_READ);
+            if (f) {
+                size_t fsize = f.size();
+                Serial.printf("[ROM] Tamaño del archivo: %u bytes\n", (unsigned int)fsize);
+                std::vector<uint8_t> buffer(fsize);
+                
+                size_t bytesRead = 0;
+                while (bytesRead < fsize && f.available()) {
+                    size_t chunk = (fsize - bytesRead > 4096) ? 4096 : (fsize - bytesRead);
+                    size_t rd = f.read(buffer.data() + bytesRead, chunk);
+                    if (rd == 0) break;
+                    bytesRead += rd;
+                }
+                f.close();
+                Serial.printf("[ROM] Leídos: %u bytes\n", (unsigned int)bytesRead);
+
+                if (selectedGame.rfind(".png") != std::string::npos || selectedGame.rfind(".PNG") != std::string::npos) {
+                    if (cart.loadFromP8PngBytes(buffer.data(), bytesRead)) {
+                        Serial.println("[ROM] Cartucho .p8.png decodificado con éxito");
+                    } else {
+                        Serial.println("[ROM] ERROR al decodificar .p8.png");
+                    }
+                } else {
+                    std::string strContent((const char*)buffer.data(), bytesRead);
+                    cart.loadFromP8String(strContent);
+                    Serial.println("[ROM] Cartucho .p8 cargado con éxito");
+                }
+            } else {
+                Serial.println("[ROM] ERROR: No se pudo abrir el archivo");
+            }
+        }
+        s_loadingRom = false;
+    } else {
+        // Demo por defecto si no hay juego seleccionado
+        std::string defaultCode = "function _init() cls(1) t=0 end\n"
+                                  "function _update60() t+=1 end\n"
+                                  "function _draw() cls(1) print('CBDOS PICO-8 S3', 30, 30, 7) print('COLOCA JUEGOS .P8 EN SD', 10, 50, 11) circfill(64+cos(t/30)*25, 85+sin(t/30)*25, 8, 8+flr(t/10)%8) end\n";
+        cart.loadFromP8String(defaultCode);
+    }
+
+    if (isPico8) {
+        P8Api::init(&cart);
+        P8Api::registerAll(lua.getRawState());
+        P8Synth::getInstance().init(&cart, 44100);
+
+        std::string err;
+        if (!lua.loadAndRunString(cart.getLuaCode(), &err)) {
+            Serial.printf("[LUA ERR] %s\n", err.c_str());
+        }
+    } else {
+        CbdApi::init(s_s3ScaledCanvas, 320, 320);
+        CbdApi::registerAll(lua.getRawState());
+    }
+
     lua.runFunction("_init");
 
     TickType_t lastTick = xTaskGetTickCount();
     const TickType_t delayTicks = pdMS_TO_TICKS(16); // ~60 FPS
+    uint16_t prevBtnState = 0;
 
     while (!g_cartState.exitToCBDosRequested.load()) {
+        // Actualizar flanco de subida para btnp()
+        uint16_t currentBtn = g_cartState.btnState.load(std::memory_order_relaxed);
+        uint16_t pressedBtn = currentBtn & ~prevBtnState;
+        prevBtnState = currentBtn;
+        g_cartState.btnpState.store(pressedBtn, std::memory_order_relaxed);
+
         if (lua.hasFunction("_update60")) lua.runFunction("_update60");
         else if (lua.hasFunction("_update")) lua.runFunction("_update");
 
@@ -230,13 +420,10 @@ void loop() {
             canvas->drawFastHLine(0, 320, 320, 0x4A69);  // Línea divisoria superior
 
             // ─── D-Pad: Cruceta Auténtica en Cruz (+) ───
-            // Brazo vertical (X: 55, Y: 345, W: 30, H: 90)
             canvas->fillRect(55, 345, 30, 90, 0x2104);
             canvas->drawRect(55, 345, 30, 90, 0x632C);
-            // Brazo horizontal (X: 25, Y: 375, W: 90, H: 30)
             canvas->fillRect(25, 375, 90, 30, 0x2104);
             canvas->drawRect(25, 375, 90, 30, 0x632C);
-            // Muesca central del D-Pad
             canvas->fillCircle(70, 390, 7, 0x18C3);
 
             // Flechas en relieve del D-Pad
@@ -248,7 +435,6 @@ void loop() {
             canvas->setCursor(102, 386); canvas->print(">"); // Derecha
 
             // ─── Botones de Acción PICO-8 (🅾️ y ❎ en Diagonal) ───
-            // Botón O (cx=205, cy=405, Rosa PICO-8)
             canvas->fillCircle(205, 405, 22, 0xFBB7);
             canvas->drawCircle(205, 405, 22, 0xFFFF);
             canvas->setTextSize(2);
@@ -256,7 +442,6 @@ void loop() {
             canvas->setCursor(200, 398);
             canvas->print("O");
 
-            // Botón X (cx=265, cy=365, Azul PICO-8)
             canvas->fillCircle(265, 365, 22, 0x2D7F);
             canvas->drawCircle(265, 365, 22, 0xFFFF);
             canvas->setTextColor(0xFFFF);
