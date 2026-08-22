@@ -1,0 +1,12 @@
+{
+  "name": "liblua",
+  "version": "5.4.6",
+  "description": "Lua 5.4.6 Core Library",
+  "build": {
+    "includeDir": ".",
+    "srcDir": ".",
+    "flags": [
+      "-DLUA_USE_C89"
+    ]
+  }
+}
