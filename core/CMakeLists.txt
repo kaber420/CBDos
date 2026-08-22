@@ -25,6 +25,7 @@ idf_component_register(
         "src/ui/views/WiFiConfigView.cpp"
         "src/ui/views/WallpaperConfigView.cpp"
         "src/ui/views/StorageConfigView.cpp"
+        "src/ui/views/TimeConfigView.cpp"
         "src/ui/views/MusicPlayerView.cpp"
         "src/ui/views/GalleryListView.cpp"
         "src/ui/views/GalleryView.cpp"

@@ -2,6 +2,7 @@
 #include "WiFiConfigView.hpp"
 #include "WallpaperConfigView.hpp"
 #include "StorageConfigView.hpp"
+#include "TimeConfigView.hpp"
 #include "../modals/DiagnosticsModal.hpp"
 #include "../modals/AboutModal.hpp"
 #include "../UIManager.hpp"
@@ -93,6 +94,8 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
             UIManager::getInstance().pushView(std::make_shared<WiFiConfigView>());
         } else if (id == 2) {
             UIManager::getInstance().pushView(std::make_shared<StorageConfigView>());
+        } else if (id == 3) {
+            UIManager::getInstance().pushView(std::make_shared<TimeConfigView>());
         } else if (id == 5) {
             UIManager::getInstance().pushView(std::make_shared<WallpaperConfigView>());
         } else if (id == 6) {
@@ -125,6 +128,7 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
 
     OptionItem options[] = {
         {"WiFi", "Red local y parametros IP", 1},
+        {"Fecha y Hora", "Zona horaria, horario de verano y NTP", 3},
         {"Almacenamiento", "Gestion de MicroSD, Flash y USB", 2},
         {"Fondo de Pantalla", "Elegir wallpaper de SD o Flash", 5},
         {"Sistema", "Diagnostico de hardware y memoria", 6},
