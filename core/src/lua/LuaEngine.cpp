@@ -54,13 +54,26 @@ void* LuaEngine::psramAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
     }
 
     if (ptr == nullptr) {
-        void* p = heap_caps_malloc(nsize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        void* p = nullptr;
+        // Asignaciones pequeñas (<256 bytes) en SRAM interna para máxima velocidad de ejecución
+        if (nsize < 256) {
+            p = heap_caps_malloc(nsize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
+        if (!p) {
+            p = heap_caps_malloc(nsize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        }
         if (!p) {
             p = malloc(nsize);
         }
         return p;
     } else {
-        void* p = heap_caps_realloc(ptr, nsize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        void* p = nullptr;
+        if (nsize < 256) {
+            p = heap_caps_realloc(ptr, nsize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
+        if (!p) {
+            p = heap_caps_realloc(ptr, nsize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        }
         if (!p) {
             p = realloc(ptr, nsize);
         }

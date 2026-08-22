@@ -39,7 +39,14 @@ uint8_t getBrightness() {
 
 void* getFramebuffer(int index) {
     (void)index;
-    return s_display.getCanvas();
+    if (s_display.getCanvas()) {
+        return (void*)s_display.getCanvas()->getFramebuffer();
+    }
+    return nullptr;
+}
+
+void flush() {
+    s_display.flush();
 }
 
 bool lock(uint32_t timeout_ms) {

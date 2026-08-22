@@ -90,6 +90,12 @@ void LuaRunner::hookCb(lua_State* L, lua_Debug* ar) {
     if (LuaRunner::getInstance().isAbortRequested()) {
         luaL_error(L, "Ejecución cancelada por el usuario.");
     }
+    // Ceder 1 tick a FreeRTOS periódicamente para alimentar el Task Watchdog Timer (TWDT)
+    static uint32_t s_hookCounter = 0;
+    if (++s_hookCounter >= 50) { // Cada 50,000 instrucciones de Lua (~3-5ms de CPU)
+        s_hookCounter = 0;
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
 }
 
 bool LuaRunner::startScript(const std::string& filePath) {
@@ -173,8 +179,8 @@ void LuaRunner::luaTask(void* param) {
     }
 
     if (L) {
-        // Instalar hook de interrupción cada 500 instrucciones de bytecode
-        lua_sethook(L, hookCb, LUA_MASKCOUNT, 500);
+        // Instalar hook de interrupción cada 1000 instrucciones de bytecode
+        lua_sethook(L, hookCb, LUA_MASKCOUNT, 1000);
 
         bool success = false;
         std::string resultMsg;
@@ -202,6 +208,9 @@ void LuaRunner::luaTask(void* param) {
         runner->_state = LuaRunnerState::ERROR;
         runner->appendLog("[Error] Motor Lua no inicializado.");
     }
+
+    // Asegurar restauración de la interfaz de LVGL al terminar o fallar el script
+    LuaBridge::resumeUI();
 
     runner->_taskHandle = nullptr;
     vTaskDelete(NULL);

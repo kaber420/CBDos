@@ -587,6 +587,12 @@ static int lua_gfx_touch(lua_State* L) {
     return 1;
 }
 
+static int lua_gfx_flush(lua_State* L) {
+    (void)L;
+    cbdos::display::flush();
+    return 0;
+}
+
 static int lua_gfx_clear(lua_State* L) {
     uint32_t col = (uint32_t)luaL_optinteger(L, 1, 0x000000);
     uint16_t col565 = toRGB565(col);
@@ -598,9 +604,10 @@ static int lua_gfx_clear(lua_State* L) {
     if (fb0) {
         for (size_t i = 0; i < totalPixels; i++) fb0[i] = col565;
     }
-    if (fb1) {
+    if (fb1 && fb1 != fb0) {
         for (size_t i = 0; i < totalPixels; i++) fb1[i] = col565;
     }
+    cbdos::display::flush();
     return 0;
 }
 
@@ -615,7 +622,8 @@ static int lua_gfx_draw_rect(lua_State* L) {
     auto caps = cbdos::display::getCapabilities();
     uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
     uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawRect(x, y, rw, rh, toRGB565(col), filled, caps.width, caps.height, fb0, fb1);
+    drawRect(x, y, rw, rh, toRGB565(col), filled, caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
+    cbdos::display::flush();
     return 0;
 }
 
@@ -629,7 +637,8 @@ static int lua_gfx_draw_circle(lua_State* L) {
     auto caps = cbdos::display::getCapabilities();
     uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
     uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawCircle(cx, cy, r, toRGB565(col), filled, caps.width, caps.height, fb0, fb1);
+    drawCircle(cx, cy, r, toRGB565(col), filled, caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
+    cbdos::display::flush();
     return 0;
 }
 
@@ -643,7 +652,8 @@ static int lua_gfx_draw_line(lua_State* L) {
     auto caps = cbdos::display::getCapabilities();
     uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
     uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawLine(x0, y0, x1, y1, toRGB565(col), caps.width, caps.height, fb0, fb1);
+    drawLine(x0, y0, x1, y1, toRGB565(col), caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
+    cbdos::display::flush();
     return 0;
 }
 
@@ -658,7 +668,8 @@ static int lua_gfx_draw_text(lua_State* L) {
     auto caps = cbdos::display::getCapabilities();
     uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
     uint16_t* fb1 = (uint16_t*)cbdos::display::getFramebuffer(1);
-    drawText(x, y, text, toRGB565(col), size, caps.width, caps.height, fb0, fb1);
+    drawText(x, y, text, toRGB565(col), size, caps.width, caps.height, fb0, (fb1 != fb0) ? fb1 : nullptr);
+    cbdos::display::flush();
     return 0;
 }
 
@@ -675,6 +686,8 @@ void LuaBridge::registerGfxAPI(lua_State* L) {
     lua_setfield(L, -2, "draw_line");
     lua_pushcfunction(L, lua_gfx_draw_text);
     lua_setfield(L, -2, "draw_text");
+    lua_pushcfunction(L, lua_gfx_flush);
+    lua_setfield(L, -2, "flush");
     lua_pushcfunction(L, lua_gfx_touch);
     lua_setfield(L, -2, "touch");
     lua_pushcfunction(L, lua_gfx_rgb);

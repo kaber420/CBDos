@@ -35,6 +35,10 @@ void* getFramebuffer(int index) {
     return DisplayHAL::getInstance().getFrameBuffer(index);
 }
 
+void flush() {
+    // No-op en P4 (panel MIPI-DPI escanea continuamente desde memoria PSRAM por hardware DMA)
+}
+
 bool lock(uint32_t timeout_ms) {
     return LVGL_Port::getInstance().lock(timeout_ms);
 }
