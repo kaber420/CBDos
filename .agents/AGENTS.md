@@ -88,3 +88,9 @@ El proyecto opera bajo un modelo desacoplado:
    - **ESTRICTAMENTE PROHIBIDO** inicializar la red (Wi-Fi, Bluetooth, ESP-Hosted, DHCP o tareas de fondo de red) de forma síncrona o automática en `app_main()` o durante el encendido del sistema.
    - El sistema operativo CBDos **DEBE ser 100% funcional y autónomo** (pantalla, táctil, audio, almacenamiento MicroSD, interfaz gráfica LVGL) **con o sin red conectada**, sin depender de la presencia, alimentación o respuesta de ningún coprocesador inalámbrico (ESP32-C6).
    - Toda inicialización de red debe ser **exclusivamente bajo demanda** cuando el usuario lo solicite explícitamente desde la UI o API.
+
+8. **Ley de Pureza Arquitectónica de `core/` (Zero Platform Pollution):**
+   - **Agnosticismo Estricto de `core/`:** `core/` DEBE ser código C++ estándar y LVGL 9.5 puro.
+   - **PROHIBIDO** incluir headers de plataformas o frameworks dentro de `core/` (ej. `<Arduino.h>`, `<Preferences.h>`, `<SD.h>`, `<WiFi.h>`, `<esp_wifi.h>`, `<driver/...>`).
+   - **PROHIBIDO** bifurcar la lógica de negocio mediante `#ifdef ARDUINO` o `#ifdef ESP_PLATFORM` dentro de `core/`.
+   - **Patrón de Abstracción HAL / Interfaces:** Todo acceso a hardware, NVS, sistema de archivos o red DEBE realizarse mediante interfaces abstractas (`IStorageBackend`, `IAudioSink`, `INetworkAdapter`). Las implementaciones concretas residen ÚNICAMENTE en sus respectivos directorios `bsp/` y se inyectan en tiempo de inicialización.

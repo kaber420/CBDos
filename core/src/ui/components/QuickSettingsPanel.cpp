@@ -30,9 +30,6 @@ void QuickSettingsPanel::volume_slider_cb(lv_event_t* e) {
     cbdos::audio::setVolume((uint8_t)val);
     if (code == LV_EVENT_RELEASED) {
         ConfigManager::getInstance().setVolume((uint8_t)val);
-        if (!cbdos::audio::getStats().isPlaying) {
-            cbdos::audio::playBeep();
-        }
     }
 }
 
