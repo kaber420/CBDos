@@ -26,6 +26,9 @@ public:
     static void addList(const std::string& name);
     static void deleteList(size_t index);
 
+    static bool exportToSd(const std::string& sdPath = "/sdcard/notes/tasks.msgpack");
+    static bool importFromSd(const std::string& sdPath = "/sdcard/notes/tasks.msgpack");
+
 private:
     static void loadFromStorage();
     static void saveToStorage();

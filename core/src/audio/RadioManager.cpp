@@ -2,44 +2,26 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFiClient.h>
-#include <ArduinoJson.h>
-#include <SD.h>
 #else
 #include <esp_http_client.h>
 #include <cJSON.h>
 #endif
 
 #include "RadioManager.hpp"
+#include "cbdos/storage.hpp"
 #include "cbdos/network.hpp"
+#include "cbdos/msgpack_util.hpp"
 #include <cstdio>
 #include <cstring>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <esp_log.h>
 #include <cctype>
+#include <sstream>
 
 static const char* TAG = "RadioManager";
-static const char* RADIOS_FILE_PATH = "/sdcard/audio/radios.json";
+static const char* PLAYLISTS_STORAGE_PATH = "audio/playlists.msgpack";
 
 namespace cbdos {
 namespace audio {
-
-#if defined(ARDUINO)
-struct SpiRamJsonAllocator : ArduinoJson::Allocator {
-    void* allocate(size_t size) override {
-        return heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    }
-    void deallocate(void* pointer) override {
-        heap_caps_free(pointer);
-    }
-    void* reallocate(void* ptr, size_t new_size) override {
-        return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    }
-};
-
-static SpiRamJsonAllocator s_spiRamJsonAllocator;
-#endif
 
 static std::string sanitizeString(const char* src) {
     if (!src) return "";
@@ -79,185 +61,337 @@ static std::string urlEncodeQuery(const std::string& str) {
 void RadioManager::init() {
     if (m_initialized) return;
     m_initialized = true;
-    loadFavorites();
+    loadPlaylists();
+}
+
+RadioPlaylist* RadioManager::getPlaylist(const std::string& id) {
+    for (auto& pl : m_playlists) {
+        if (pl.id == id) return &pl;
+    }
+    return nullptr;
+}
+
+bool RadioManager::createPlaylist(const std::string& name) {
+    if (name.empty()) return false;
+    std::string id = "pl_" + std::to_string(m_playlists.size() + 1);
+    m_playlists.push_back(RadioPlaylist(id, name, false));
+    savePlaylists();
+    return true;
+}
+
+bool RadioManager::deletePlaylist(const std::string& id) {
+    for (size_t i = 0; i < m_playlists.size(); i++) {
+        if (m_playlists[i].id == id) {
+            if (m_playlists[i].isDefault) {
+                ESP_LOGW(TAG, "No se puede eliminar la lista por defecto: %s", id.c_str());
+                return false;
+            }
+            m_playlists.erase(m_playlists.begin() + i);
+            savePlaylists();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool RadioManager::addStationToPlaylist(const std::string& playlistId, const RadioStation& station) {
+    RadioPlaylist* pl = getPlaylist(playlistId);
+    if (!pl) return false;
+
+    for (const auto& s : pl->stations) {
+        if (s.url == station.url) return false; // Evitar duplicados
+    }
+
+    RadioStation copy = station;
+    copy.isFavorite = true;
+    pl->stations.push_back(copy);
+    savePlaylists();
+    return true;
+}
+
+bool RadioManager::removeStationFromPlaylist(const std::string& playlistId, size_t stationIdx) {
+    RadioPlaylist* pl = getPlaylist(playlistId);
+    if (!pl || stationIdx >= pl->stations.size()) return false;
+
+    pl->stations.erase(pl->stations.begin() + stationIdx);
+    savePlaylists();
+    return true;
+}
+
+const std::vector<RadioStation>& RadioManager::getFavorites() const {
+    for (const auto& pl : m_playlists) {
+        if (pl.isDefault || pl.id == "fav") {
+            return pl.stations;
+        }
+    }
+    static const std::vector<RadioStation> emptyList;
+    return emptyList;
 }
 
 void RadioManager::addFavorite(const RadioStation& station) {
-    for (const auto& fav : m_favorites) {
-        if (fav.url == station.url) return;
+    if (m_playlists.empty()) {
+        m_playlists.push_back(RadioPlaylist("fav", "Favoritos", true));
     }
-    RadioStation copy = station;
-    copy.isFavorite = true;
-    m_favorites.push_back(copy);
-    saveFavorites();
+    addStationToPlaylist("fav", station);
 }
 
 void RadioManager::updateFavorite(size_t index, const RadioStation& station) {
-    if (index < m_favorites.size()) {
-        m_favorites[index] = station;
-        m_favorites[index].isFavorite = true;
-        saveFavorites();
+    RadioPlaylist* pl = getPlaylist("fav");
+    if (!pl && !m_playlists.empty()) pl = &m_playlists[0];
+    if (pl && index < pl->stations.size()) {
+        pl->stations[index] = station;
+        pl->stations[index].isFavorite = true;
+        savePlaylists();
     }
 }
 
 void RadioManager::removeFavorite(size_t index) {
-    if (index < m_favorites.size()) {
-        m_favorites.erase(m_favorites.begin() + index);
-        saveFavorites();
-    }
+    removeStationFromPlaylist("fav", index);
 }
 
-void RadioManager::loadFavorites() {
-    m_favorites.clear();
+// ────────────────────────────────────────────────────────────────
+//  Serialización / Deserialización MessagePack
+// ────────────────────────────────────────────────────────────────
+static std::string serializePlaylistsToMsgPack(const std::vector<RadioPlaylist>& playlists) {
+    cbdos::msgpack::MsgPackWriter writer;
+    writer.writeArrayHeader(playlists.size());
 
-#if defined(ARDUINO)
-    if (SD.cardType() != CARD_NONE && SD.exists("/audio/radios.json")) {
-        File file = SD.open("/audio/radios.json", FILE_READ);
-        if (file) {
-            JsonDocument doc(&s_spiRamJsonAllocator);
-            DeserializationError err = deserializeJson(doc, file);
-            file.close();
+    for (const auto& pl : playlists) {
+        writer.writeMapHeader(4);
 
-            if (!err && doc.is<JsonObject>()) {
-                JsonArray stationsArr = doc["stations"].as<JsonArray>();
-                for (JsonObject sObj : stationsArr) {
-                    RadioStation st;
-                    st.name = sObj["name"] | "Radio";
-                    st.url = sObj["url"] | "";
-                    st.country = sObj["country"] | "Global";
-                    st.genre = sObj["genre"] | "Varios";
-                    st.bitrate = sObj["bitrate"] | 128;
-                    st.isFavorite = true;
-                    if (!st.url.empty()) {
-                        m_favorites.push_back(st);
-                    }
-                }
-            }
+        writer.writeString("id");
+        writer.writeString(pl.id);
+
+        writer.writeString("name");
+        writer.writeString(pl.name);
+
+        writer.writeString("def");
+        writer.writeBool(pl.isDefault);
+
+        writer.writeString("stations");
+        writer.writeArrayHeader(pl.stations.size());
+        for (const auto& st : pl.stations) {
+            writer.writeMapHeader(6);
+            writer.writeString("name");
+            writer.writeString(st.name);
+
+            writer.writeString("url");
+            writer.writeString(st.url);
+
+            writer.writeString("country");
+            writer.writeString(st.country);
+
+            writer.writeString("genre");
+            writer.writeString(st.genre);
+
+            writer.writeString("bitrate");
+            writer.writeInt(st.bitrate);
+
+            writer.writeString("fav");
+            writer.writeBool(st.isFavorite);
         }
     }
-#else
-    FILE* f = fopen(RADIOS_FILE_PATH, "r");
-    if (f) {
-        fseek(f, 0, SEEK_END);
-        long fileSize = ftell(f);
-        fseek(f, 0, SEEK_SET);
 
-        if (fileSize > 0 && fileSize < 512 * 1024) {
-            std::string content(fileSize, '\0');
-            size_t nRead = fread(&content[0], 1, fileSize, f);
-            (void)nRead;
-            fclose(f);
-            f = nullptr;
+    return writer.toString();
+}
 
-            cJSON* root = cJSON_Parse(content.c_str());
-            if (root) {
-                cJSON* stationsArr = cJSON_GetObjectItem(root, "stations");
-                if (cJSON_IsArray(stationsArr)) {
-                    int count = cJSON_GetArraySize(stationsArr);
-                    for (int i = 0; i < count; i++) {
-                        cJSON* item = cJSON_GetArrayItem(stationsArr, i);
-                        if (item) {
-                            cJSON* nameItem = cJSON_GetObjectItem(item, "name");
-                            cJSON* urlItem = cJSON_GetObjectItem(item, "url");
-                            cJSON* countryItem = cJSON_GetObjectItem(item, "country");
-                            cJSON* genreItem = cJSON_GetObjectItem(item, "genre");
-                            cJSON* bitrateItem = cJSON_GetObjectItem(item, "bitrate");
+static bool deserializePlaylistsFromMsgPack(const std::string& data, std::vector<RadioPlaylist>& outPlaylists) {
+    if (data.empty()) return false;
 
-                            RadioStation st;
-                            st.name = nameItem && nameItem->valuestring ? nameItem->valuestring : "Desconocida";
-                            st.url = urlItem && urlItem->valuestring ? urlItem->valuestring : "";
-                            st.country = countryItem && countryItem->valuestring ? countryItem->valuestring : "Global";
-                            st.genre = genreItem && genreItem->valuestring ? genreItem->valuestring : "General";
-                            st.bitrate = bitrateItem ? bitrateItem->valueint : 128;
-                            st.isFavorite = true;
+    cbdos::msgpack::MsgPackReader reader(data);
+    size_t plCount = 0;
+    if (!reader.readArrayHeader(plCount)) return false;
 
-                            if (!st.url.empty()) {
-                                m_favorites.push_back(st);
-                            }
+    outPlaylists.clear();
+    for (size_t i = 0; i < plCount; i++) {
+        size_t mapSize = 0;
+        if (!reader.readMapHeader(mapSize)) break;
+
+        RadioPlaylist pl;
+        for (size_t m = 0; m < mapSize; m++) {
+            std::string key;
+            if (!reader.readString(key)) break;
+
+            if (key == "id") {
+                reader.readString(pl.id);
+            } else if (key == "name") {
+                reader.readString(pl.name);
+            } else if (key == "def") {
+                reader.readBool(pl.isDefault);
+            } else if (key == "stations") {
+                size_t stCount = 0;
+                if (reader.readArrayHeader(stCount)) {
+                    for (size_t s = 0; s < stCount; s++) {
+                        size_t stMapSize = 0;
+                        if (!reader.readMapHeader(stMapSize)) break;
+
+                        RadioStation st;
+                        for (size_t sm = 0; sm < stMapSize; sm++) {
+                            std::string sKey;
+                            if (!reader.readString(sKey)) break;
+
+                            if (sKey == "name") reader.readString(st.name);
+                            else if (sKey == "url") reader.readString(st.url);
+                            else if (sKey == "country") reader.readString(st.country);
+                            else if (sKey == "genre") reader.readString(st.genre);
+                            else if (sKey == "bitrate") reader.readInt(st.bitrate);
+                            else if (sKey == "fav") reader.readBool(st.isFavorite);
+                            else reader.skipValue();
+                        }
+                        if (!st.url.empty()) {
+                            pl.stations.push_back(st);
                         }
                     }
                 }
-                cJSON_Delete(root);
+            } else {
+                reader.skipValue();
             }
         }
-        if (f) fclose(f);
+        outPlaylists.push_back(pl);
     }
-#endif
 
-    // Si no existen favoritos en la SD, cargar la selección por defecto
-    if (m_favorites.empty()) {
-        ESP_LOGI(TAG, "No se encontraron emisoras en %s. Cargando emisoras por defecto...", RADIOS_FILE_PATH);
-        m_favorites.push_back(RadioStation("SomaFM Groove Salad", "http://ice1.somafm.com/groovesalad-128-mp3", "USA", "Ambient / Chill", 128, true));
-        m_favorites.push_back(RadioStation("Ibiza Global Radio", "http://listento.ibizaglobalradio.com:8024/stream", "Espana", "Electronic", 128, true));
-        m_favorites.push_back(RadioStation("Radio Paradise", "http://stream.radioparadise.com/mp3-128", "USA", "Rock / Eclectic", 128, true));
-        m_favorites.push_back(RadioStation("SomaFM Secret Agent", "http://ice1.somafm.com/secretagent-128-mp3", "USA", "Spy / Lounge", 128, true));
-        saveFavorites();
-    } else {
-        ESP_LOGI(TAG, "Cargadas %d emisoras favoritas desde %s", (int)m_favorites.size(), RADIOS_FILE_PATH);
-    }
+    return !outPlaylists.empty();
 }
 
-void RadioManager::saveFavorites() {
-#if defined(ARDUINO)
-    if (SD.cardType() != CARD_NONE) {
-        if (!SD.exists("/audio")) {
-            SD.mkdir("/audio");
-        }
-        File file = SD.open("/audio/radios.json", FILE_WRITE);
-        if (file) {
-            JsonDocument doc(&s_spiRamJsonAllocator);
-            JsonArray stationsArr = doc["stations"].to<JsonArray>();
-            for (const auto& st : m_favorites) {
-                JsonObject sObj = stationsArr.add<JsonObject>();
-                sObj["name"] = st.name.c_str();
-                sObj["url"] = st.url.c_str();
-                sObj["country"] = st.country.c_str();
-                sObj["genre"] = st.genre.c_str();
-                sObj["bitrate"] = st.bitrate;
-            }
-            serializeJson(doc, file);
-            file.close();
-            ESP_LOGI(TAG, "Guardadas %d emisoras en /audio/radios.json", (int)m_favorites.size());
+void RadioManager::loadPlaylists() {
+    m_playlists.clear();
+
+    // 1. Intentar cargar desde Flash SPIFFS en formato MessagePack
+    if (cbdos::storage::fileExists(PLAYLISTS_STORAGE_PATH)) {
+        std::string rawData = cbdos::storage::readFile(PLAYLISTS_STORAGE_PATH);
+        if (deserializePlaylistsFromMsgPack(rawData, m_playlists)) {
+            ESP_LOGI(TAG, "Cargadas %d listas de reproduccion desde %s (MessagePack)", (int)m_playlists.size(), PLAYLISTS_STORAGE_PATH);
+            return;
         }
     }
-#else
-    struct stat st;
-    if (stat("/sdcard/audio", &st) != 0) {
-        mkdir("/sdcard/audio", 0777);
-    }
 
-    cJSON* root = cJSON_CreateObject();
-    if (!root) return;
+    // 2. Si no existe o está vacío, inicializar listas por defecto
+    ESP_LOGI(TAG, "Inicializando listas por defecto en Flash SPIFFS...");
+    RadioPlaylist favPlaylist("fav", "Favoritos", true);
+    favPlaylist.stations.push_back(RadioStation("SomaFM Groove Salad", "http://ice1.somafm.com/groovesalad-128-mp3", "USA", "Ambient / Chill", 128, true));
+    favPlaylist.stations.push_back(RadioStation("Ibiza Global Radio", "http://listento.ibizaglobalradio.com:8024/stream", "Espana", "Electronic", 128, true));
+    favPlaylist.stations.push_back(RadioStation("Radio Paradise", "http://stream.radioparadise.com/mp3-128", "USA", "Rock / Eclectic", 128, true));
+    favPlaylist.stations.push_back(RadioStation("SomaFM Secret Agent", "http://ice1.somafm.com/secretagent-128-mp3", "USA", "Spy / Lounge", 128, true));
 
-    cJSON* stationsArr = cJSON_CreateArray();
-    cJSON_AddItemToObject(root, "stations", stationsArr);
+    m_playlists.push_back(favPlaylist);
+    savePlaylists();
+}
 
-    for (const auto& fav : m_favorites) {
-        cJSON* sObj = cJSON_CreateObject();
-        cJSON_AddStringToObject(sObj, "name", fav.name.c_str());
-        cJSON_AddStringToObject(sObj, "url", fav.url.c_str());
-        cJSON_AddStringToObject(sObj, "country", fav.country.c_str());
-        cJSON_AddStringToObject(sObj, "genre", fav.genre.c_str());
-        cJSON_AddNumberToObject(sObj, "bitrate", fav.bitrate);
-        cJSON_AddItemToArray(stationsArr, sObj);
-    }
-
-    char* jsonStr = cJSON_PrintUnformatted(root);
-    if (jsonStr) {
-        FILE* f = fopen(RADIOS_FILE_PATH, "w");
-        if (f) {
-            fputs(jsonStr, f);
-            fclose(f);
-            ESP_LOGI(TAG, "Guardadas %d emisoras en %s", (int)m_favorites.size(), RADIOS_FILE_PATH);
+void RadioManager::savePlaylists() {
+    std::string binData = serializePlaylistsToMsgPack(m_playlists);
+    if (!binData.empty()) {
+        bool ok = cbdos::storage::writeFile(PLAYLISTS_STORAGE_PATH, binData);
+        if (ok) {
+            ESP_LOGI(TAG, "Guardadas %d listas en %s (MessagePack, %d bytes)", (int)m_playlists.size(), PLAYLISTS_STORAGE_PATH, (int)binData.size());
         } else {
-            ESP_LOGW(TAG, "No se pudo abrir %s para escritura (errno %d: %s)", RADIOS_FILE_PATH, errno, strerror(errno));
+            ESP_LOGE(TAG, "Error al escribir en %s", PLAYLISTS_STORAGE_PATH);
         }
-        cJSON_free(jsonStr);
     }
-    cJSON_Delete(root);
-#endif
 }
 
+// ────────────────────────────────────────────────────────────────
+//  Portabilidad con Tarjeta MicroSD
+// ────────────────────────────────────────────────────────────────
+bool RadioManager::exportPlaylistToSd(const std::string& playlistId, const std::string& sdPath) {
+    RadioPlaylist* pl = getPlaylist(playlistId);
+    if (!pl) return false;
+
+    if (!cbdos::storage::isSdMounted()) {
+        ESP_LOGW(TAG, "exportPlaylistToSd: MicroSD no montada.");
+        return false;
+    }
+
+    std::vector<RadioPlaylist> singleList = { *pl };
+    std::string binData = serializePlaylistsToMsgPack(singleList);
+    return cbdos::storage::writeFile(sdPath.c_str(), binData);
+}
+
+bool RadioManager::importPlaylistFromSd(const std::string& sdPath) {
+    if (!cbdos::storage::fileExists(sdPath.c_str())) return false;
+
+    std::string rawData = cbdos::storage::readFile(sdPath.c_str());
+    std::vector<RadioPlaylist> imported;
+    if (!deserializePlaylistsFromMsgPack(rawData, imported)) return false;
+
+    for (auto& pl : imported) {
+        pl.isDefault = false; // Las listas importadas nunca sobreescriben la lista protegida por defecto
+        pl.id = "pl_imp_" + std::to_string(m_playlists.size() + 1);
+        m_playlists.push_back(pl);
+    }
+
+    savePlaylists();
+    return true;
+}
+
+bool RadioManager::importM3uFromSd(const std::string& sdPath) {
+    if (!cbdos::storage::fileExists(sdPath.c_str())) return false;
+
+    std::string m3uContent = cbdos::storage::readFile(sdPath.c_str());
+    if (m3uContent.empty()) return false;
+
+    // Extraer nombre de archivo como nombre de lista
+    std::string plName = "Importada M3U";
+    size_t lastSlash = sdPath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        plName = sdPath.substr(lastSlash + 1);
+        size_t dot = plName.find_last_of('.');
+        if (dot != std::string::npos) plName = plName.substr(0, dot);
+    }
+
+    RadioPlaylist newPl("pl_m3u_" + std::to_string(m_playlists.size() + 1), plName, false);
+
+    std::istringstream stream(m3uContent);
+    std::string line;
+    std::string pendingTitle = "";
+
+    while (std::getline(stream, line)) {
+        // Limpiar retornos de carro
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n' || line.back() == ' ')) {
+            line.pop_back();
+        }
+        if (line.empty()) continue;
+
+        if (line.rfind("#EXTINF:", 0) == 0) {
+            size_t comma = line.find(',');
+            if (comma != std::string::npos && comma + 1 < line.size()) {
+                pendingTitle = line.substr(comma + 1);
+            }
+        } else if (line[0] != '#') {
+            if (line.rfind("http://", 0) == 0 || line.rfind("https://", 0) == 0) {
+                std::string stName = pendingTitle.empty() ? "Radio Stream" : pendingTitle;
+                newPl.stations.push_back(RadioStation(stName, line, "Global", "M3U", 128, false));
+                pendingTitle.clear();
+            }
+        }
+    }
+
+    if (!newPl.stations.empty()) {
+        m_playlists.push_back(newPl);
+        savePlaylists();
+        return true;
+    }
+
+    return false;
+}
+
+std::vector<std::string> RadioManager::scanPlaylistsOnSd() {
+    std::vector<std::string> results;
+    if (!cbdos::storage::isSdMounted()) return results;
+
+    auto entries = cbdos::storage::listDir("/sdcard/playlists");
+    for (const auto& entry : entries) {
+        if (!entry.isDirectory) {
+            if (entry.name.rfind(".msgpack") != std::string::npos || entry.name.rfind(".m3u") != std::string::npos) {
+                results.push_back("/sdcard/playlists/" + entry.name);
+            }
+        }
+    }
+    return results;
+}
+
+// ────────────────────────────────────────────────────────────────
+//  Búsqueda de Emisoras en Línea (radio-browser.info)
+// ────────────────────────────────────────────────────────────────
 std::vector<RadioStation> RadioManager::searchStations(const std::string& query, int offset, int limit) {
     std::vector<RadioStation> list;
 
@@ -278,99 +412,54 @@ std::vector<RadioStation> RadioManager::searchStations(const std::string& query,
     std::string encodedQuery = urlEncodeQuery(query);
     char url[320];
 
-    // Configurar filtro ArduinoJson para descartar campos irrelevantes y ahorrar RAM
-    JsonDocument filter;
-    filter[0]["name"] = true;
-    filter[0]["url"] = true;
-    filter[0]["url_resolved"] = true;
-    filter[0]["country"] = true;
-    filter[0]["tags"] = true;
-    filter[0]["bitrate"] = true;
-
-    // 1. Búsqueda por nombre en HTTP plano con streaming directo
     snprintf(url, sizeof(url), "http://de1.api.radio-browser.info/json/stations/byname/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
-    Serial.printf("[RadioSearch] Consultando API HTTP: %s\n", url);
 
     if (http.begin(client, url)) {
         int httpCode = http.GET();
-        Serial.printf("[RadioSearch] HTTP Code (Name Search): %d\n", httpCode);
-
         if (httpCode == HTTP_CODE_OK) {
-            JsonDocument doc(&s_spiRamJsonAllocator);
-            DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+            std::string payload = http.getString().c_str();
+            size_t pos = 0;
+            while ((pos = payload.find("\"name\":\"", pos)) != std::string::npos) {
+                pos += 8;
+                size_t endName = payload.find("\"", pos);
+                if (endName == std::string::npos) break;
+                std::string name = payload.substr(pos, endName - pos);
 
-            if (!err && doc.is<JsonArray>()) {
-                JsonArray arr = doc.as<JsonArray>();
-                for (JsonObject obj : arr) {
-                    RadioStation st;
-                    const char* n = obj["name"] | "Desconocida";
-                    const char* u = obj["url_resolved"] | (obj["url"] | "");
-                    const char* c = obj["country"] | "Global";
-                    const char* g = obj["tags"] | "Varios";
-
-                    st.name = sanitizeString(n);
-                    if (st.name.empty()) st.name = "Desconocida";
-                    st.url = u;
-                    st.country = sanitizeString(c);
-                    if (st.country.empty()) st.country = "Global";
-                    st.genre = sanitizeString(g);
-                    if (st.genre.empty()) st.genre = "General";
-                    st.bitrate = obj["bitrate"] | 128;
-                    st.isFavorite = false;
-
-                    if (!st.url.empty()) {
-                        list.push_back(st);
+                std::string stUrl = "";
+                size_t urlPos = payload.find("\"url_resolved\":\"", endName);
+                if (urlPos != std::string::npos && urlPos < endName + 300) {
+                    urlPos += 16;
+                    size_t endUrl = payload.find("\"", urlPos);
+                    if (endUrl != std::string::npos) {
+                        stUrl = payload.substr(urlPos, endUrl - urlPos);
                     }
                 }
-            } else if (err) {
-                Serial.printf("[RadioSearch] JSON Deserialization error: %s\n", err.c_str());
+
+                std::string genre = "General";
+                size_t tagPos = payload.find("\"tags\":\"", endName);
+                if (tagPos != std::string::npos && tagPos < endName + 500) {
+                    tagPos += 8;
+                    size_t endTag = payload.find("\"", tagPos);
+                    if (endTag != std::string::npos) {
+                        genre = payload.substr(tagPos, endTag - tagPos);
+                    }
+                }
+
+                if (!stUrl.empty()) {
+                    RadioStation st;
+                    st.name = sanitizeString(name.c_str());
+                    st.url = stUrl;
+                    st.country = "Global";
+                    st.genre = sanitizeString(genre.c_str());
+                    st.bitrate = 128;
+                    st.isFavorite = false;
+                    list.push_back(st);
+                }
+                pos = endName;
             }
-        } else if (httpCode < 0) {
-            Serial.printf("[RadioSearch] HTTP Error: %s\n", http.errorToString(httpCode).c_str());
         }
         http.end();
     }
-
-    // 2. Si no encontró por nombre, intentar búsqueda por género/tag
-    if (list.empty() && offset == 0) {
-        snprintf(url, sizeof(url), "http://de1.api.radio-browser.info/json/stations/bytag/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
-        Serial.printf("[RadioSearch] Reintentando por Tag HTTP: %s\n", url);
-        if (http.begin(client, url)) {
-            int httpCode = http.GET();
-            Serial.printf("[RadioSearch] HTTP Code (Tag Search): %d\n", httpCode);
-            if (httpCode == HTTP_CODE_OK) {
-                JsonDocument doc(&s_spiRamJsonAllocator);
-                DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
-                if (!err && doc.is<JsonArray>()) {
-                    JsonArray arr = doc.as<JsonArray>();
-                    for (JsonObject obj : arr) {
-                        RadioStation st;
-                        const char* n = obj["name"] | "Desconocida";
-                        const char* u = obj["url_resolved"] | (obj["url"] | "");
-                        const char* c = obj["country"] | "Global";
-                        const char* g = obj["tags"] | "Varios";
-
-                        st.name = sanitizeString(n);
-                        if (st.name.empty()) st.name = "Desconocida";
-                        st.url = u;
-                        st.country = sanitizeString(c);
-                        if (st.country.empty()) st.country = "Global";
-                        st.genre = sanitizeString(g);
-                        if (st.genre.empty()) st.genre = "General";
-                        st.bitrate = obj["bitrate"] | 128;
-                        st.isFavorite = false;
-
-                        if (!st.url.empty()) {
-                            list.push_back(st);
-                        }
-                    }
-                }
-            }
-            http.end();
-        }
-    }
-
-    Serial.printf("[RadioSearch] Total emisoras encontradas: %d\n", (int)list.size());
 
 #else // ESP-IDF (ESP32-P4)
 
@@ -402,7 +491,6 @@ std::vector<RadioStation> RadioManager::searchStations(const std::string& query,
 
         int contentLength = esp_http_client_fetch_headers(client);
         int statusCode = esp_http_client_get_status_code(client);
-        ESP_LOGI(TAG, "HTTP %s -> Status: %d, Length: %d", fullUrl, statusCode, contentLength);
 
         if (statusCode == 200) {
             std::string response;
@@ -485,8 +573,9 @@ std::vector<RadioStation> RadioManager::searchStations(const std::string& query,
 #endif
 
     // Marcar favoritas
+    const auto& favs = getFavorites();
     for (auto& st : list) {
-        for (const auto& fav : m_favorites) {
+        for (const auto& fav : favs) {
             if (fav.url == st.url) {
                 st.isFavorite = true;
                 break;

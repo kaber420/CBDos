@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <FS.h>
 #include <SD.h>
+#include <SPIFFS.h>
 #include <lvgl.h>
 
 namespace cbdos {
@@ -10,7 +11,20 @@ namespace storage {
 
 static SPIClass* s_sdSPI = nullptr;
 static bool s_sdMounted = false;
+static bool s_spiffsMounted = false;
 static bool s_lvfsRegistered = false;
+
+static bool mountSpiffs() {
+    if (s_spiffsMounted) return true;
+    if (SPIFFS.begin(true, "/spiffs", 10, "spiffs")) {
+        s_spiffsMounted = true;
+        Serial.println("[StorageHAL-S3] SPIFFS montado exitosamente en /spiffs");
+        return true;
+    }
+    s_spiffsMounted = false;
+    Serial.println("[StorageHAL-S3] WARN: No se pudo montar particion Flash SPIFFS");
+    return false;
+}
 
 // ────────────────────────────────────────────────────────────────
 //  Driver VFS para LVGL v9 (Unidad 'A:')
@@ -37,9 +51,16 @@ static void * fs_open(lv_fs_drv_t * drv, const char * path, lv_fs_mode_t mode) {
         arduinoMode = FILE_WRITE;
     }
 
-    File f = SD.open(fullPath, arduinoMode);
-    if (!f) return NULL;
-    return (void *)(new File(f));
+    if (s_sdMounted) {
+        File f = SD.open(fullPath, arduinoMode);
+        if (f) return (void *)(new File(f));
+    }
+    if (s_spiffsMounted) {
+        File f = SPIFFS.open(fullPath, arduinoMode);
+        if (f) return (void *)(new File(f));
+    }
+
+    return NULL;
 }
 
 static lv_fs_res_t fs_close(lv_fs_drv_t * drv, void * file_p) {
@@ -114,13 +135,13 @@ bool mountSd() {
 
     if (!s_sdSPI) {
         s_sdSPI = new SPIClass(HSPI);
-        s_sdSPI->begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS (HSPI / SPI3_HOST para no colisionar con FSPI)
+        s_sdSPI->begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS (HSPI)
     }
 
-    bool mounted = SD.begin(10, *s_sdSPI, 10000000, "/sdcard"); // Intento 1: 10MHz en /sdcard
+    bool mounted = SD.begin(10, *s_sdSPI, 10000000, "/sdcard");
     if (!mounted) {
         Serial.println("[StorageHAL-S3] SD 10MHz fallo, reintentando a 4MHz...");
-        mounted = SD.begin(10, *s_sdSPI, 4000000, "/sdcard"); // Intento 2: 4MHz en /sdcard
+        mounted = SD.begin(10, *s_sdSPI, 4000000, "/sdcard");
     }
 
     if (mounted) {
@@ -136,8 +157,10 @@ bool mountSd() {
 }
 
 bool init() {
+    mountSpiffs();
     mountSd();
-    return true;
+    initLvfsDriver();
+    return s_spiffsMounted || s_sdMounted;
 }
 
 bool unmountSd() {
@@ -150,13 +173,22 @@ bool isSdMounted() {
     return s_sdMounted && (SD.cardType() != CARD_NONE);
 }
 
+bool isFlashMounted() {
+    return s_spiffsMounted;
+}
+
 StorageStats getFlashStats() {
-    StorageStats stats = { true, 0, 0, 0, "Flash Interna" };
-    stats.totalBytes = ESP.getFlashChipSize();
-    if (stats.totalBytes == 0) stats.totalBytes = 16 * 1024 * 1024;
-    
-    stats.usedBytes = ESP.getSketchSize();
-    stats.freeBytes = stats.totalBytes > stats.usedBytes ? (stats.totalBytes - stats.usedBytes) : 0;
+    StorageStats stats = { s_spiffsMounted, 0, 0, 0, "Flash Interna (SPIFFS)" };
+    if (s_spiffsMounted) {
+        stats.totalBytes = SPIFFS.totalBytes();
+        stats.usedBytes = SPIFFS.usedBytes();
+        stats.freeBytes = (stats.totalBytes > stats.usedBytes) ? (stats.totalBytes - stats.usedBytes) : 0;
+    } else {
+        stats.totalBytes = ESP.getFlashChipSize();
+        if (stats.totalBytes == 0) stats.totalBytes = 16 * 1024 * 1024;
+        stats.usedBytes = ESP.getSketchSize();
+        stats.freeBytes = stats.totalBytes > stats.usedBytes ? (stats.totalBytes - stats.usedBytes) : 0;
+    }
     return stats;
 }
 
@@ -171,116 +203,210 @@ StorageStats getSdCardStats() {
     return stats;
 }
 
+static String resolvePath(const char* path, bool& isSdTarget) {
+    String p = String(path ? path : "/");
+    isSdTarget = false;
+
+    // Rutas con alias de MicroSD
+    if (p.startsWith("S:/") || p.startsWith("s:/") || p.startsWith("A:/") || p.startsWith("a:/")) {
+        isSdTarget = true;
+        p = p.substring(2);
+    } else if (p.startsWith("/sdcard")) {
+        isSdTarget = true;
+        p = p.substring(7);
+    } else if (p.startsWith("/sd")) {
+        isSdTarget = true;
+        p = p.substring(3);
+    } else if (p.startsWith("/spiffs")) {
+        isSdTarget = false;
+        p = p.substring(7);
+    } else if (p.startsWith("/flash")) {
+        isSdTarget = false;
+        p = p.substring(6);
+    }
+
+    if (p.isEmpty() || !p.startsWith("/")) {
+        p = "/" + p;
+    }
+    return p;
+}
+
 std::vector<FileEntry> listDir(const char* path) {
     std::vector<FileEntry> result;
-    if (SD.cardType() == CARD_NONE) return result;
+    bool isSd = false;
+    String cleanPath = resolvePath(path, isSd);
 
-    String cleanPath = String(path ? path : "/");
-    if (cleanPath.startsWith("A:") || cleanPath.startsWith("a:")) {
-        cleanPath = cleanPath.substring(2);
-    }
-    if (cleanPath.startsWith("/sdcard")) {
-        cleanPath = cleanPath.substring(7);
-    }
-    if (cleanPath.isEmpty() || !cleanPath.startsWith("/")) {
-        cleanPath = "/" + cleanPath;
-    }
+    if (isSd) {
+        if (!isSdMounted()) return result;
+        File dir = SD.open(cleanPath);
+        if (!dir || !dir.isDirectory()) return result;
 
-    File dir = SD.open(cleanPath);
-    if (!dir || !dir.isDirectory()) {
-        return result;
-    }
-
-    File entry = dir.openNextFile();
-    while (entry) {
-        FileEntry fe;
-        fe.name = entry.name();
-        size_t slash = fe.name.find_last_of('/');
-        if (slash != std::string::npos) {
-            fe.name = fe.name.substr(slash + 1);
+        File entry = dir.openNextFile();
+        while (entry) {
+            FileEntry fe;
+            fe.name = entry.name();
+            size_t slash = fe.name.find_last_of('/');
+            if (slash != std::string::npos) {
+                fe.name = fe.name.substr(slash + 1);
+            }
+            fe.size = entry.size();
+            fe.isDirectory = entry.isDirectory();
+            result.push_back(fe);
+            entry.close();
+            entry = dir.openNextFile();
         }
-        fe.size = entry.size();
-        fe.isDirectory = entry.isDirectory();
-        result.push_back(fe);
-        entry.close();
-        entry = dir.openNextFile();
+        dir.close();
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return result;
+        File root = SPIFFS.open(cleanPath);
+        if (!root) return result;
+
+        if (root.isDirectory()) {
+            File file = root.openNextFile();
+            while (file) {
+                FileEntry fe;
+                fe.name = file.name();
+                size_t slash = fe.name.find_last_of('/');
+                if (slash != std::string::npos) {
+                    fe.name = fe.name.substr(slash + 1);
+                }
+                fe.size = file.size();
+                fe.isDirectory = file.isDirectory();
+                result.push_back(fe);
+                file.close();
+                file = root.openNextFile();
+            }
+        }
+        root.close();
     }
-    dir.close();
+
     return result;
 }
 
-static String getCleanSdPath(const char* path) {
-    String cleanPath = String(path ? path : "/");
-    if (cleanPath.startsWith("A:") || cleanPath.startsWith("a:")) {
-        cleanPath = cleanPath.substring(2);
-    }
-    if (cleanPath.startsWith("/sdcard")) {
-        cleanPath = cleanPath.substring(7);
-    }
-    if (cleanPath.isEmpty() || !cleanPath.startsWith("/")) {
-        cleanPath = "/" + cleanPath;
-    }
-    return cleanPath;
-}
-
 bool fileExists(const char* path) {
-    if (SD.cardType() == CARD_NONE) return false;
-    String cleanPath = getCleanSdPath(path);
-    return SD.exists(cleanPath);
+    bool isSd = false;
+    String cleanPath = resolvePath(path, isSd);
+
+    if (isSd) {
+        if (!isSdMounted()) return false;
+        return SD.exists(cleanPath);
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return false;
+        return SPIFFS.exists(cleanPath);
+    }
 }
 
 std::string readFile(const char* path) {
     std::string content = "";
-    if (SD.cardType() == CARD_NONE) return content;
+    bool isSd = false;
+    String cleanPath = resolvePath(path, isSd);
 
-    String cleanPath = getCleanSdPath(path);
-    File f = SD.open(cleanPath, FILE_READ);
-    if (f) {
-        size_t fileSize = f.size();
-        if (fileSize > 0) {
-            content.resize(fileSize);
-            f.read((uint8_t*)&content[0], fileSize);
+    if (isSd) {
+        if (!isSdMounted() && !mountSd()) return content;
+        File f = SD.open(cleanPath, FILE_READ);
+        if (f) {
+            size_t fileSize = f.size();
+            if (fileSize > 0) {
+                content.resize(fileSize);
+                f.read((uint8_t*)&content[0], fileSize);
+            }
+            f.close();
         }
-        f.close();
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return content;
+        File f = SPIFFS.open(cleanPath, FILE_READ);
+        if (f) {
+            size_t fileSize = f.size();
+            if (fileSize > 0) {
+                content.resize(fileSize);
+                f.read((uint8_t*)&content[0], fileSize);
+            }
+            f.close();
+        }
     }
     return content;
 }
 
+bool makeDir(const char* path) {
+    bool isSd = false;
+    String cleanPath = resolvePath(path, isSd);
+
+    if (isSd) {
+        if (!isSdMounted() && !mountSd()) return false;
+        return SD.mkdir(cleanPath);
+    } else {
+        // SPIFFS maneja nombres con barra pero no directorios reales
+        return true;
+    }
+}
+
 bool writeFile(const char* path, const std::string& content) {
-    if (SD.cardType() == CARD_NONE) return false;
+    bool isSd = false;
+    String cleanPath = resolvePath(path, isSd);
 
-    String cleanPath = getCleanSdPath(path);
+    if (isSd) {
+        if (!isSdMounted() && !mountSd()) return false;
 
-    int lastSlash = cleanPath.lastIndexOf('/');
-    if (lastSlash > 0) {
-        for (int i = 1; i <= lastSlash; i++) {
-            if (cleanPath[i] == '/' || i == lastSlash) {
-                String currentDir = cleanPath.substring(0, i);
-                if (!SD.exists(currentDir)) {
-                    SD.mkdir(currentDir);
+        int lastSlash = cleanPath.lastIndexOf('/');
+        if (lastSlash > 0) {
+            for (int i = 1; i <= lastSlash; i++) {
+                if (cleanPath[i] == '/' || i == lastSlash) {
+                    String currentDir = cleanPath.substring(0, i);
+                    if (!SD.exists(currentDir)) {
+                        SD.mkdir(currentDir);
+                    }
                 }
             }
         }
-    }
 
-    File f = SD.open(cleanPath, FILE_WRITE);
-    bool ok = false;
-    if (f) {
-        if (!content.empty()) {
-            size_t written = f.write((const uint8_t*)content.data(), content.size());
-            ok = (written == content.size());
-        } else {
-            ok = true;
+        File f = SD.open(cleanPath, FILE_WRITE);
+        bool ok = false;
+        if (f) {
+            if (!content.empty()) {
+                size_t written = f.write((const uint8_t*)content.data(), content.size());
+                ok = (written == content.size());
+            } else {
+                ok = true;
+            }
+            f.close();
         }
-        f.close();
+        return ok;
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return false;
+        File f = SPIFFS.open(cleanPath, FILE_WRITE);
+        bool ok = false;
+        if (f) {
+            if (!content.empty()) {
+                size_t written = f.write((const uint8_t*)content.data(), content.size());
+                ok = (written == content.size());
+            } else {
+                ok = true;
+            }
+            f.close();
+        }
+        return ok;
     }
-    return ok;
 }
 
 bool deleteFile(const char* path) {
-    if (SD.cardType() == CARD_NONE) return false;
-    String cleanPath = getCleanSdPath(path);
-    return SD.remove(cleanPath);
+    bool isSd = false;
+    String cleanPath = resolvePath(path, isSd);
+
+    if (isSd) {
+        if (!isSdMounted()) return false;
+        return SD.remove(cleanPath);
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return false;
+        return SPIFFS.remove(cleanPath);
+    }
+}
+
+bool copyFile(const char* srcPath, const char* dstPath) {
+    std::string data = readFile(srcPath);
+    if (data.empty() && !fileExists(srcPath)) {
+        return false;
+    }
+    return writeFile(dstPath, data);
 }
 
 size_t getFreeBytes(StorageType type) {

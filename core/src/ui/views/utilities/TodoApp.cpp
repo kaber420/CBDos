@@ -1,22 +1,16 @@
 #include "TodoApp.hpp"
 #include "../../UIManager.hpp"
 #include "../../themes/DefaultTheme.h"
+#include "cbdos/storage.hpp"
+#include "cbdos/msgpack_util.hpp"
 #include <cstdio>
 #include <vector>
 #include <string>
 #include <cstring>
-#include <sys/stat.h>
-
-#if defined(ARDUINO)
-#include <Arduino.h>
-#include <SD.h>
-#include <ArduinoJson.h>
-#else
-#include <cJSON.h>
 #include <esp_log.h>
+
 static const char* TAG = "TodoApp";
-static const char* TASKS_FILE_PATH = "/sdcard/notes/tasks.json";
-#endif
+static const char* TASKS_STORAGE_PATH = "notes/tasks.msgpack";
 
 namespace cbdos {
 namespace ui {
@@ -45,163 +39,149 @@ void TodoApp::deleteList(size_t index) {
     }
 }
 
+// ────────────────────────────────────────────────────────────────
+//  Serialización y Deserialización MessagePack para Listas de Tareas
+// ────────────────────────────────────────────────────────────────
+static std::string serializeTodoListsToMsgPack(const std::vector<TodoList>& lists) {
+    cbdos::msgpack::MsgPackWriter writer;
+    writer.writeArrayHeader(lists.size());
+
+    for (const auto& list : lists) {
+        writer.writeMapHeader(2);
+
+        writer.writeString("name");
+        writer.writeString(list.name);
+
+        writer.writeString("items");
+        writer.writeArrayHeader(list.items.size());
+        for (const auto& item : list.items) {
+            writer.writeMapHeader(2);
+            writer.writeString("text");
+            writer.writeString(item.text);
+            writer.writeString("done");
+            writer.writeBool(item.done);
+        }
+    }
+
+    return writer.toString();
+}
+
+static bool deserializeTodoListsFromMsgPack(const std::string& data, std::vector<TodoList>& outLists) {
+    if (data.empty()) return false;
+
+    cbdos::msgpack::MsgPackReader reader(data);
+    size_t listCount = 0;
+    if (!reader.readArrayHeader(listCount)) return false;
+
+    outLists.clear();
+    for (size_t i = 0; i < listCount; i++) {
+        size_t mapSize = 0;
+        if (!reader.readMapHeader(mapSize)) break;
+
+        TodoList list;
+        for (size_t m = 0; m < mapSize; m++) {
+            std::string key;
+            if (!reader.readString(key)) break;
+
+            if (key == "name") {
+                reader.readString(list.name);
+            } else if (key == "items") {
+                size_t itemCount = 0;
+                if (reader.readArrayHeader(itemCount)) {
+                    for (size_t j = 0; j < itemCount; j++) {
+                        size_t itemMapSize = 0;
+                        if (!reader.readMapHeader(itemMapSize)) break;
+
+                        TodoItem item;
+                        for (size_t im = 0; im < itemMapSize; im++) {
+                            std::string iKey;
+                            if (!reader.readString(iKey)) break;
+
+                            if (iKey == "text") {
+                                reader.readString(item.text);
+                            } else if (iKey == "done") {
+                                reader.readBool(item.done);
+                            } else {
+                                reader.skipValue();
+                            }
+                        }
+                        list.items.push_back(item);
+                    }
+                }
+            } else {
+                reader.skipValue();
+            }
+        }
+        outLists.push_back(list);
+    }
+
+    return !outLists.empty();
+}
+
 void TodoApp::loadFromStorage() {
     s_todoLists.clear();
 
-#if defined(ARDUINO)
-    if (SD.cardType() != CARD_NONE && SD.exists("/notes/tasks.json")) {
-        File file = SD.open("/notes/tasks.json", FILE_READ);
-        if (file) {
-            JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, file);
-            file.close();
-
-            if (!err && doc.is<JsonObject>()) {
-                JsonArray listsArr = doc["lists"].as<JsonArray>();
-                for (JsonObject lObj : listsArr) {
-                    TodoList l;
-                    l.name = lObj["name"].as<const char*>() ? lObj["name"].as<const char*>() : "Lista";
-                    JsonArray itemsArr = lObj["items"].as<JsonArray>();
-                    for (JsonObject iObj : itemsArr) {
-                        TodoItem it;
-                        it.text = iObj["text"].as<const char*>() ? iObj["text"].as<const char*>() : "";
-                        it.done = iObj["done"].as<bool>();
-                        l.items.push_back(it);
-                    }
-                    s_todoLists.push_back(l);
-                }
-            }
+    // 1. Cargar desde Flash interna SPIFFS en formato MessagePack
+    if (cbdos::storage::fileExists(TASKS_STORAGE_PATH)) {
+        std::string rawData = cbdos::storage::readFile(TASKS_STORAGE_PATH);
+        if (deserializeTodoListsFromMsgPack(rawData, s_todoLists)) {
+            ESP_LOGI(TAG, "Cargadas %d listas de tareas desde %s (MessagePack)", (int)s_todoLists.size(), TASKS_STORAGE_PATH);
+            return;
         }
     }
-#else
-    FILE* f = fopen(TASKS_FILE_PATH, "r");
-    if (f) {
-        fseek(f, 0, SEEK_END);
-        long fileSize = ftell(f);
-        fseek(f, 0, SEEK_SET);
 
-        if (fileSize > 0 && fileSize < 256 * 1024) {
-            std::string content(fileSize, '\0');
-            size_t nRead = fread(&content[0], 1, fileSize, f);
-            (void)nRead;
-            fclose(f);
-            f = nullptr;
+    // 2. Si no hay datos (primer arranque), inicializar listas predeterminadas
+    ESP_LOGI(TAG, "Inicializando listas de tareas predeterminadas en Flash SPIFFS...");
+    TodoList compras;
+    compras.name = "Compras";
+    compras.items.push_back({"Leche y Cafe", false});
+    compras.items.push_back({"Huevos y Frutas", false});
+    compras.items.push_back({"Pan integral", true});
+    s_todoLists.push_back(compras);
 
-            cJSON* root = cJSON_Parse(content.c_str());
-            if (root) {
-                cJSON* listsArr = cJSON_GetObjectItem(root, "lists");
-                if (listsArr && cJSON_IsArray(listsArr)) {
-                    int listCount = cJSON_GetArraySize(listsArr);
-                    for (int i = 0; i < listCount; i++) {
-                        cJSON* lObj = cJSON_GetArrayItem(listsArr, i);
-                        if (lObj) {
-                            TodoList l;
-                            cJSON* nameItem = cJSON_GetObjectItem(lObj, "name");
-                            l.name = nameItem && nameItem->valuestring ? nameItem->valuestring : "Lista";
+    TodoList tareas;
+    tareas.name = "Tareas";
+    tareas.items.push_back({"Revisar codigo CBDos", false});
+    tareas.items.push_back({"Probar emuladores", false});
+    s_todoLists.push_back(tareas);
 
-                            cJSON* itemsArr = cJSON_GetObjectItem(lObj, "items");
-                            if (itemsArr && cJSON_IsArray(itemsArr)) {
-                                int itemCount = cJSON_GetArraySize(itemsArr);
-                                for (int j = 0; j < itemCount; j++) {
-                                    cJSON* iObj = cJSON_GetArrayItem(itemsArr, j);
-                                    if (iObj) {
-                                        TodoItem it;
-                                        cJSON* txtItem = cJSON_GetObjectItem(iObj, "text");
-                                        cJSON* doneItem = cJSON_GetObjectItem(iObj, "done");
-                                        it.text = txtItem && txtItem->valuestring ? txtItem->valuestring : "";
-                                        it.done = doneItem ? cJSON_IsTrue(doneItem) : false;
-                                        l.items.push_back(it);
-                                    }
-                                }
-                            }
-                            s_todoLists.push_back(l);
-                        }
-                    }
-                }
-                cJSON_Delete(root);
-            }
-        } else {
-            fclose(f);
-        }
-    }
-#endif
-
-    // Si no hay datos (primera vez o sin SD), inicializar listas predeterminadas
-    if (s_todoLists.empty()) {
-        TodoList compras;
-        compras.name = "Compras";
-        compras.items.push_back({"Leche y Cafe", false});
-        compras.items.push_back({"Huevos y Frutas", false});
-        compras.items.push_back({"Pan integral", true});
-        s_todoLists.push_back(compras);
-
-        TodoList tareas;
-        tareas.name = "Tareas";
-        tareas.items.push_back({"Revisar codigo CBDos", false});
-        tareas.items.push_back({"Flashear firmware a ESP32-P4", false});
-        tareas.items.push_back({"Probar emuladores", false});
-        s_todoLists.push_back(tareas);
-    }
+    saveToStorage();
 }
 
 void TodoApp::saveToStorage() {
-#if defined(ARDUINO)
-    if (SD.cardType() != CARD_NONE) {
-        if (!SD.exists("/notes")) {
-            SD.mkdir("/notes");
-        }
-        File file = SD.open("/notes/tasks.json", FILE_WRITE);
-        if (file) {
-            JsonDocument doc;
-            JsonArray listsArr = doc["lists"].to<JsonArray>();
-            for (const auto& l : s_todoLists) {
-                JsonObject lObj = listsArr.add<JsonObject>();
-                lObj["name"] = l.name.c_str();
-                JsonArray itemsArr = lObj["items"].to<JsonArray>();
-                for (const auto& it : l.items) {
-                    JsonObject iObj = itemsArr.add<JsonObject>();
-                    iObj["text"] = it.text.c_str();
-                    iObj["done"] = it.done;
-                }
-            }
-            serializeJson(doc, file);
-            file.close();
+    std::string binData = serializeTodoListsToMsgPack(s_todoLists);
+    if (!binData.empty()) {
+        bool ok = cbdos::storage::writeFile(TASKS_STORAGE_PATH, binData);
+        if (ok) {
+            ESP_LOGI(TAG, "Guardadas %d listas de tareas en %s (MessagePack, %d bytes)", (int)s_todoLists.size(), TASKS_STORAGE_PATH, (int)binData.size());
+        } else {
+            ESP_LOGE(TAG, "Error al escribir tareas en %s", TASKS_STORAGE_PATH);
         }
     }
-#else
-    mkdir("/sdcard/notes", 0777);
-    cJSON* root = cJSON_CreateObject();
-    if (!root) return;
+}
 
-    cJSON* listsArr = cJSON_CreateArray();
-    cJSON_AddItemToObject(root, "lists", listsArr);
-
-    for (const auto& l : s_todoLists) {
-        cJSON* lObj = cJSON_CreateObject();
-        cJSON_AddStringToObject(lObj, "name", l.name.c_str());
-        cJSON* itemsArr = cJSON_CreateArray();
-        cJSON_AddItemToObject(lObj, "items", itemsArr);
-        for (const auto& it : l.items) {
-            cJSON* iObj = cJSON_CreateObject();
-            cJSON_AddStringToObject(iObj, "text", it.text.c_str());
-            cJSON_AddBoolToObject(iObj, "done", it.done);
-            cJSON_AddItemToArray(itemsArr, iObj);
-        }
-        cJSON_AddItemToArray(listsArr, lObj);
+bool TodoApp::exportToSd(const std::string& sdPath) {
+    if (!cbdos::storage::isSdMounted()) {
+        ESP_LOGW(TAG, "exportToSd: MicroSD no montada");
+        return false;
     }
+    std::string binData = serializeTodoListsToMsgPack(s_todoLists);
+    return cbdos::storage::writeFile(sdPath.c_str(), binData);
+}
 
-    char* jsonStr = cJSON_PrintUnformatted(root);
-    if (jsonStr) {
-        FILE* f = fopen(TASKS_FILE_PATH, "w");
-        if (f) {
-            fputs(jsonStr, f);
-            fclose(f);
-            ESP_LOGI(TAG, "Guardadas listas de tareas en %s", TASKS_FILE_PATH);
-        }
-        cJSON_free(jsonStr);
+bool TodoApp::importFromSd(const std::string& sdPath) {
+    if (!cbdos::storage::fileExists(sdPath.c_str())) return false;
+
+    std::string rawData = cbdos::storage::readFile(sdPath.c_str());
+    std::vector<TodoList> imported;
+    if (!deserializeTodoListsFromMsgPack(rawData, imported)) return false;
+
+    for (const auto& l : imported) {
+        s_todoLists.push_back(l);
     }
-    cJSON_Delete(root);
-#endif
+    saveToStorage();
+    refreshListUI();
+    return true;
 }
 
 void TodoApp::checkboxEventCb(lv_event_t* e) {

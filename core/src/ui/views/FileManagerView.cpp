@@ -305,12 +305,22 @@ void FileManagerView::renderFileList(lv_obj_t* parent) {
 
     lv_obj_clean(parent);
 
-    std::string queryPath = m_currentPath;
+    std::string queryPath;
     if (m_currentStorage == cbdos::storage::StorageType::SdCard) {
-        if (queryPath.empty() || queryPath == "/") {
+        if (m_currentPath.empty() || m_currentPath == "/") {
             queryPath = "/sdcard";
-        } else if (queryPath.rfind("/sdcard", 0) != 0) {
-            queryPath = "/sdcard" + (queryPath[0] == '/' ? queryPath : "/" + queryPath);
+        } else if (m_currentPath.rfind("/sdcard", 0) != 0) {
+            queryPath = "/sdcard" + (m_currentPath[0] == '/' ? m_currentPath : "/" + m_currentPath);
+        } else {
+            queryPath = m_currentPath;
+        }
+    } else {
+        if (m_currentPath.empty() || m_currentPath == "/") {
+            queryPath = "/spiffs";
+        } else if (m_currentPath.rfind("/spiffs", 0) != 0) {
+            queryPath = "/spiffs" + (m_currentPath[0] == '/' ? m_currentPath : "/" + m_currentPath);
+        } else {
+            queryPath = m_currentPath;
         }
     }
 
@@ -480,10 +490,11 @@ void FileManagerView::itemClickCb(lv_event_t* e) {
         self->refreshCurrentView();
     } else {
         std::string fullFilePath;
+        std::string unitPrefix = (self->m_currentStorage == cbdos::storage::StorageType::SdCard) ? "/sdcard" : "/spiffs";
         if (self->m_currentPath == "/") {
-            fullFilePath = "/" + item.name;
+            fullFilePath = unitPrefix + "/" + item.name;
         } else {
-            fullFilePath = self->m_currentPath + "/" + item.name;
+            fullFilePath = unitPrefix + self->m_currentPath + "/" + item.name;
         }
 
         // Detectar tipo y realizar acción contextual
@@ -494,12 +505,14 @@ void FileManagerView::itemClickCb(lv_event_t* e) {
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         }
 
-        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif") {
+        if (ext == ".jpg" || ext == ".jpeg" || ext == ".bin" || ext == ".raw") {
             if (self->m_currentStorage == cbdos::storage::StorageType::SdCard) {
-                std::string lvglPath = "A:" + fullFilePath;
+                std::string relPath = (self->m_currentPath == "/") ? ("/" + item.name) : (self->m_currentPath + "/" + item.name);
+                std::string lvglPath = "A:" + relPath;
                 UIManager::getInstance().pushView(std::make_shared<GalleryView>(lvglPath, item.name));
             } else {
-                UIManager::showToast("Visor disponible para imagenes en SD");
+                std::string lvglPath = fullFilePath;
+                UIManager::getInstance().pushView(std::make_shared<GalleryView>(lvglPath, item.name));
             }
         } else if (ext == ".txt" || ext == ".json" || ext == ".ini" || ext == ".enc" || ext == ".log" || ext == ".csv" || ext == ".md" || ext == ".c" || ext == ".h" || ext == ".cpp") {
             UIManager::showToast("Abriendo en Editor...");
@@ -573,11 +586,12 @@ void FileManagerView::showDeleteConfirmModal(const cbdos::storage::FileEntry& fi
     int32_t screenW = caps.width;
     int32_t screenH = caps.height;
 
+    std::string unitPrefix = (m_currentStorage == cbdos::storage::StorageType::SdCard) ? "/sdcard" : "/spiffs";
     std::string itemFullPath;
     if (m_currentPath == "/") {
-        itemFullPath = "/" + file.name;
+        itemFullPath = unitPrefix + "/" + file.name;
     } else {
-        itemFullPath = m_currentPath + "/" + file.name;
+        itemFullPath = unitPrefix + m_currentPath + "/" + file.name;
     }
 
     m_modalMask = lv_obj_create(lv_layer_top());

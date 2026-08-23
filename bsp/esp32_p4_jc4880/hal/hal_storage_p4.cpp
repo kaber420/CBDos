@@ -1,6 +1,7 @@
 #include "cbdos/storage.hpp"
 #include <esp_flash.h>
 #include <esp_partition.h>
+#include <esp_spiffs.h>
 #include <esp_log.h>
 #include <esp_vfs_fat.h>
 #include <sdmmc_cmd.h>
@@ -14,7 +15,9 @@
 #include <cstring>
 
 static const char* TAG = "HAL_Storage_P4";
-static const char* MOUNT_POINT = "/sdcard";
+static const char* SD_MOUNT_POINT = "/sdcard";
+static const char* SPIFFS_MOUNT_POINT = "/spiffs";
+static const char* SPIFFS_PARTITION_LABEL = "spiffs";
 
 #define BOARD_DISP_SD_LDO_CH 4
 
@@ -22,6 +25,7 @@ namespace cbdos {
 namespace storage {
 
 static bool s_sdMounted = false;
+static bool s_spiffsMounted = false;
 static sdmmc_card_t* s_cardHandle = nullptr;
 static esp_ldo_channel_handle_t s_sdLdoHandle = nullptr;
 
@@ -43,9 +47,48 @@ static void ensureLdoPower() {
     vTaskDelay(pdMS_TO_TICKS(100));
 }
 
+static bool mountSpiffs() {
+    if (s_spiffsMounted) {
+        return true;
+    }
+
+    ESP_LOGI(TAG, "Montando particion Flash interna SPIFFS ('%s') en %s...", SPIFFS_PARTITION_LABEL, SPIFFS_MOUNT_POINT);
+
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = SPIFFS_MOUNT_POINT,
+        .partition_label = SPIFFS_PARTITION_LABEL,
+        .max_files = 8,
+        .format_if_mount_failed = true
+    };
+
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Fallo al montar o formatear SPIFFS");
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            ESP_LOGE(TAG, "No se encontro la particion SPIFFS ('%s')", SPIFFS_PARTITION_LABEL);
+        } else {
+            ESP_LOGE(TAG, "Error SPIFFS: %s", esp_err_to_name(ret));
+        }
+        s_spiffsMounted = false;
+        return false;
+    }
+
+    size_t total = 0, used = 0;
+    ret = esp_spiffs_info(SPIFFS_PARTITION_LABEL, &total, &used);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "SPIFFS montado OK. Tamano: %d KB, Usado: %d KB", (int)(total / 1024), (int)(used / 1024));
+    } else {
+        ESP_LOGI(TAG, "SPIFFS montado OK.");
+    }
+
+    s_spiffsMounted = true;
+    return true;
+}
+
 bool mountSd() {
     if (s_sdMounted) {
-        ESP_LOGI(TAG, "MicroSD ya se encuentra montada en %s", MOUNT_POINT);
+        ESP_LOGI(TAG, "MicroSD ya se encuentra montada en %s", SD_MOUNT_POINT);
         return true;
     }
 
@@ -60,7 +103,7 @@ bool mountSd() {
 
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     host.slot = SDMMC_HOST_SLOT_0;
-    host.max_freq_khz = SDMMC_FREQ_DEFAULT; // 20 MHz estándar para compatibilidad amplia
+    host.max_freq_khz = SDMMC_FREQ_DEFAULT; // 20 MHz estándar
 
     // Slot 0 nativo en ESP32-P4 (GPIO 39-44)
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
@@ -73,24 +116,24 @@ bool mountSd() {
     slot_config.d2 = GPIO_NUM_41;
     slot_config.d3 = GPIO_NUM_42;
 
-    ESP_LOGI(TAG, "Intentando montar MicroSD (Slot 0, 4-bit) en %s...", MOUNT_POINT);
-    esp_err_t ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
+    ESP_LOGI(TAG, "Intentando montar MicroSD (Slot 0, 4-bit) en %s...", SD_MOUNT_POINT);
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount(SD_MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
 
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Fallo montaje 4-bit (%s), reintentando en modo 1-bit...", esp_err_to_name(ret));
         slot_config.width = 1;
-        ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
+        ret = esp_vfs_fat_sdmmc_mount(SD_MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
     }
 
     if (ret == ESP_OK && s_cardHandle != nullptr) {
         s_sdMounted = true;
-        ESP_LOGI(TAG, "MicroSD montada exitosamente en %s!", MOUNT_POINT);
+        ESP_LOGI(TAG, "MicroSD montada exitosamente en %s!", SD_MOUNT_POINT);
         sdmmc_card_print_info(stdout, s_cardHandle);
         return true;
     } else {
         s_sdMounted = false;
         s_cardHandle = nullptr;
-        ESP_LOGW(TAG, "No se pudo montar la tarjeta MicroSD: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "MicroSD no detectada o no montada: %s", esp_err_to_name(ret));
         return false;
     }
 }
@@ -100,8 +143,8 @@ bool unmountSd() {
         return true;
     }
 
-    ESP_LOGI(TAG, "Desmontando MicroSD de %s...", MOUNT_POINT);
-    esp_err_t ret = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_cardHandle);
+    ESP_LOGI(TAG, "Desmontando MicroSD de %s...", SD_MOUNT_POINT);
+    esp_err_t ret = esp_vfs_fat_sdcard_unmount(SD_MOUNT_POINT, s_cardHandle);
     s_sdMounted = false;
     s_cardHandle = nullptr;
 
@@ -115,25 +158,40 @@ bool unmountSd() {
 }
 
 bool init() {
-    ESP_LOGI(TAG, "Inicializando subsistema de almacenamiento...");
-    return mountSd();
+    ESP_LOGI(TAG, "Inicializando subsistema de almacenamiento (Flash SPIFFS + MicroSD)...");
+    bool spiffsOk = mountSpiffs();
+    mountSd(); // Intento no bloqueante de montaje MicroSD
+    return spiffsOk || s_sdMounted;
 }
 
 bool isSdMounted() {
     return s_sdMounted;
 }
 
+bool isFlashMounted() {
+    return s_spiffsMounted;
+}
+
 StorageStats getFlashStats() {
-    StorageStats stats = { true, 0, 0, 0, "Flash Interna (SPI NOR)" };
+    StorageStats stats = { s_spiffsMounted, 0, 0, 0, "Flash Interna (SPIFFS)" };
+    if (s_spiffsMounted) {
+        size_t total = 0, used = 0;
+        if (esp_spiffs_info(SPIFFS_PARTITION_LABEL, &total, &used) == ESP_OK) {
+            stats.totalBytes = total;
+            stats.usedBytes = used;
+            stats.freeBytes = (total > used) ? (total - used) : 0;
+            return stats;
+        }
+    }
+
+    // Fallback general del chip
     uint32_t flashSize = 0;
     if (esp_flash_get_size(esp_flash_default_chip, &flashSize) == ESP_OK) {
         stats.totalBytes = flashSize;
     } else {
-        stats.totalBytes = 16 * 1024 * 1024; // 16MB por defecto
+        stats.totalBytes = 16 * 1024 * 1024;
     }
-
-    // Estimación razonable según particiones y firmware
-    stats.usedBytes = 4718592; // 4.5 MB
+    stats.usedBytes = 4 * 1024 * 1024;
     stats.freeBytes = (stats.totalBytes > stats.usedBytes) ? (stats.totalBytes - stats.usedBytes) : 0;
     return stats;
 }
@@ -146,13 +204,12 @@ StorageStats getSdCardStats() {
 
     uint64_t totalBytes = 0;
     uint64_t freeBytes = 0;
-    esp_err_t ret = esp_vfs_fat_info(MOUNT_POINT, &totalBytes, &freeBytes);
+    esp_err_t ret = esp_vfs_fat_info(SD_MOUNT_POINT, &totalBytes, &freeBytes);
     if (ret == ESP_OK) {
         stats.totalBytes = totalBytes;
         stats.freeBytes = freeBytes;
         stats.usedBytes = (totalBytes > freeBytes) ? (totalBytes - freeBytes) : 0;
     } else if (s_cardHandle != nullptr) {
-        // Fallback usando capacidad del descriptor del driver SDMMC
         stats.totalBytes = (uint64_t)s_cardHandle->csd.capacity * s_cardHandle->csd.sector_size;
         stats.freeBytes = stats.totalBytes;
         stats.usedBytes = 0;
@@ -165,24 +222,58 @@ StorageStats getUsbStats() {
     return StorageStats{ false, 0, 0, 0, "Puerto USB (OTG / HS)" };
 }
 
-static std::string normalizePath(const char* path) {
-    if (!path || strlen(path) == 0) return MOUNT_POINT;
-    std::string p = path;
-    if (p.rfind("S:/", 0) == 0 || p.rfind("A:/", 0) == 0) {
-        p = std::string(MOUNT_POINT) + p.substr(2);
-    } else if (p[0] != '/') {
-        p = std::string(MOUNT_POINT) + "/" + p;
+static std::string normalizePath(const char* path, bool& isSdTarget) {
+    if (!path || strlen(path) == 0) {
+        isSdTarget = false;
+        return SPIFFS_MOUNT_POINT;
     }
-    return p;
+
+    std::string p = path;
+
+    // Rutas con alias de MicroSD
+    if (p.rfind("S:/", 0) == 0 || p.rfind("A:/", 0) == 0) {
+        isSdTarget = true;
+        return std::string(SD_MOUNT_POINT) + p.substr(2);
+    }
+    if (p.rfind("/sdcard", 0) == 0) {
+        isSdTarget = true;
+        return p;
+    }
+    if (p.rfind("/sd", 0) == 0 && (p.length() == 3 || p[3] == '/')) {
+        isSdTarget = true;
+        return std::string(SD_MOUNT_POINT) + p.substr(3);
+    }
+
+    // Rutas con prefijo explícito de Flash SPIFFS
+    if (p.rfind("/spiffs", 0) == 0) {
+        isSdTarget = false;
+        return p;
+    }
+    if (p.rfind("/flash", 0) == 0 && (p.length() == 6 || p[6] == '/')) {
+        isSdTarget = false;
+        return std::string(SPIFFS_MOUNT_POINT) + p.substr(6);
+    }
+
+    // Rutas relativas o sin prefijo conocido -> Enrutamiento predeterminado a Flash Interna SPIFFS
+    isSdTarget = false;
+    if (p[0] == '/') {
+        return std::string(SPIFFS_MOUNT_POINT) + p;
+    }
+    return std::string(SPIFFS_MOUNT_POINT) + "/" + p;
 }
 
 std::vector<FileEntry> listDir(const char* path) {
     std::vector<FileEntry> result;
-    if (!s_sdMounted) {
+    bool isSd = false;
+    std::string fullPath = normalizePath(path, isSd);
+
+    if (isSd && !s_sdMounted) {
         return result;
     }
+    if (!isSd && !s_spiffsMounted) {
+        if (!mountSpiffs()) return result;
+    }
 
-    std::string fullPath = normalizePath(path);
     DIR* dir = opendir(fullPath.c_str());
     if (!dir) {
         ESP_LOGW(TAG, "No se pudo abrir directorio: %s", fullPath.c_str());
@@ -220,19 +311,27 @@ std::vector<FileEntry> listDir(const char* path) {
 }
 
 bool fileExists(const char* path) {
-    if (!s_sdMounted) return false;
-    std::string fullPath = normalizePath(path);
+    bool isSd = false;
+    std::string fullPath = normalizePath(path, isSd);
+
+    if (isSd && !s_sdMounted) return false;
+    if (!isSd && !s_spiffsMounted) return false;
+
     struct stat st;
     return (stat(fullPath.c_str(), &st) == 0);
 }
 
 std::string readFile(const char* path) {
     std::string content = "";
-    if (!s_sdMounted) {
-        if (!mountSd()) return content;
+    bool isSd = false;
+    std::string fullPath = normalizePath(path, isSd);
+
+    if (isSd) {
+        if (!s_sdMounted && !mountSd()) return content;
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return content;
     }
 
-    std::string fullPath = normalizePath(path);
     FILE* f = fopen(fullPath.c_str(), "rb");
     if (!f) {
         ESP_LOGW(TAG, "readFile: No se pudo abrir %s", fullPath.c_str());
@@ -252,25 +351,46 @@ std::string readFile(const char* path) {
     return content;
 }
 
-bool writeFile(const char* path, const std::string& content) {
-    if (!s_sdMounted) {
-        if (!mountSd()) return false;
+bool makeDir(const char* path) {
+    bool isSd = false;
+    std::string fullPath = normalizePath(path, isSd);
+
+    if (isSd) {
+        if (!s_sdMounted && !mountSd()) return false;
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return false;
+        return true;
     }
 
-    std::string fullPath = normalizePath(path);
+    struct stat st;
+    if (stat(fullPath.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+        return true;
+    }
+    return (mkdir(fullPath.c_str(), 0777) == 0);
+}
 
-    // Asegurar directorios padres si la ruta contiene subcarpetas
-    size_t lastSlash = fullPath.rfind('/');
-    if (lastSlash != std::string::npos && lastSlash > 0) {
-        for (size_t i = 1; i <= lastSlash; i++) {
-            if (fullPath[i] == '/' || i == lastSlash) {
-                std::string currentDir = fullPath.substr(0, i);
-                struct stat st;
-                if (stat(currentDir.c_str(), &st) != 0) {
-                    mkdir(currentDir.c_str(), 0777);
+bool writeFile(const char* path, const std::string& content) {
+    bool isSd = false;
+    std::string fullPath = normalizePath(path, isSd);
+
+    if (isSd) {
+        if (!s_sdMounted && !mountSd()) return false;
+
+        // Asegurar directorios padres en FAT
+        size_t lastSlash = fullPath.rfind('/');
+        if (lastSlash != std::string::npos && lastSlash > 0) {
+            for (size_t i = 1; i <= lastSlash; i++) {
+                if (fullPath[i] == '/' || i == lastSlash) {
+                    std::string currentDir = fullPath.substr(0, i);
+                    struct stat st;
+                    if (stat(currentDir.c_str(), &st) != 0) {
+                        mkdir(currentDir.c_str(), 0777);
+                    }
                 }
             }
         }
+    } else {
+        if (!s_spiffsMounted && !mountSpiffs()) return false;
     }
 
     FILE* f = fopen(fullPath.c_str(), "wb");
@@ -289,9 +409,22 @@ bool writeFile(const char* path, const std::string& content) {
 }
 
 bool deleteFile(const char* path) {
-    if (!s_sdMounted) return false;
-    std::string fullPath = normalizePath(path);
+    bool isSd = false;
+    std::string fullPath = normalizePath(path, isSd);
+
+    if (isSd && !s_sdMounted) return false;
+    if (!isSd && !s_spiffsMounted) return false;
+
     return (remove(fullPath.c_str()) == 0);
+}
+
+bool copyFile(const char* srcPath, const char* dstPath) {
+    std::string data = readFile(srcPath);
+    if (data.empty() && !fileExists(srcPath)) {
+        ESP_LOGE(TAG, "copyFile: Origen no encontrado: %s", srcPath);
+        return false;
+    }
+    return writeFile(dstPath, data);
 }
 
 size_t getFreeBytes(StorageType type) {

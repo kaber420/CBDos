@@ -30,6 +30,7 @@ bool init();
 bool mountSd();
 bool unmountSd();
 bool isSdMounted();
+bool isFlashMounted();
 
 StorageStats getFlashStats();
 StorageStats getSdCardStats();
@@ -40,6 +41,8 @@ bool fileExists(const char* path);
 std::string readFile(const char* path);
 bool writeFile(const char* path, const std::string& content);
 bool deleteFile(const char* path);
+bool copyFile(const char* srcPath, const char* dstPath);
+bool makeDir(const char* path);
 size_t getFreeBytes(StorageType type);
 size_t getTotalBytes(StorageType type);
 

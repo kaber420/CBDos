@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BaseView.hpp"
+#include "cbdos/storage.hpp"
 #include <lvgl.h>
 #include <string>
 #include <vector>
@@ -35,6 +36,8 @@ private:
     void showOpenFileModal();
     static void modalSaveConfirmCb(lv_event_t* e);
     static void modalSaveCancelCb(lv_event_t* e);
+    static void modalSaveUnitFlashCb(lv_event_t* e);
+    static void modalSaveUnitSdCb(lv_event_t* e);
     static void modalOpenCloseCb(lv_event_t* e);
     static void modalFileItemCb(lv_event_t* e);
     static void modalScrollUpCb(lv_event_t* e);
@@ -42,7 +45,8 @@ private:
 
     void updateTitle();
     void updateRunButtonVisibility();
-    void scanTextFilesSD();
+    void updateSaveModalUnitButtons();
+    void scanTextFiles();
 
     // UI Widgets
     lv_obj_t* m_fileLabel;
@@ -52,8 +56,11 @@ private:
     lv_obj_t* m_keyboard;
     lv_obj_t* m_modalMask;
     lv_obj_t* m_saveAsTa;
+    lv_obj_t* m_btnSaveTargetFlash;
+    lv_obj_t* m_btnSaveTargetSd;
 
     std::string m_currentFilePath;
+    cbdos::storage::StorageType m_modalSaveStorage;
     bool m_isModified;
     bool m_keyboardVisible;
     std::vector<std::string> m_foundFiles;

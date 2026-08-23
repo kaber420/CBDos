@@ -21,15 +21,35 @@ TextEditorView::TextEditorView(const std::string& initialPath)
       m_keyboard(nullptr),
       m_modalMask(nullptr),
       m_saveAsTa(nullptr),
+      m_btnSaveTargetFlash(nullptr),
+      m_btnSaveTargetSd(nullptr),
       m_currentFilePath(initialPath),
+      m_modalSaveStorage(cbdos::storage::StorageType::InternalFlash),
       m_isModified(false),
       m_keyboardVisible(true) {
+    if (!m_currentFilePath.empty()) {
+        if (m_currentFilePath.rfind("/sd", 0) == 0 || m_currentFilePath.rfind("A:", 0) == 0 || m_currentFilePath.rfind("S:", 0) == 0) {
+            m_modalSaveStorage = cbdos::storage::StorageType::SdCard;
+        } else {
+            m_modalSaveStorage = cbdos::storage::StorageType::InternalFlash;
+        }
+    } else {
+        m_modalSaveStorage = cbdos::storage::isSdMounted() ? cbdos::storage::StorageType::SdCard : cbdos::storage::StorageType::InternalFlash;
+    }
 }
 
 void TextEditorView::updateTitle() {
     if (!m_fileLabel || !lv_obj_is_valid(m_fileLabel)) return;
 
-    std::string prefix = "[SD] ";
+    std::string prefix = "[Flash] ";
+    if (!m_currentFilePath.empty()) {
+        if (m_currentFilePath.rfind("/sd", 0) == 0 || m_currentFilePath.rfind("A:", 0) == 0 || m_currentFilePath.rfind("S:", 0) == 0) {
+            prefix = "[SD] ";
+        }
+    } else if (cbdos::storage::isSdMounted()) {
+        prefix = "[SD] ";
+    }
+
     std::string name = m_currentFilePath.empty() ? "(Sin Titulo)" : m_currentFilePath;
     if (m_isModified) {
         name += " *";
@@ -187,22 +207,73 @@ void TextEditorView::btnRunCb(lv_event_t* e) {
 }
 
 // ── Modal: Guardar Como ──────────────────────────────────────────
+void TextEditorView::updateSaveModalUnitButtons() {
+    if (!m_btnSaveTargetFlash || !m_btnSaveTargetSd) return;
+    if (!lv_obj_is_valid(m_btnSaveTargetFlash) || !lv_obj_is_valid(m_btnSaveTargetSd)) return;
+
+    if (m_modalSaveStorage == cbdos::storage::StorageType::InternalFlash) {
+        lv_obj_set_style_bg_color(m_btnSaveTargetFlash, lv_color_hex(0x1B5E20), 0);
+        lv_obj_set_style_border_color(m_btnSaveTargetFlash, lv_color_hex(0x00E676), 0);
+        lv_obj_set_style_border_width(m_btnSaveTargetFlash, 2, 0);
+
+        lv_obj_set_style_bg_color(m_btnSaveTargetSd, lv_color_hex(0x1E2230), 0);
+        lv_obj_set_style_border_width(m_btnSaveTargetSd, 0, 0);
+    } else {
+        lv_obj_set_style_bg_color(m_btnSaveTargetSd, lv_color_hex(0x1B5E20), 0);
+        lv_obj_set_style_border_color(m_btnSaveTargetSd, lv_color_hex(0x00E676), 0);
+        lv_obj_set_style_border_width(m_btnSaveTargetSd, 2, 0);
+
+        lv_obj_set_style_bg_color(m_btnSaveTargetFlash, lv_color_hex(0x1E2230), 0);
+        lv_obj_set_style_border_width(m_btnSaveTargetFlash, 0, 0);
+    }
+}
+
+void TextEditorView::modalSaveUnitFlashCb(lv_event_t* e) {
+    TextEditorView* self = static_cast<TextEditorView*>(lv_event_get_user_data(e));
+    if (self) {
+        self->m_modalSaveStorage = cbdos::storage::StorageType::InternalFlash;
+        self->updateSaveModalUnitButtons();
+    }
+}
+
+void TextEditorView::modalSaveUnitSdCb(lv_event_t* e) {
+    TextEditorView* self = static_cast<TextEditorView*>(lv_event_get_user_data(e));
+    if (self) {
+        if (!cbdos::storage::isSdMounted()) {
+            UIManager::showToast("MicroSD no detectada o no montada");
+            return;
+        }
+        self->m_modalSaveStorage = cbdos::storage::StorageType::SdCard;
+        self->updateSaveModalUnitButtons();
+    }
+}
+
 void TextEditorView::modalSaveConfirmCb(lv_event_t* e) {
     TextEditorView* self = static_cast<TextEditorView*>(lv_event_get_user_data(e));
     if (!self || !self->m_saveAsTa || !lv_obj_is_valid(self->m_saveAsTa)) return;
 
     const char* p = lv_textarea_get_text(self->m_saveAsTa);
-    std::string path = p ? p : "";
-    if (path.empty() || path == "/") {
-        UIManager::showToast("Ruta o nombre no valido");
+    std::string relPath = p ? p : "";
+    while (!relPath.empty() && (relPath.front() == ' ' || relPath.front() == '/')) {
+        relPath.erase(relPath.begin());
+    }
+    while (!relPath.empty() && relPath.back() == ' ') {
+        relPath.pop_back();
+    }
+
+    if (relPath.empty()) {
+        UIManager::showToast("Introduce un nombre de archivo");
         return;
     }
 
-    if (path[0] != '/') {
-        path = "/" + path;
+    std::string finalPath;
+    if (self->m_modalSaveStorage == cbdos::storage::StorageType::InternalFlash) {
+        finalPath = "/spiffs/" + relPath;
+    } else {
+        finalPath = "/sdcard/" + relPath;
     }
 
-    self->m_currentFilePath = path;
+    self->m_currentFilePath = finalPath;
 
     const char* txt = lv_textarea_get_text(self->m_textArea);
     std::string content = txt ? txt : "";
@@ -221,6 +292,8 @@ void TextEditorView::modalSaveConfirmCb(lv_event_t* e) {
         self->m_modalMask = nullptr;
     }
     self->m_saveAsTa = nullptr;
+    self->m_btnSaveTargetFlash = nullptr;
+    self->m_btnSaveTargetSd = nullptr;
 }
 
 void TextEditorView::modalSaveCancelCb(lv_event_t* e) {
@@ -229,6 +302,8 @@ void TextEditorView::modalSaveCancelCb(lv_event_t* e) {
         lv_obj_delete_async(self->m_modalMask);
         self->m_modalMask = nullptr;
         self->m_saveAsTa = nullptr;
+        self->m_btnSaveTargetFlash = nullptr;
+        self->m_btnSaveTargetSd = nullptr;
     }
 }
 
@@ -257,13 +332,13 @@ void TextEditorView::showSaveAsModal() {
     lv_obj_set_style_pad_all(m_modalMask, 0, 0);
 
     int32_t modalW = (screenW >= 480) ? 420 : 300;
-    int32_t modalH = (screenH >= 800) ? 220 : 190;
+    int32_t modalH = (screenH >= 800) ? 260 : 220;
 
     lv_obj_t* modal = lv_obj_create(m_modalMask);
     lv_obj_set_size(modal, modalW, modalH);
     DefaultTheme::applyRaisedCard(modal, 16);
     lv_obj_set_align(modal, LV_ALIGN_TOP_MID);
-    lv_obj_set_style_margin_top(modal, (screenH >= 800) ? 30 : 12, 0);
+    lv_obj_set_style_margin_top(modal, (screenH >= 800) ? 24 : 8, 0);
     lv_obj_set_flex_flow(modal, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(modal, 10, 0);
     lv_obj_set_style_pad_row(modal, 8, 0);
@@ -275,16 +350,56 @@ void TextEditorView::showSaveAsModal() {
     lv_obj_set_style_text_color(title, DefaultTheme::getTextColor(), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
 
-    // Campo de texto de ruta
+    // 1. Selector de Unidad Destino (Flash vs MicroSD)
+    lv_obj_t* unitRow = lv_obj_create(modal);
+    lv_obj_set_size(unitRow, LV_PCT(100), 38);
+    lv_obj_set_style_bg_opa(unitRow, 0, 0);
+    lv_obj_set_style_border_width(unitRow, 0, 0);
+    lv_obj_set_flex_flow(unitRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(unitRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(unitRow, 0, 0);
+    DefaultTheme::disableScroll(unitRow);
+
+    int32_t unitBtnW = (modalW / 2) - 8;
+
+    m_btnSaveTargetFlash = lv_button_create(unitRow);
+    lv_obj_set_size(m_btnSaveTargetFlash, unitBtnW, 34);
+    DefaultTheme::applyButton(m_btnSaveTargetFlash, 8);
+    lv_obj_t* lblFlash = lv_label_create(m_btnSaveTargetFlash);
+    lv_label_set_text(lblFlash, LV_SYMBOL_SAVE " Flash Interna");
+    lv_obj_set_style_text_font(lblFlash, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblFlash);
+    lv_obj_add_event_cb(m_btnSaveTargetFlash, modalSaveUnitFlashCb, LV_EVENT_CLICKED, this);
+
+    m_btnSaveTargetSd = lv_button_create(unitRow);
+    lv_obj_set_size(m_btnSaveTargetSd, unitBtnW, 34);
+    DefaultTheme::applyButton(m_btnSaveTargetSd, 8);
+    lv_obj_t* lblSd = lv_label_create(m_btnSaveTargetSd);
+    lv_label_set_text(lblSd, LV_SYMBOL_SD_CARD " MicroSD");
+    lv_obj_set_style_text_font(lblSd, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblSd);
+    lv_obj_add_event_cb(m_btnSaveTargetSd, modalSaveUnitSdCb, LV_EVENT_CLICKED, this);
+
+    updateSaveModalUnitButtons();
+
+    // 2. Campo de texto de ruta relativa
     m_saveAsTa = lv_textarea_create(modal);
     lv_obj_set_size(m_saveAsTa, LV_PCT(100), 38);
     DefaultTheme::applySunkenCard(m_saveAsTa, 8);
     lv_textarea_set_one_line(m_saveAsTa, true);
-    std::string defaultPath = m_currentFilePath.empty() ? "/sdcard/scripts/nuevo.lua" : m_currentFilePath;
-    lv_textarea_set_text(m_saveAsTa, defaultPath.c_str());
+
+    std::string cleanInitial = m_currentFilePath;
+    if (cleanInitial.rfind("/spiffs/", 0) == 0) cleanInitial = cleanInitial.substr(8);
+    else if (cleanInitial.rfind("/sdcard/", 0) == 0) cleanInitial = cleanInitial.substr(8);
+    else if (cleanInitial.rfind("/sd/", 0) == 0) cleanInitial = cleanInitial.substr(4);
+    else if (cleanInitial.rfind("/flash/", 0) == 0) cleanInitial = cleanInitial.substr(7);
+    else if (!cleanInitial.empty() && cleanInitial[0] == '/') cleanInitial = cleanInitial.substr(1);
+
+    if (cleanInitial.empty()) cleanInitial = "scripts/nuevo.lua";
+    lv_textarea_set_text(m_saveAsTa, cleanInitial.c_str());
     lv_obj_set_style_text_font(m_saveAsTa, &lv_font_montserrat_12, 0);
 
-    // Fila de botones Cancelar / Guardar
+    // 3. Fila de botones Cancelar / Guardar
     lv_obj_t* btnRow = lv_obj_create(modal);
     lv_obj_set_size(btnRow, LV_PCT(100), 40);
     lv_obj_set_style_bg_opa(btnRow, 0, 0);
@@ -294,7 +409,7 @@ void TextEditorView::showSaveAsModal() {
     lv_obj_set_style_pad_all(btnRow, 0, 0);
     DefaultTheme::disableScroll(btnRow);
 
-    int32_t btnW = (modalW / 2) - 10;
+    int32_t btnW = (modalW / 2) - 8;
 
     lv_obj_t* btnCancel = lv_button_create(btnRow);
     lv_obj_set_size(btnCancel, btnW, 36);
@@ -314,7 +429,7 @@ void TextEditorView::showSaveAsModal() {
     lv_obj_center(lblS);
     lv_obj_add_event_cb(btnSave, modalSaveConfirmCb, LV_EVENT_CLICKED, this);
 
-    // Teclado virtual en la parte inferior del modal
+    // 4. Teclado virtual en la parte inferior
     lv_obj_t* kb = lv_keyboard_create(m_modalMask);
     lv_obj_set_size(kb, LV_PCT(100), (screenH >= 800) ? 320 : 230);
     lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
@@ -367,18 +482,19 @@ void TextEditorView::modalScrollDownCb(lv_event_t* e) {
     }
 }
 
-void TextEditorView::scanTextFilesSD() {
+void TextEditorView::scanTextFiles() {
     m_foundFiles.clear();
 
-    if (!cbdos::storage::isSdMounted()) {
-        cbdos::storage::mountSd();
-    }
+    std::vector<std::string> dirsToScan;
+    // 1. Escaneo en Flash Interna SPIFFS
+    dirsToScan.push_back("/spiffs");
+    dirsToScan.push_back("/spiffs/scripts");
+    dirsToScan.push_back("/spiffs/notes");
 
-    if (!cbdos::storage::isSdMounted()) {
-        return;
+    // 2. Escaneo en MicroSD si está montada
+    if (cbdos::storage::isSdMounted()) {
+        dirsToScan.push_back("/sdcard");
     }
-
-    std::vector<std::string> dirsToScan = {"/sdcard"};
 
     for (size_t d = 0; d < dirsToScan.size() && dirsToScan.size() < 50; d++) {
         std::string currentDir = dirsToScan[d];
@@ -391,7 +507,10 @@ void TextEditorView::scanTextFilesSD() {
             if (f.isDirectory) {
                 if (f.name != "System Volume Information" && f.name != ".Spotlight-V100" && 
                     f.name != ".Trashes" && f.name[0] != '.') {
-                    dirsToScan.push_back(fullPath);
+                    // Evitar duplicar carpetas ya encoladas
+                    if (std::find(dirsToScan.begin(), dirsToScan.end(), fullPath) == dirsToScan.end()) {
+                        dirsToScan.push_back(fullPath);
+                    }
                 }
             } else {
                 std::string nameLower = f.name;
@@ -401,7 +520,9 @@ void TextEditorView::scanTextFilesSD() {
                     std::string ext = nameLower.substr(dotPos);
                     if (ext == ".lua" || ext == ".txt" || ext == ".json" || 
                         ext == ".ini" || ext == ".log" || ext == ".csv" || ext == ".md") {
-                        m_foundFiles.push_back(fullPath);
+                        if (std::find(m_foundFiles.begin(), m_foundFiles.end(), fullPath) == m_foundFiles.end()) {
+                            m_foundFiles.push_back(fullPath);
+                        }
                     }
                 }
             }
@@ -421,7 +542,7 @@ void TextEditorView::showOpenFileModal() {
         m_keyboardVisible = false;
     }
 
-    scanTextFilesSD();
+    scanTextFiles();
 
     auto caps = cbdos::display::getCapabilities();
     int32_t screenW = caps.width > 0 ? caps.width : 480;

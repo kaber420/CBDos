@@ -36,6 +36,7 @@ idf_component_register(
         "esp_driver_sdmmc"
         "sdmmc"
         "fatfs"
+        "spiffs"
         "vfs"
         "esp_wifi"
         "esp_netif"
