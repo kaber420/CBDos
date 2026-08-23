@@ -51,10 +51,10 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
         return ESP_FAIL;
     }
 
-    // 3. Configurar Interfaz de Datos I2S con buffers DMA de baja latencia
+    // 3. Configurar Interfaz de Datos I2S con buffers DMA continuos y estables
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(BOARD_AUDIO_I2S_PORT, I2S_ROLE_MASTER);
-    chan_cfg.dma_desc_num = 6;
-    chan_cfg.dma_frame_num = 256;
+    chan_cfg.dma_desc_num = 16;
+    chan_cfg.dma_frame_num = 512;
     chan_cfg.auto_clear = true;
     i2s_chan_handle_t tx_handle = nullptr;
     esp_err_t ret = i2s_new_channel(&chan_cfg, &tx_handle, nullptr);

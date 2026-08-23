@@ -56,15 +56,6 @@ static void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data) {
     }
 }
 
-static void networkTask(void* param) {
-    while (1) {
-        if (WiFi.status() == WL_CONNECTED) {
-            TimeService::getInstance().update();
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
-
 void setup() {
     Serial.begin(115200);
     cbdos::system::sleepMs(500);
@@ -111,8 +102,6 @@ void setup() {
             WiFi.begin(wifiCfg.ssid.c_str(), wifiCfg.password.c_str());
         }
     }
-
-    xTaskCreatePinnedToCore(networkTask, "NetworkTask", 8192, NULL, 1, NULL, 0);
 
     // 4. Inicializar LVGL 9.5 con fuente de Ticks
     lv_init();

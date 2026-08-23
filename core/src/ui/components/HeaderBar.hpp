@@ -29,6 +29,7 @@ private:
     static void eventHandler(lv_event_t* e);
     static void backBtnEventHandler(lv_event_t* e);
     static void rightActionEventHandler(lv_event_t* e);
+    static void timerCallback(lv_timer_t* t);
 
     lv_obj_t* m_container;
     lv_obj_t* m_labelTitle;
@@ -37,6 +38,7 @@ private:
     lv_obj_t* m_labelWifi;
     lv_obj_t* m_btnRightAction;
     lv_obj_t* m_labelRightAction;
+    lv_timer_t* m_timer;
 
     ClickCallback m_onClickCb;
     ClickCallback m_onBackCb;

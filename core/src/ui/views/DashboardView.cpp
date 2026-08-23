@@ -9,6 +9,7 @@
 #include "CartridgeView.hpp"
 #include "FileManagerView.hpp"
 #include "UtilitiesView.hpp"
+#include "TlvBrowserView.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
@@ -21,6 +22,7 @@ namespace ui {
 DashboardView::DashboardView()
     : BaseView("Dashboard") {
     m_apps = {
+        {"browser", "Navegador", LV_SYMBOL_EYE_OPEN, 0x00B4D8},
         {"gallery", "Galeria", LV_SYMBOL_IMAGE, 0xEC4899},
         {"files", "Archivos", LV_SYMBOL_DIRECTORY, 0xF77F00},
         {"utilities", "Utilidades", LV_SYMBOL_LIST, 0x00F5D4},
@@ -128,7 +130,9 @@ void DashboardView::createCards() {
 void DashboardView::cardClickedEventCb(lv_event_t* e) {
     const char* appId = static_cast<const char*>(lv_event_get_user_data(e));
     if (appId) {
-        if (strcmp(appId, "gallery") == 0) {
+        if (strcmp(appId, "browser") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<TlvBrowserView>());
+        } else if (strcmp(appId, "gallery") == 0) {
             UIManager::getInstance().pushView(std::make_shared<GalleryListView>());
         } else if (strcmp(appId, "files") == 0) {
             UIManager::getInstance().pushView(std::make_shared<FileManagerView>());

@@ -36,6 +36,7 @@ idf_component_register(
         "src/ui/views/FileManagerView.cpp"
         "src/ui/views/CartridgeView.cpp"
         "src/ui/views/UtilitiesView.cpp"
+        "src/ui/views/TlvBrowserView.cpp"
         "src/ui/views/utilities/CalculatorApp.cpp"
         "src/ui/views/utilities/StopwatchApp.cpp"
         "src/ui/views/utilities/PomodoroApp.cpp"
@@ -46,6 +47,9 @@ idf_component_register(
         "src/ui/modals/C6FlasherModal.cpp"
         "src/audio/AudioPlayer.cpp"
         "src/audio/RadioManager.cpp"
+
+        "src/tlv/mesh_header.cpp"
+        "src/tlv/tlv_parser.cpp"
 
         "src/network/ConfigManager.cpp"
         "src/network/TimeService.cpp"
@@ -59,6 +63,7 @@ idf_component_register(
         "src/ui"
         "src/ui/views"
         "src/ui/views/utilities"
+        "src/tlv"
         "src/cartridge"
         "src/audio"
         "src/audio/libhelix/src"

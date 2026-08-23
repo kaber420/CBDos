@@ -240,7 +240,7 @@ bool AudioPlayer::play(const char* filepath) {
         cbdos::audio::setSampleRate(m_sampleRate);
     }
 
-    xTaskCreatePinnedToCore(playbackTask, "helix_audio_task", 8192, this, 4, &m_taskHandle, 0);
+    xTaskCreatePinnedToCore(playbackTask, "helix_audio_task", 8192, this, 6, &m_taskHandle, 0);
 
     xSemaphoreGive(m_mutex);
     return true;
@@ -280,7 +280,7 @@ bool AudioPlayer::playStream(const char* url) {
 
     ESP_LOGI(TAG, "Iniciando Helix Stream Player para: %s", url);
 
-    xTaskCreatePinnedToCore(streamPlaybackTask, "helix_stream_task", 12288, this, 4, &m_taskHandle, 0);
+    xTaskCreatePinnedToCore(streamPlaybackTask, "helix_stream_task", 12288, this, 6, &m_taskHandle, 0);
 
     xSemaphoreGive(m_mutex);
     return true;
@@ -672,9 +672,10 @@ void AudioPlayer::runMp3Playback() {
         } else if (err != ERR_MP3_INDATA_UNDERFLOW) {
             readPtr++;
             bytesLeft--;
+            taskYIELD();
+        } else {
+            taskYIELD();
         }
-
-        taskYIELD();
     }
 
     free(inBuf);

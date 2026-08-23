@@ -10,6 +10,7 @@
       "-I src/ui",
       "-I src/ui/views",
       "-I src/ui/views/utilities",
+      "-I src/tlv",
       "-I src/audio",
       "-I src/audio/libhelix/src",
       "-I src/audio/libhelix/src/utils",

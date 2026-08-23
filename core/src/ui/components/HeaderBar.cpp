@@ -16,12 +16,20 @@ HeaderBar::HeaderBar()
       m_btnBack(nullptr),
       m_labelClock(nullptr),
       m_labelWifi(nullptr),
+      m_btnRightAction(nullptr),
+      m_labelRightAction(nullptr),
+      m_timer(nullptr),
       m_onClickCb(nullptr),
       m_onBackCb(nullptr),
+      m_onRightActionCb(nullptr),
       m_lastUpdateMs(0) {
 }
 
 HeaderBar::~HeaderBar() {
+    if (m_timer) {
+        lv_timer_delete(m_timer);
+        m_timer = nullptr;
+    }
     if (m_container && lv_obj_is_valid(m_container)) {
         lv_obj_delete(m_container);
         m_container = nullptr;
@@ -125,8 +133,16 @@ bool HeaderBar::init(lv_obj_t* parent) {
     lv_obj_set_style_text_color(m_labelWifi, lv_color_hex(0x10B981), 0);
     lv_obj_set_style_text_font(m_labelWifi, &lv_font_montserrat_16, 0);
 
+    m_timer = lv_timer_create(timerCallback, 15000, this);
     update();
     return true;
+}
+
+void HeaderBar::timerCallback(lv_timer_t* t) {
+    auto* self = static_cast<HeaderBar*>(lv_timer_get_user_data(t));
+    if (self) {
+        self->update();
+    }
 }
 
 void HeaderBar::setTitle(const char* title) {
@@ -199,15 +215,9 @@ void HeaderBar::setOnClickCallback(ClickCallback cb) {
 }
 
 void HeaderBar::update() {
-    uint32_t now = cbdos::system::getTimeMs();
-    if (now - m_lastUpdateMs < 5000 && m_lastUpdateMs != 0) {
-        return; // Actualización cada 5 segundos
-    }
-    m_lastUpdateMs = now;
-
     if (!m_container || !lv_obj_is_valid(m_container)) return;
 
-    // 1. Reloj NTP Real (HH:MM)
+    // 1. Reloj NTP Real (HH:MM) - Actualizado cada 15 segundos
     time_t rawtime;
     time(&rawtime);
     struct tm* timeinfo = localtime(&rawtime);

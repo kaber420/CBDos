@@ -16,17 +16,6 @@
 
 static const char* TAG = "CBDos_Main";
 
-static void uiUpdateTask(void* pvParameters) {
-    while (true) {
-        TimeService::getInstance().update();
-        if (LVGL_Port::getInstance().lock(pdMS_TO_TICKS(100))) {
-            cbdos::ui::update();
-            LVGL_Port::getInstance().unlock();
-        }
-        vTaskDelay(pdMS_TO_TICKS(250));
-    }
-}
-
 static void consoleCommandTask(void* pvParameters) {
     char buf[128];
     while (true) {
@@ -153,10 +142,7 @@ extern "C" void app_main(void) {
         }, "auto_wifi_task", 4096, nullptr, 1, nullptr, 0);
     }
 
-    // 8. Tarea periódica para refresco de métricas en tiempo real (reloj, RAM, etc.)
-    xTaskCreatePinnedToCore(uiUpdateTask, "ui_update_task", 4096, nullptr, 3, nullptr, 1);
-
-    // 9. Tarea de consola interactiva bajo demanda
+    // 8. Tarea de consola interactiva bajo demanda
     xTaskCreatePinnedToCore(consoleCommandTask, "cli_task", 4096, nullptr, 1, nullptr, 0);
 
     auto caps = cbdos::display::getCapabilities();
