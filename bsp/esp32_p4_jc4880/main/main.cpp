@@ -14,6 +14,12 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+namespace cbdos {
+namespace bsp {
+    void initPersistenceBackend();
+}
+}
+
 static const char* TAG = "CBDos_Main";
 
 static void consoleCommandTask(void* pvParameters) {
@@ -65,6 +71,9 @@ extern "C" void app_main(void) {
     if (nvsRet != ESP_OK) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando NVS Flash: %s", esp_err_to_name(nvsRet));
     }
+
+    // Inyectar el backend de persistencia NVS
+    cbdos::bsp::initPersistenceBackend();
 
     // Cargar configuraciones del sistema desde NVS
     SystemConfig sysCfg;

@@ -1,7 +1,7 @@
 #pragma once
 #include <lvgl.h>
-#include "../Components/HeaderBar.h"
-#include "../../Network/ConfigManager.h"
+#include "../components/HeaderBar.hpp"
+#include "../../network/ConfigManager.h"
 
 class WiFiConfigView {
 public:

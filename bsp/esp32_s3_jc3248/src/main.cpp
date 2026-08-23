@@ -16,6 +16,12 @@
 extern JC3248W535_Display& get_s3_display_driver();
 extern JC3248W535_Touch& get_s3_touch_driver();
 
+namespace cbdos {
+namespace bsp {
+    void initPersistenceBackend();
+}
+}
+
 static const char* TAG = "CBDos_Main";
 static lv_display_t* s_lv_display = nullptr;
 static lv_indev_t* s_lv_indev = nullptr;
@@ -61,6 +67,9 @@ void setup() {
     cbdos::system::sleepMs(500);
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) [Target: ESP32-S3] ===");
     
+    // Inyectar el backend de persistencia NVS
+    cbdos::bsp::initPersistenceBackend();
+
     // Cargar configuraciones del sistema desde NVS
     SystemConfig sysCfg;
     ConfigManager::getInstance().loadSystem(sysCfg);

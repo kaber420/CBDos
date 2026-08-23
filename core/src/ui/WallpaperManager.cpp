@@ -4,8 +4,9 @@
 #include <cstring>
 #include <cstdlib>
 
+#include "cbdos/persistence.hpp"
+
 #if defined(ARDUINO)
-#include <Preferences.h>
 #include <SD.h>
 #include <LittleFS.h>
 #include <esp_heap_caps.h>
@@ -92,28 +93,23 @@ bool WallpaperManager::loadFromFlash() {
 }
 
 void WallpaperManager::init() {
-#if defined(ARDUINO)
-    Preferences prefs;
+    auto* backend = cbdos::persistence::getBackend();
     bool isCustom = false;
-    if (prefs.begin("wallpaper", true)) {
-        isCustom = prefs.getBool("custom", false);
-        String p = prefs.getString("path", "default");
-        currentPath = p.c_str();
-        prefs.end();
+    currentPath = "default";
+    hasCustomWallpaper = false;
+
+    if (backend && backend->begin("wallpaper", true)) {
+        isCustom = backend->getBool("custom", false);
+        currentPath = backend->getString("path", "default");
+        backend->end();
     }
+
     if (isCustom) {
         if (!loadFromFlash()) {
             hasCustomWallpaper = false;
             currentPath = "default";
         }
-    } else {
-        hasCustomWallpaper = false;
-        currentPath = "default";
     }
-#else
-    hasCustomWallpaper = false;
-    currentPath = "default";
-#endif
 }
 
 void WallpaperManager::applyWallpaper(lv_obj_t* parent) {
@@ -225,11 +221,11 @@ bool WallpaperManager::setWallpaper(const std::string& path) {
     hasCustomWallpaper = true;
     currentPath = path;
 
-    Preferences prefs;
-    if (prefs.begin("wallpaper", false)) {
-        prefs.putBool("custom", true);
-        prefs.putString("path", currentPath.c_str());
-        prefs.end();
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("wallpaper", false)) {
+        backend->setBool("custom", true);
+        backend->setString("path", currentPath);
+        backend->end();
     }
 
     return true;
@@ -245,13 +241,13 @@ void WallpaperManager::restoreDefault() {
     if (LittleFS.exists("/wallpaper.bin")) {
         LittleFS.remove("/wallpaper.bin");
     }
-    Preferences prefs;
-    if (prefs.begin("wallpaper", false)) {
-        prefs.putBool("custom", false);
-        prefs.putString("path", "default");
-        prefs.end();
-    }
 #endif
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("wallpaper", false)) {
+        backend->setBool("custom", false);
+        backend->setString("path", "default");
+        backend->end();
+    }
 }
 
 std::vector<std::string> WallpaperManager::getAvailableWallpapers() {

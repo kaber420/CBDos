@@ -7,6 +7,7 @@ idf_component_register(
         "../hal/hal_audio_p4.cpp"
         "../hal/hal_network_p4.cpp"
         "../hal/hal_storage_p4.cpp"
+        "../hal/hal_persistence_p4.cpp"
         "../hal/DisplayHAL.cpp"
         "../hal/TouchHAL.cpp"
         "../hal/AudioHAL.cpp"

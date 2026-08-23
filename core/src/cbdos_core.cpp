@@ -4,9 +4,23 @@
 #include "cbdos/audio.hpp"
 #include "cbdos/network.hpp"
 #include "cbdos/storage.hpp"
+#include "cbdos/persistence.hpp"
 
 // Punto de entrada y fallbacks débiles (weak) del núcleo agnóstico
 namespace cbdos {
+
+namespace persistence {
+    static IPersistenceBackend* s_backend = nullptr;
+
+    void setBackend(IPersistenceBackend* backend) {
+        s_backend = backend;
+    }
+
+    IPersistenceBackend* getBackend() {
+        return s_backend;
+    }
+}
+
 
 const char* getVersion() {
     return "0.2.0-CyBerDeck";

@@ -1,524 +1,10 @@
 #include "ConfigManager.h"
-
-#ifdef ARDUINO
-
-#include <SD.h>
-#include <mbedtls/aes.h>
-#include <mbedtls/gcm.h>
-#include <mbedtls/pkcs5.h>
-#include <mbedtls/md.h>
-#include <mbedtls/build_info.h>
-#include <ArduinoJson.h>
-
-bool ConfigManager::init() {
-    // Probar abrir namespaces
-    bool res = preferences.begin("cbdos_sys", true);
-    if (res) preferences.end();
-    res = preferences.begin("wifi", true);
-    if (res) preferences.end();
-    res = preferences.begin("lora", true);
-    if (res) preferences.end();
-    res = preferences.begin("flrc", true);
-    if (res) preferences.end();
-    res = preferences.begin("gateways", true);
-    if (res) preferences.end();
-    res = preferences.begin("time", true);
-    if (res) preferences.end();
-    return true;
-}
-
-bool ConfigManager::clearLegacyConfig() {
-    if (preferences.begin("tablehub", false)) {
-        preferences.clear();
-        preferences.end();
-        Serial.println("[NVS] Namespace legacy 'tablehub' borrado completamente");
-        return true;
-    }
-    return false;
-}
-
-bool ConfigManager::clearAllNvs() {
-    const char* namespaces[] = {"cbdos_sys", "wifi", "lora", "flrc", "gateways", "time", "tablehub"};
-    for (const char* ns : namespaces) {
-        if (preferences.begin(ns, false)) {
-            preferences.clear();
-            preferences.end();
-        }
-    }
-    Serial.println("[NVS] Todos los namespaces NVS borrados correctamente");
-    return true;
-}
-
-// ─── System Config ───
-bool ConfigManager::loadSystem(SystemConfig& cfg) {
-    if (preferences.begin("cbdos_sys", true)) {
-        cfg.brightness = preferences.getUChar("bright", 70);
-        cfg.volume = preferences.getUChar("vol", 70);
-        cfg.autoConnectWifi = preferences.getBool("wifi_auto", false);
-        cfg.gmtOffsetSeconds = preferences.getInt("gmt_off", -21600);
-        cfg.daylightOffsetSeconds = preferences.getInt("dst_off", 0);
-        cfg.screenTimeoutSeconds = preferences.getUInt("scr_tout", 60);
-        cfg.defaultTheme = preferences.getString("theme", "dark");
-        preferences.end();
-        return true;
-    }
-    return false;
-}
-
-bool ConfigManager::saveSystem(const SystemConfig& cfg) {
-    if (!preferences.begin("cbdos_sys", false)) {
-        return false;
-    }
-    preferences.putUChar("bright", cfg.brightness);
-    preferences.putUChar("vol", cfg.volume);
-    preferences.putBool("wifi_auto", cfg.autoConnectWifi);
-    preferences.putInt("gmt_off", cfg.gmtOffsetSeconds);
-    preferences.putInt("dst_off", cfg.daylightOffsetSeconds);
-    preferences.putUInt("scr_tout", cfg.screenTimeoutSeconds);
-    preferences.putString("theme", cfg.defaultTheme);
-    preferences.end();
-    return true;
-}
-
-uint8_t ConfigManager::getBrightness() {
-    SystemConfig cfg;
-    loadSystem(cfg);
-    return cfg.brightness;
-}
-
-void ConfigManager::setBrightness(uint8_t percent) {
-    if (preferences.begin("cbdos_sys", false)) {
-        preferences.putUChar("bright", percent);
-        preferences.end();
-    }
-}
-
-uint8_t ConfigManager::getVolume() {
-    SystemConfig cfg;
-    loadSystem(cfg);
-    return cfg.volume;
-}
-
-void ConfigManager::setVolume(uint8_t percent) {
-    if (preferences.begin("cbdos_sys", false)) {
-        preferences.putUChar("vol", percent);
-        preferences.end();
-    }
-}
-
-bool ConfigManager::isWifiAutoConnect() {
-    SystemConfig cfg;
-    loadSystem(cfg);
-    return cfg.autoConnectWifi;
-}
-
-void ConfigManager::setWifiAutoConnect(bool enable) {
-    if (preferences.begin("cbdos_sys", false)) {
-        preferences.putBool("wifi_auto", enable);
-        preferences.end();
-    }
-}
-
-int32_t ConfigManager::getTimezoneOffset() {
-    SystemConfig cfg;
-    loadSystem(cfg);
-    return cfg.gmtOffsetSeconds;
-}
-
-void ConfigManager::setTimezoneOffset(int32_t offsetSec) {
-    if (preferences.begin("cbdos_sys", false)) {
-        preferences.putInt("gmt_off", offsetSec);
-        preferences.end();
-    }
-}
-
-// ─── WiFi Config ───
-bool ConfigManager::loadWiFi(WiFiConfig& cfg) {
-    if (preferences.begin("wifi", true)) {
-        cfg.ssid = preferences.getString("ssid", "");
-        cfg.password = preferences.getString("pass", "");
-        cfg.useStaticIp = preferences.getBool("static", false);
-        cfg.staticIp = preferences.getString("ip", "");
-        cfg.gateway = preferences.getString("gw", "");
-        cfg.subnet = preferences.getString("sub", "");
-        cfg.dns1 = preferences.getString("dns1", "");
-        cfg.dns2 = preferences.getString("dns2", "");
-        preferences.end();
-    }
-
-    // Fallback de migración: Si en "wifi" no hay SSID, buscar en namespace legacy "tablehub"
-    if (cfg.ssid.length() == 0) {
-        if (preferences.begin("tablehub", true)) {
-            cfg.ssid = preferences.getString("ssid", "");
-            cfg.password = preferences.getString("pass", "");
-            preferences.end();
-            if (cfg.ssid.length() > 0) {
-                saveWiFi(cfg);
-            }
-        }
-    }
-    return cfg.ssid.length() > 0;
-}
-
-bool ConfigManager::saveWiFi(const WiFiConfig& cfg) {
-    if (!preferences.begin("wifi", false)) {
-        return false;
-    }
-    preferences.putString("ssid", cfg.ssid);
-    preferences.putString("pass", cfg.password);
-    preferences.putBool("static", cfg.useStaticIp);
-    preferences.putString("ip", cfg.staticIp);
-    preferences.putString("gw", cfg.gateway);
-    preferences.putString("sub", cfg.subnet);
-    preferences.putString("dns1", cfg.dns1);
-    preferences.putString("dns2", cfg.dns2);
-    preferences.end();
-    return true;
-}
-
-// ─── LoRa Config ───
-bool ConfigManager::loadLoRa(LoRaConfig& cfg) {
-    if (!preferences.begin("lora", true)) {
-        return false;
-    }
-    cfg.frequency = preferences.getFloat("freq", 915.0f);
-    cfg.txPower = (int8_t)preferences.getChar("txpwr", 14);
-    cfg.bandwidth = preferences.getFloat("bw", 250.0f);
-    cfg.spreadingFactor = preferences.getUChar("sf", 7);
-    cfg.codingRate = preferences.getUChar("cr", 5);
-    cfg.syncWord = preferences.getUShort("sync", 0x32);
-    cfg.enableCRC = preferences.getBool("crc", true);
-    cfg.preambleLength = preferences.getUShort("preamb", 8);
-    preferences.end();
-    return true;
-}
-
-bool ConfigManager::saveLoRa(const LoRaConfig& cfg) {
-    if (!preferences.begin("lora", false)) {
-        return false;
-    }
-    preferences.putFloat("freq", cfg.frequency);
-    preferences.putChar("txpwr", cfg.txPower);
-    preferences.putFloat("bw", cfg.bandwidth);
-    preferences.putUChar("sf", cfg.spreadingFactor);
-    preferences.putUChar("cr", cfg.codingRate);
-    preferences.putUShort("sync", cfg.syncWord);
-    preferences.putBool("crc", cfg.enableCRC);
-    preferences.putUShort("preamb", cfg.preambleLength);
-    preferences.end();
-    return true;
-}
-
-// ─── FLRC Config ───
-bool ConfigManager::loadFLRC(FLRCConfig& cfg) {
-    if (!preferences.begin("flrc", true)) {
-        return false;
-    }
-    cfg.frequency = preferences.getFloat("freq", 2.400f);
-    cfg.txPower = (int8_t)preferences.getChar("txpwr", 10);
-    cfg.bandwidth = preferences.getFloat("bw", 1.2f);
-    cfg.dataRate = preferences.getUChar("rate", 1);
-    cfg.codingRate = preferences.getUChar("cr", 2);
-    cfg.syncWord = preferences.getUShort("sync", 0x7B5A);
-    cfg.enableCRC = preferences.getBool("crc", true);
-    cfg.preambleLength = preferences.getUShort("preamb", 8);
-    preferences.end();
-    return true;
-}
-
-bool ConfigManager::saveFLRC(const FLRCConfig& cfg) {
-    if (!preferences.begin("flrc", false)) {
-        return false;
-    }
-    preferences.putFloat("freq", cfg.frequency);
-    preferences.putChar("txpwr", cfg.txPower);
-    preferences.putFloat("bw", cfg.bandwidth);
-    preferences.putUChar("rate", cfg.dataRate);
-    preferences.putUChar("cr", cfg.codingRate);
-    preferences.putUShort("sync", cfg.syncWord);
-    preferences.putBool("crc", cfg.enableCRC);
-    preferences.putUShort("preamb", cfg.preambleLength);
-    preferences.end();
-    return true;
-}
-
-// ─── Time / NTP Config ───
-bool ConfigManager::loadTime(TimeConfig& cfg) {
-    if (!preferences.begin("time", true)) {
-        return false;
-    }
-    cfg.ntpServer = preferences.getString("server", "pool.ntp.org");
-    cfg.gmtOffsetSeconds = preferences.getInt("offset", -21600);
-    cfg.daylightOffsetSeconds = preferences.getInt("dst", 0);
-    cfg.enabled = preferences.getBool("enabled", true);
-    preferences.end();
-    return true;
-}
-
-bool ConfigManager::saveTime(const TimeConfig& cfg) {
-    if (!preferences.begin("time", false)) {
-        return false;
-    }
-    preferences.putString("server", cfg.ntpServer);
-    preferences.putInt("offset", cfg.gmtOffsetSeconds);
-    preferences.putInt("dst", cfg.daylightOffsetSeconds);
-    preferences.putBool("enabled", cfg.enabled);
-    preferences.end();
-    return true;
-}
-
-// ─── Gateways Config (MsgPack en SD) ───
-static const size_t PBKDF2_SALT_LEN = 8;
-static const size_t GCM_IV_LEN = 12;
-static const size_t GCM_TAG_LEN = 16;
-static const int PBKDF2_ITERATIONS = 10000;
-
-std::vector<GatewayConfig> ConfigManager::listGateways() {
-    std::vector<GatewayConfig> list;
-    if (!SD.exists("/config")) {
-        SD.mkdir("/config");
-    }
-    if (!SD.exists("/config/gateways.bin")) {
-        return list;
-    }
-
-    File file = SD.open("/config/gateways.bin", FILE_READ);
-    if (!file) {
-        return list;
-    }
-
-    JsonDocument doc;
-    DeserializationError err = deserializeMsgPack(doc, file);
-    file.close();
-
-    if (err) {
-        Serial.println("[ConfigManager] Error deserializando gateways.bin");
-        return list;
-    }
-
-    JsonArray arr = doc.as<JsonArray>();
-    for (JsonVariant val : arr) {
-        GatewayConfig gw;
-        gw.id = val["id"].as<String>();
-        gw.name = val["name"].as<String>();
-        gw.address = val["address"].as<String>();
-        gw.domain = val["domain"].as<String>();
-        gw.mqttPort = val["mqtt_port"].as<int>();
-        gw.mqttUseTls = val["mqtt_tls"].as<bool>();
-        gw.authToken = val["auth_token"].as<String>();
-        gw.authType = val["auth_type"].as<String>();
-        gw.discoveryMethod = val["discovery"].as<String>();
-        gw.notes = val["notes"].as<String>();
-        list.push_back(gw);
-    }
-    return list;
-}
-
-static bool saveGatewayList(const std::vector<GatewayConfig>& list) {
-    if (!SD.exists("/config")) {
-        SD.mkdir("/config");
-    }
-    File file = SD.open("/config/gateways.bin", FILE_WRITE);
-    if (!file) {
-        return false;
-    }
-
-    JsonDocument doc;
-    JsonArray arr = doc.to<JsonArray>();
-    for (const auto& gw : list) {
-        JsonObject obj = arr.add<JsonObject>();
-        obj["id"] = gw.id;
-        obj["name"] = gw.name;
-        obj["address"] = gw.address;
-        obj["domain"] = gw.domain;
-        obj["mqtt_port"] = gw.mqttPort;
-        obj["mqtt_tls"] = gw.mqttUseTls;
-        obj["auth_token"] = gw.authToken;
-        obj["auth_type"] = gw.authType;
-        obj["discovery"] = gw.discoveryMethod;
-        obj["notes"] = gw.notes;
-    }
-
-    size_t written = serializeMsgPack(doc, file);
-    file.close();
-    return written > 0;
-}
-
-bool ConfigManager::importGateway(const String& encPath, const String& pin, String& errorOut) {
-    File file = SD.open(encPath, FILE_READ);
-    if (!file) {
-        errorOut = "Fallo SD.open: " + encPath;
-        return false;
-    }
-
-    size_t fileSize = file.size();
-    size_t headerSize = PBKDF2_SALT_LEN + GCM_IV_LEN;
-    size_t minSize = headerSize + GCM_TAG_LEN;
-
-    if (fileSize < minSize) {
-        errorOut = "Archivo corrupto.";
-        file.close();
-        return false;
-    }
-
-    uint8_t* buffer = (uint8_t*)ps_malloc(fileSize);
-    if (!buffer) {
-        buffer = (uint8_t*)malloc(fileSize);
-        if (!buffer) {
-            errorOut = "Error de memoria (OOM).";
-            file.close();
-            return false;
-        }
-    }
-
-    size_t bytesRead = file.read(buffer, fileSize);
-    file.close();
-
-    if (bytesRead != fileSize) {
-        errorOut = "Error al leer SD.";
-        free(buffer);
-        return false;
-    }
-
-    uint8_t* salt = buffer;
-    uint8_t* iv = buffer + PBKDF2_SALT_LEN;
-    size_t ciphertextLen = fileSize - headerSize - GCM_TAG_LEN;
-    uint8_t* ciphertext = buffer + headerSize;
-    uint8_t* tag = buffer + headerSize + ciphertextLen;
-
-    uint8_t key[32];
-    int ret = mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256,
-        (const unsigned char*)pin.c_str(), pin.length(),
-        salt, PBKDF2_SALT_LEN, PBKDF2_ITERATIONS, 32, key);
-
-    if (ret != 0) {
-        errorOut = "PIN incorrecto o archivo corrupto.";
-        free(buffer);
-        return false;
-    }
-
-    uint8_t* plaintext = (uint8_t*)malloc(ciphertextLen + 1);
-    if (!plaintext) {
-        errorOut = "Error de memoria (OOM).";
-        free(buffer);
-        return false;
-    }
-
-    mbedtls_gcm_context gcm;
-    mbedtls_gcm_init(&gcm);
-    mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, key, 256);
-
-    ret = mbedtls_gcm_auth_decrypt(&gcm, ciphertextLen,
-        iv, GCM_IV_LEN, NULL, 0, tag, GCM_TAG_LEN,
-        ciphertext, plaintext);
-
-    mbedtls_gcm_free(&gcm);
-
-    if (ret != 0) {
-        errorOut = "PIN incorrecto o archivo corrupto.";
-        free(plaintext);
-        free(buffer);
-        return false;
-    }
-
-    plaintext[ciphertextLen] = '\0';
-
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, plaintext, ciphertextLen);
-    free(plaintext);
-    free(buffer);
-
-    if (err) {
-        errorOut = "JSON corrupto.";
-        return false;
-    }
-
-    GatewayConfig gw;
-    gw.id = "gw_" + String(millis()); // Generar ID basado en milisegundos
-    gw.name = doc["name"].as<const char*>() ? doc["name"].as<const char*>() : "Gateway";
-    gw.address = doc["address"].as<const char*>() ? doc["address"].as<const char*>() : "";
-    gw.domain = doc["domain"].as<const char*>() ? doc["domain"].as<const char*>() : "";
-    gw.mqttPort = doc["mqtt_port"].as<int>() ? doc["mqtt_port"].as<int>() : 1883;
-    gw.mqttUseTls = doc["mqtt_use_tls"].as<bool>();
-    gw.authToken = doc["auth_token"].as<const char*>() ? doc["auth_token"].as<const char*>() : "";
-    gw.authType = doc["auth_type"].as<const char*>() ? doc["auth_type"].as<const char*>() : "token";
-    gw.discoveryMethod = doc["discovery_method"].as<const char*>() ? doc["discovery_method"].as<const char*>() : "static";
-    gw.notes = doc["notes"].as<const char*>() ? doc["notes"].as<const char*>() : "";
-
-    auto list = listGateways();
-    list.push_back(gw);
-    
-    if (saveGatewayList(list)) {
-        SD.remove(encPath);
-        return true;
-    } else {
-        errorOut = "Error guardando lista MsgPack.";
-        return false;
-    }
-}
-
-bool ConfigManager::removeGateway(const String& gwId) {
-    auto list = listGateways();
-    bool found = false;
-    for (auto it = list.begin(); it != list.end(); ++it) {
-        if (it->id == gwId) {
-            list.erase(it);
-            found = true;
-            break;
-        }
-    }
-    if (found) {
-        saveGatewayList(list);
-        // Si el activo era este, limpiarlo
-        if (preferences.begin("gateways", false)) {
-            if (preferences.getString("active_id", "") == gwId) {
-                preferences.remove("active_id");
-            }
-            preferences.end();
-        }
-    }
-    return found;
-}
-
-bool ConfigManager::setActiveGateway(const String& gwId) {
-    if (!preferences.begin("gateways", false)) {
-        return false;
-    }
-    preferences.putString("active_id", gwId);
-    preferences.end();
-    return true;
-}
-
-bool ConfigManager::loadActiveGateway(GatewayConfig& gw) {
-    if (!preferences.begin("gateways", true)) {
-        return false;
-    }
-    String activeId = preferences.getString("active_id", "");
-    preferences.end();
-
-    if (activeId.length() == 0) {
-        return false;
-    }
-
-    auto list = listGateways();
-    for (const auto& item : list) {
-        if (item.id == activeId) {
-            gw = item;
-            return true;
-        }
-    }
-    return false;
-}
-
-#else
-
-// ─── Implementación para entorno ESP-IDF (ESP32-P4 / ESP-IDF) ───
-#if defined(ESP_PLATFORM)
-#include <nvs_flash.h>
-#include <nvs.h>
-#include <esp_log.h>
+#include "cbdos/persistence.hpp"
+#include "cbdos/system.hpp"
 
 static const char* TAG_CFG = "ConfigManager";
+
+static SystemConfig s_cachedSys;
 static WiFiConfig s_cachedWiFi;
 static LoRaConfig s_cachedLoRa;
 static FLRCConfig s_cachedFLRC;
@@ -526,89 +12,86 @@ static TimeConfig s_cachedTime;
 static std::vector<GatewayConfig> s_cachedGateways;
 static std::string s_cachedActiveGwId = "";
 
-static SystemConfig s_cachedSys;
-
 bool ConfigManager::init() {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        nvs_flash_erase();
-        ret = nvs_flash_init();
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend) {
+        // Inicializar o verificar que los namespaces respondan
+        if (backend->begin("cbdos_sys", true)) {
+            backend->end();
+        }
     }
-    return (ret == ESP_OK);
+    return true;
+}
+
+bool ConfigManager::clearLegacyConfig() {
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend) {
+        if (backend->begin("tablehub", false)) {
+            backend->clear();
+            backend->end();
+            cbdos::system::log(cbdos::system::LogLevel::Info, TAG_CFG, "Namespace legacy 'tablehub' borrado");
+            return true;
+        }
+    }
+    return true;
+}
+
+bool ConfigManager::clearAllNvs() {
+    auto* backend = cbdos::persistence::getBackend();
+    const char* namespaces[] = {"cbdos_sys", "cbdos_wifi", "cbdos_time", "cbdos_lora", "cbdos_flrc", "wifi", "tablehub"};
+    if (backend) {
+        for (const char* ns : namespaces) {
+            if (backend->begin(ns, false)) {
+                backend->clear();
+                backend->end();
+            }
+        }
+    }
+    s_cachedSys = SystemConfig{};
+    s_cachedWiFi = WiFiConfig{};
+    s_cachedLoRa = LoRaConfig{};
+    s_cachedFLRC = FLRCConfig{};
+    s_cachedTime = TimeConfig{};
+    s_cachedGateways.clear();
+    s_cachedActiveGwId.clear();
+    cbdos::system::log(cbdos::system::LogLevel::Info, TAG_CFG, "Todos los namespaces NVS borrados correctamente");
+    return true;
 }
 
 // ─── System Config ───
 bool ConfigManager::loadSystem(SystemConfig& cfg) {
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("cbdos_sys", NVS_READONLY, &handle);
-    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
-        init();
-        err = nvs_open("cbdos_sys", NVS_READONLY, &handle);
-    }
-    if (err != ESP_OK) {
-        cfg = s_cachedSys;
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_sys", true)) {
+        cfg.brightness = backend->getUChar("bright", 70);
+        cfg.volume = backend->getUChar("vol", 70);
+        cfg.autoConnectWifi = backend->getBool("wifi_auto", false);
+        cfg.gmtOffsetSeconds = backend->getInt("gmt_off", -21600);
+        cfg.daylightOffsetSeconds = backend->getInt("dst_off", 0);
+        cfg.screenTimeoutSeconds = backend->getUInt("scr_tout", 60);
+        cfg.defaultTheme = backend->getString("theme", "dark");
+        backend->end();
+        s_cachedSys = cfg;
         return true;
     }
-
-    uint8_t val8 = 70;
-    if (nvs_get_u8(handle, "bright", &val8) == ESP_OK) {
-        cfg.brightness = val8;
-    }
-    val8 = 70;
-    if (nvs_get_u8(handle, "vol", &val8) == ESP_OK) {
-        cfg.volume = val8;
-    }
-    val8 = 0;
-    if (nvs_get_u8(handle, "wifi_auto", &val8) == ESP_OK) {
-        cfg.autoConnectWifi = (val8 != 0);
-    }
-    uint32_t val32 = 60;
-    if (nvs_get_u32(handle, "scr_tout", &val32) == ESP_OK) {
-        cfg.screenTimeoutSeconds = val32;
-    }
-    int32_t valI32 = -21600;
-    if (nvs_get_i32(handle, "gmt_off", &valI32) == ESP_OK) {
-        cfg.gmtOffsetSeconds = valI32;
-    }
-    valI32 = 0;
-    if (nvs_get_i32(handle, "dst_off", &valI32) == ESP_OK) {
-        cfg.daylightOffsetSeconds = valI32;
-    }
-    char themeBuf[32];
-    size_t themeLen = sizeof(themeBuf);
-    if (nvs_get_str(handle, "theme", themeBuf, &themeLen) == ESP_OK) {
-        cfg.defaultTheme = themeBuf;
-    }
-
-    nvs_close(handle);
-    s_cachedSys = cfg;
+    cfg = s_cachedSys;
     return true;
 }
 
 bool ConfigManager::saveSystem(const SystemConfig& cfg) {
     s_cachedSys = cfg;
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("cbdos_sys", NVS_READWRITE, &handle);
-    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
-        init();
-        err = nvs_open("cbdos_sys", NVS_READWRITE, &handle);
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_sys", false)) {
+        backend->setUChar("bright", cfg.brightness);
+        backend->setUChar("vol", cfg.volume);
+        backend->setBool("wifi_auto", cfg.autoConnectWifi);
+        backend->setInt("gmt_off", cfg.gmtOffsetSeconds);
+        backend->setInt("dst_off", cfg.daylightOffsetSeconds);
+        backend->setUInt("scr_tout", cfg.screenTimeoutSeconds);
+        backend->setString("theme", cfg.defaultTheme);
+        backend->end();
+        return true;
     }
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG_CFG, "Error abriendo NVS cbdos_sys: %s", esp_err_to_name(err));
-        return false;
-    }
-
-    nvs_set_u8(handle, "bright", cfg.brightness);
-    nvs_set_u8(handle, "vol", cfg.volume);
-    nvs_set_u8(handle, "wifi_auto", cfg.autoConnectWifi ? 1 : 0);
-    nvs_set_i32(handle, "gmt_off", cfg.gmtOffsetSeconds);
-    nvs_set_i32(handle, "dst_off", cfg.daylightOffsetSeconds);
-    nvs_set_u32(handle, "scr_tout", cfg.screenTimeoutSeconds);
-    nvs_set_str(handle, "theme", cfg.defaultTheme.c_str());
-
-    err = nvs_commit(handle);
-    nvs_close(handle);
-    return (err == ESP_OK);
+    return false;
 }
 
 uint8_t ConfigManager::getBrightness() {
@@ -619,11 +102,10 @@ uint8_t ConfigManager::getBrightness() {
 
 void ConfigManager::setBrightness(uint8_t percent) {
     s_cachedSys.brightness = percent;
-    nvs_handle_t handle;
-    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_set_u8(handle, "bright", percent);
-        nvs_commit(handle);
-        nvs_close(handle);
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_sys", false)) {
+        backend->setUChar("bright", percent);
+        backend->end();
     }
 }
 
@@ -635,11 +117,10 @@ uint8_t ConfigManager::getVolume() {
 
 void ConfigManager::setVolume(uint8_t percent) {
     s_cachedSys.volume = percent;
-    nvs_handle_t handle;
-    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_set_u8(handle, "vol", percent);
-        nvs_commit(handle);
-        nvs_close(handle);
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_sys", false)) {
+        backend->setUChar("vol", percent);
+        backend->end();
     }
 }
 
@@ -651,11 +132,10 @@ bool ConfigManager::isWifiAutoConnect() {
 
 void ConfigManager::setWifiAutoConnect(bool enable) {
     s_cachedSys.autoConnectWifi = enable;
-    nvs_handle_t handle;
-    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_set_u8(handle, "wifi_auto", enable ? 1 : 0);
-        nvs_commit(handle);
-        nvs_close(handle);
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_sys", false)) {
+        backend->setBool("wifi_auto", enable);
+        backend->end();
     }
 }
 
@@ -667,159 +147,173 @@ int32_t ConfigManager::getTimezoneOffset() {
 
 void ConfigManager::setTimezoneOffset(int32_t offsetSec) {
     s_cachedSys.gmtOffsetSeconds = offsetSec;
-    nvs_handle_t handle;
-    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_set_i32(handle, "gmt_off", offsetSec);
-        nvs_commit(handle);
-        nvs_close(handle);
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_sys", false)) {
+        backend->setInt("gmt_off", offsetSec);
+        backend->end();
     }
 }
 
+// ─── WiFi Config ───
 bool ConfigManager::loadWiFi(WiFiConfig& cfg) {
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("cbdos_wifi", NVS_READONLY, &handle);
-    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
-        init();
-        err = nvs_open("cbdos_wifi", NVS_READONLY, &handle);
-    }
-    if (err != ESP_OK) {
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_wifi", true)) {
+        cfg.ssid = backend->getString("ssid", "");
+        cfg.password = backend->getString("pass", "");
+        cfg.useStaticIp = backend->getBool("static_en", false);
+        cfg.staticIp = backend->getString("ip", "");
+        cfg.gateway = backend->getString("gw", "");
+        cfg.subnet = backend->getString("sub", "");
+        cfg.dns1 = backend->getString("dns1", "");
+        cfg.dns2 = backend->getString("dns2", "");
+        backend->end();
+        s_cachedWiFi = cfg;
+    } else {
         cfg = s_cachedWiFi;
-        return true;
     }
 
-    char buf[128];
-    size_t len = sizeof(buf);
-
-    if (nvs_get_str(handle, "ssid", buf, &len) == ESP_OK) {
-        cfg.ssid = buf;
-    }
-    len = sizeof(buf);
-    if (nvs_get_str(handle, "pass", buf, &len) == ESP_OK) {
-        cfg.password = buf;
-    }
-    uint8_t staticIp = 0;
-    if (nvs_get_u8(handle, "static_en", &staticIp) == ESP_OK) {
-        cfg.useStaticIp = (staticIp != 0);
-    }
-    len = sizeof(buf);
-    if (nvs_get_str(handle, "ip", buf, &len) == ESP_OK) {
-        cfg.staticIp = buf;
-    }
-    len = sizeof(buf);
-    if (nvs_get_str(handle, "gw", buf, &len) == ESP_OK) {
-        cfg.gateway = buf;
-    }
-    len = sizeof(buf);
-    if (nvs_get_str(handle, "sub", buf, &len) == ESP_OK) {
-        cfg.subnet = buf;
-    }
-    len = sizeof(buf);
-    if (nvs_get_str(handle, "dns1", buf, &len) == ESP_OK) {
-        cfg.dns1 = buf;
-    }
-    len = sizeof(buf);
-    if (nvs_get_str(handle, "dns2", buf, &len) == ESP_OK) {
-        cfg.dns2 = buf;
+    // Fallback de migración: buscar en namespace legacy "wifi" si no hay SSID
+    if (cfg.ssid.empty() && backend && backend->begin("wifi", true)) {
+        cfg.ssid = backend->getString("ssid", "");
+        cfg.password = backend->getString("pass", "");
+        backend->end();
+        if (!cfg.ssid.empty()) {
+            saveWiFi(cfg);
+        }
     }
 
-    nvs_close(handle);
-    s_cachedWiFi = cfg;
-    return true;
+    return !cfg.ssid.empty();
 }
 
 bool ConfigManager::saveWiFi(const WiFiConfig& cfg) {
     s_cachedWiFi = cfg;
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("cbdos_wifi", NVS_READWRITE, &handle);
-    if (err == ESP_ERR_NVS_NOT_INITIALIZED) {
-        init();
-        err = nvs_open("cbdos_wifi", NVS_READWRITE, &handle);
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_wifi", false)) {
+        backend->setString("ssid", cfg.ssid);
+        backend->setString("pass", cfg.password);
+        backend->setBool("static_en", cfg.useStaticIp);
+        backend->setString("ip", cfg.staticIp);
+        backend->setString("gw", cfg.gateway);
+        backend->setString("sub", cfg.subnet);
+        backend->setString("dns1", cfg.dns1);
+        backend->setString("dns2", cfg.dns2);
+        backend->end();
+        return true;
     }
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG_CFG, "Error abriendo NVS para guardar WiFi: %s", esp_err_to_name(err));
-        return false;
-    }
-
-    nvs_set_str(handle, "ssid", cfg.ssid.c_str());
-    nvs_set_str(handle, "pass", cfg.password.c_str());
-    nvs_set_u8(handle, "static_en", cfg.useStaticIp ? 1 : 0);
-    nvs_set_str(handle, "ip", cfg.staticIp.c_str());
-    nvs_set_str(handle, "gw", cfg.gateway.c_str());
-    nvs_set_str(handle, "sub", cfg.subnet.c_str());
-    nvs_set_str(handle, "dns1", cfg.dns1.c_str());
-    nvs_set_str(handle, "dns2", cfg.dns2.c_str());
-
-    err = nvs_commit(handle);
-    nvs_close(handle);
-    return (err == ESP_OK);
+    return false;
 }
 
+// ─── LoRa Config ───
 bool ConfigManager::loadLoRa(LoRaConfig& cfg) {
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_lora", true)) {
+        cfg.frequency = backend->getFloat("freq", 915.0f);
+        cfg.txPower = (int8_t)backend->getUChar("txpwr", 14);
+        cfg.bandwidth = backend->getFloat("bw", 250.0f);
+        cfg.spreadingFactor = backend->getUChar("sf", 7);
+        cfg.codingRate = backend->getUChar("cr", 5);
+        cfg.syncWord = backend->getUShort("sync", 0x32);
+        cfg.enableCRC = backend->getBool("crc", true);
+        cfg.preambleLength = backend->getUShort("preamb", 8);
+        backend->end();
+        s_cachedLoRa = cfg;
+        return true;
+    }
     cfg = s_cachedLoRa;
     return true;
 }
 
 bool ConfigManager::saveLoRa(const LoRaConfig& cfg) {
     s_cachedLoRa = cfg;
-    return true;
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_lora", false)) {
+        backend->setFloat("freq", cfg.frequency);
+        backend->setUChar("txpwr", (uint8_t)cfg.txPower);
+        backend->setFloat("bw", cfg.bandwidth);
+        backend->setUChar("sf", cfg.spreadingFactor);
+        backend->setUChar("cr", cfg.codingRate);
+        backend->setUShort("sync", cfg.syncWord);
+        backend->setBool("crc", cfg.enableCRC);
+        backend->setUShort("preamb", cfg.preambleLength);
+        backend->end();
+        return true;
+    }
+    return false;
 }
 
+// ─── FLRC Config ───
 bool ConfigManager::loadFLRC(FLRCConfig& cfg) {
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_flrc", true)) {
+        cfg.frequency = backend->getFloat("freq", 2.400f);
+        cfg.txPower = (int8_t)backend->getUChar("txpwr", 10);
+        cfg.bandwidth = backend->getFloat("bw", 1.2f);
+        cfg.dataRate = backend->getUChar("rate", 1);
+        cfg.codingRate = backend->getUChar("cr", 2);
+        cfg.syncWord = backend->getUShort("sync", 0x7B5A);
+        cfg.enableCRC = backend->getBool("crc", true);
+        cfg.preambleLength = backend->getUShort("preamb", 8);
+        backend->end();
+        s_cachedFLRC = cfg;
+        return true;
+    }
     cfg = s_cachedFLRC;
     return true;
 }
 
 bool ConfigManager::saveFLRC(const FLRCConfig& cfg) {
     s_cachedFLRC = cfg;
-    return true;
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_flrc", false)) {
+        backend->setFloat("freq", cfg.frequency);
+        backend->setUChar("txpwr", (uint8_t)cfg.txPower);
+        backend->setFloat("bw", cfg.bandwidth);
+        backend->setUChar("rate", cfg.dataRate);
+        backend->setUChar("cr", cfg.codingRate);
+        backend->setUShort("sync", cfg.syncWord);
+        backend->setBool("crc", cfg.enableCRC);
+        backend->setUShort("preamb", cfg.preambleLength);
+        backend->end();
+        return true;
+    }
+    return false;
 }
 
+// ─── Time / NTP Config ───
 bool ConfigManager::loadTime(TimeConfig& cfg) {
-    nvs_handle_t handle;
-    if (nvs_open("cbdos_time", NVS_READONLY, &handle) == ESP_OK) {
-        char srvBuf[64];
-        size_t srvLen = sizeof(srvBuf);
-        if (nvs_get_str(handle, "server", srvBuf, &srvLen) == ESP_OK) {
-            cfg.ntpServer = srvBuf;
-        }
-        int32_t offset = -21600;
-        if (nvs_get_i32(handle, "offset", &offset) == ESP_OK) {
-            cfg.gmtOffsetSeconds = offset;
-        }
-        int32_t dst = 0;
-        if (nvs_get_i32(handle, "dst", &dst) == ESP_OK) {
-            cfg.daylightOffsetSeconds = dst;
-        }
-        uint8_t en = 1;
-        if (nvs_get_u8(handle, "enabled", &en) == ESP_OK) {
-            cfg.enabled = (en != 0);
-        }
-        nvs_close(handle);
-    } else {
-        SystemConfig sysCfg;
-        loadSystem(sysCfg);
-        cfg.gmtOffsetSeconds = sysCfg.gmtOffsetSeconds;
-        cfg.daylightOffsetSeconds = sysCfg.daylightOffsetSeconds;
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_time", true)) {
+        cfg.ntpServer = backend->getString("server", "pool.ntp.org");
+        cfg.gmtOffsetSeconds = backend->getInt("offset", -21600);
+        cfg.daylightOffsetSeconds = backend->getInt("dst", 0);
+        cfg.enabled = backend->getBool("enabled", true);
+        backend->end();
+        s_cachedTime = cfg;
+        return true;
     }
+    SystemConfig sysCfg;
+    loadSystem(sysCfg);
+    cfg.gmtOffsetSeconds = sysCfg.gmtOffsetSeconds;
+    cfg.daylightOffsetSeconds = sysCfg.daylightOffsetSeconds;
     s_cachedTime = cfg;
     return true;
 }
 
 bool ConfigManager::saveTime(const TimeConfig& cfg) {
     s_cachedTime = cfg;
-    nvs_handle_t handle;
-    if (nvs_open("cbdos_time", NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_set_str(handle, "server", cfg.ntpServer.c_str());
-        nvs_set_i32(handle, "offset", cfg.gmtOffsetSeconds);
-        nvs_set_i32(handle, "dst", cfg.daylightOffsetSeconds);
-        nvs_set_u8(handle, "enabled", cfg.enabled ? 1 : 0);
-        nvs_commit(handle);
-        nvs_close(handle);
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_time", false)) {
+        backend->setString("server", cfg.ntpServer);
+        backend->setInt("offset", cfg.gmtOffsetSeconds);
+        backend->setInt("dst", cfg.daylightOffsetSeconds);
+        backend->setBool("enabled", cfg.enabled);
+        backend->end();
     }
     setTimezoneOffset(cfg.gmtOffsetSeconds);
     return true;
 }
 
+// ─── Gateways Config ───
 bool ConfigManager::importGateway(const std::string& encPath, const std::string& pin, std::string& errorOut) {
     if (pin == "1234") {
         GatewayConfig gw;
@@ -839,7 +333,7 @@ bool ConfigManager::removeGateway(const std::string& gwId) {
     for (auto it = s_cachedGateways.begin(); it != s_cachedGateways.end(); ++it) {
         if (it->id == gwId) {
             s_cachedGateways.erase(it);
-            if (s_cachedActiveGwId == gwId) s_cachedActiveGwId = "";
+            if (s_cachedActiveGwId == gwId) s_cachedActiveGwId.clear();
             return true;
         }
     }
@@ -864,182 +358,3 @@ bool ConfigManager::loadActiveGateway(GatewayConfig& gw) {
     }
     return false;
 }
-
-bool ConfigManager::clearLegacyConfig() {
-    return true;
-}
-
-bool ConfigManager::clearAllNvs() {
-    nvs_handle_t handle;
-    if (nvs_open("cbdos_wifi", NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_erase_all(handle);
-        nvs_commit(handle);
-        nvs_close(handle);
-    }
-    if (nvs_open("cbdos_sys", NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_erase_all(handle);
-        nvs_commit(handle);
-        nvs_close(handle);
-    }
-    s_cachedSys = SystemConfig{};
-    s_cachedGateways.clear();
-    s_cachedActiveGwId = "";
-    return true;
-}
-
-#else
-// ─── Mock para entorno Emulator (PC Simulator) ───
-static SystemConfig mockSys;
-static WiFiConfig mockWiFi;
-static LoRaConfig mockLoRa;
-static FLRCConfig mockFLRC;
-static std::vector<GatewayConfig> mockGateways;
-static std::string mockActiveGwId = "";
-
-bool ConfigManager::init() {
-    return true;
-}
-
-bool ConfigManager::loadSystem(SystemConfig& cfg) {
-    cfg = mockSys;
-    return true;
-}
-
-bool ConfigManager::saveSystem(const SystemConfig& cfg) {
-    mockSys = cfg;
-    return true;
-}
-
-uint8_t ConfigManager::getBrightness() {
-    return mockSys.brightness;
-}
-
-void ConfigManager::setBrightness(uint8_t percent) {
-    mockSys.brightness = percent;
-}
-
-uint8_t ConfigManager::getVolume() {
-    return mockSys.volume;
-}
-
-void ConfigManager::setVolume(uint8_t percent) {
-    mockSys.volume = percent;
-}
-
-bool ConfigManager::isWifiAutoConnect() {
-    return mockSys.autoConnectWifi;
-}
-
-void ConfigManager::setWifiAutoConnect(bool enable) {
-    mockSys.autoConnectWifi = enable;
-}
-
-int32_t ConfigManager::getTimezoneOffset() {
-    return mockSys.gmtOffsetSeconds;
-}
-
-void ConfigManager::setTimezoneOffset(int32_t offsetSec) {
-    mockSys.gmtOffsetSeconds = offsetSec;
-}
-
-bool ConfigManager::loadWiFi(WiFiConfig& cfg) {
-    cfg = mockWiFi;
-    return true;
-}
-
-bool ConfigManager::saveWiFi(const WiFiConfig& cfg) {
-    mockWiFi = cfg;
-    return true;
-}
-
-bool ConfigManager::loadLoRa(LoRaConfig& cfg) {
-    cfg = mockLoRa;
-    return true;
-}
-
-bool ConfigManager::saveLoRa(const LoRaConfig& cfg) {
-    mockLoRa = cfg;
-    return true;
-}
-
-bool ConfigManager::loadFLRC(FLRCConfig& cfg) {
-    cfg = mockFLRC;
-    return true;
-}
-
-bool ConfigManager::saveFLRC(const FLRCConfig& cfg) {
-    mockFLRC = cfg;
-    return true;
-}
-
-static TimeConfig mockTime;
-
-bool ConfigManager::loadTime(TimeConfig& cfg) {
-    cfg = mockTime;
-    return true;
-}
-
-bool ConfigManager::saveTime(const TimeConfig& cfg) {
-    mockTime = cfg;
-    return true;
-}
-
-bool ConfigManager::importGateway(const std::string& encPath, const std::string& pin, std::string& errorOut) {
-    if (pin == "1234") {
-        GatewayConfig gw;
-        gw.id = "gw_mock_" + std::to_string(mockGateways.size() + 1);
-        gw.name = "Mock Gateway";
-        gw.address = "127.0.0.1";
-        gw.mqttPort = 1883;
-        gw.authToken = "auth-mock-token-abc";
-        mockGateways.push_back(gw);
-        return true;
-    }
-    errorOut = "PIN incorrecto (usa 1234).";
-    return false;
-}
-
-bool ConfigManager::removeGateway(const std::string& gwId) {
-    for (auto it = mockGateways.begin(); it != mockGateways.end(); ++it) {
-        if (it->id == gwId) {
-            mockGateways.erase(it);
-            if (mockActiveGwId == gwId) mockActiveGwId = "";
-            return true;
-        }
-    }
-    return false;
-}
-
-std::vector<GatewayConfig> ConfigManager::listGateways() {
-    return mockGateways;
-}
-
-bool ConfigManager::setActiveGateway(const std::string& gwId) {
-    mockActiveGwId = gwId;
-    return true;
-}
-
-bool ConfigManager::loadActiveGateway(GatewayConfig& gw) {
-    for (const auto& item : mockGateways) {
-        if (item.id == mockActiveGwId) {
-            gw = item;
-            return true;
-        }
-    }
-    return false;
-}
-
-bool ConfigManager::clearLegacyConfig() {
-    return true;
-}
-
-bool ConfigManager::clearAllNvs() {
-    mockGateways.clear();
-    mockActiveGwId = "";
-    return true;
-}
-
-#endif // ESP_PLATFORM
-
-#endif // ARDUINO
-
