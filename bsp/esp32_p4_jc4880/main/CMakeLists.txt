@@ -13,6 +13,7 @@ idf_component_register(
         "../hal/AudioHAL.cpp"
         "../hal/LVGL_Port.cpp"
         "../hal/C6FlasherService.cpp"
+        "../hal/hal_uart_p4.cpp"
     INCLUDE_DIRS 
         "."
         "../hal"
@@ -51,5 +52,6 @@ idf_component_register(
         "freertos"
     EMBED_FILES
         "assets/c6_slave.bin"
+    WHOLE_ARCHIVE
 )
 

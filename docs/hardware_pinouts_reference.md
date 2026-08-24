@@ -77,6 +77,13 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | **ESP Externo (JC3248W535 S3)** | **GPIO 15** | **GPIO 16** | **GPIO 0** | Manual / -1 | 115200 | `/sdcard/firmware.bin` |
 | **Personalizado / Manual** | Configurable | Configurable | Configurable | Configurable | Configurable | Embebido / MicroSD |
 
+### 📟 Terminal Serie / Monitor UART (`SerialTerminalView`)
+| Plataforma | Pin TX (CBDos -> Target) | Pin RX (CBDos <- Target) | Preset UI | Velocidades Soportadas |
+| :--- | :--- | :--- | :--- | :--- |
+| **ESP32-P4 (JC4880)** | **GPIO 32** (JP1 Pin 19) | **GPIO 28** (JP1 Pin 21) | `JP1 (TX:32 RX:28)` | 9600 - 921600 bps |
+| **ESP32-P4 (Alternativo)** | **GPIO 50** (JP1 Pin 11) | **GPIO 49** (JP1 Pin 13) | `JP1 Alt (TX:50 RX:49)` | 9600 - 921600 bps |
+| **ESP32-S3 (JC3248W535)** | **GPIO 15** | **GPIO 16** | `S3 Ext (TX:15 RX:16)` | 9600 - 921600 bps |
+
 ---
 
 

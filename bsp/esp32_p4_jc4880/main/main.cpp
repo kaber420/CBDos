@@ -5,6 +5,7 @@
 #include "cbdos/audio.hpp"
 #include "cbdos/network.hpp"
 #include "cbdos/flasher.hpp"
+#include "cbdos/uart.hpp"
 #include "cbdos/ui.hpp"
 #include "LVGL_Port.h"
 #include "../../core/src/network/ConfigManager.h"

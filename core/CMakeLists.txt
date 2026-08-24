@@ -35,6 +35,7 @@ idf_component_register(
         "src/ui/views/TextEditorView.cpp"
         "src/ui/views/FileManagerView.cpp"
         "src/ui/views/CartridgeView.cpp"
+        "src/ui/views/SerialTerminalView.cpp"
         "src/ui/views/UtilitiesView.cpp"
         "src/ui/views/TlvBrowserView.cpp"
         "src/ui/views/utilities/CalculatorApp.cpp"

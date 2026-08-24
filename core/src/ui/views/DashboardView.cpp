@@ -8,6 +8,7 @@
 #include "TextEditorView.hpp"
 #include "CartridgeView.hpp"
 #include "FileManagerView.hpp"
+#include "SerialTerminalView.hpp"
 #include "UtilitiesView.hpp"
 #include "TlvBrowserView.hpp"
 #include "../UIManager.hpp"
@@ -31,6 +32,7 @@ DashboardView::DashboardView()
         {"editor", "Editor", LV_SYMBOL_EDIT, 0x3B82F6},
         {"radio", "Radio Online", LV_SYMBOL_WIFI, 0x10B981},
         {"flasher", "Flasheador", LV_SYMBOL_DOWNLOAD, 0xF59E0B},
+        {"terminal", "Terminal UART", LV_SYMBOL_KEYBOARD, 0x10B981},
         {"music", "Musica", LV_SYMBOL_AUDIO, 0x00E5FF},
         {"config", "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD}
     };
@@ -152,6 +154,8 @@ void DashboardView::cardClickedEventCb(lv_event_t* e) {
             UIManager::getInstance().pushView(std::make_shared<MusicPlayerView>());
         } else if (strcmp(appId, "flasher") == 0) {
             UIManager::getInstance().pushView(std::make_shared<FlasherView>());
+        } else if (strcmp(appId, "terminal") == 0) {
+            UIManager::getInstance().pushView(std::make_shared<SerialTerminalView>());
         }
     }
 }
