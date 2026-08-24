@@ -12,7 +12,7 @@ idf_component_register(
         "../hal/TouchHAL.cpp"
         "../hal/AudioHAL.cpp"
         "../hal/LVGL_Port.cpp"
-        "../hal/C6FlasherService.cpp"
+        "../hal/hal_flasher_p4.cpp"
         "../hal/hal_uart_p4.cpp"
     INCLUDE_DIRS 
         "."

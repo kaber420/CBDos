@@ -286,6 +286,84 @@ public:
 
 ---
 
+### 3.6. Flasheo Serial Universal (`cbdos::flasher`)
+Permite flashear microcontroladores externos (ESP32/ESP8266/C6) desde MicroSD o binarios embebidos.
+
+```cpp
+// core/include/cbdos/flasher.hpp
+#pragma once
+#include <string>
+#include <vector>
+#include <functional>
+
+namespace cbdos {
+namespace flasher {
+
+struct FlasherConfig {
+    int txPin = 32;
+    int rxPin = 28;
+    int bootPin = 34;
+    int rstPin = 54;
+    uint32_t baudRate = 115200;
+    uint32_t flashOffset = 0x0;
+    std::string binPath = "";
+    std::string presetName = "";
+};
+
+bool isSupported();
+bool isBusy();
+const std::vector<FlasherPreset>& getPresets();
+FlasherConfig getDefaultConfig();
+bool startFlash(const FlasherConfig& config, FlasherProgressCb progressCb = nullptr);
+
+} // namespace flasher
+} // namespace cbdos
+```
+
+---
+
+### 3.7. Terminal Serial UART (`cbdos::uart`)
+Permite lectura y escritura interactiva por hardware serie, terminal de comandos y data logging.
+
+```cpp
+// core/include/cbdos/uart.hpp
+#pragma once
+#include <cstdint>
+#include <cstddef>
+#include <string>
+#include <vector>
+
+namespace cbdos {
+namespace uart {
+
+struct UartPinPreset {
+    std::string name;
+    int txPin;
+    int rxPin;
+};
+
+bool init(int txPin, int rxPin, uint32_t baudrate);
+void deinit();
+bool isInitialized();
+size_t available();
+size_t read(uint8_t* buffer, size_t maxLen);
+std::string readString(size_t maxLen = 1024);
+size_t write(const uint8_t* data, size_t len);
+size_t writeString(const std::string& str);
+void flush();
+bool setBaudrate(uint32_t baudrate);
+
+int getDefaultTxPin();
+int getDefaultRxPin();
+uint32_t getDefaultBaudrate();
+const std::vector<UartPinPreset>& getPinPresets();
+
+} // namespace uart
+} // namespace cbdos
+```
+
+---
+
 ## 🔄 4. Flujo de Inicialización Multi-Target (Boot Flow)
 
 ```mermaid
@@ -298,47 +376,23 @@ sequenceDiagram
     Boot->>BSP: 1. Init Clocks & PSRAM
     BSP->>BSP: 2. Init Display Hardware (ST7701S / AXS15231B)
     BSP->>BSP: 3. Init Audio Codec (ES8311 / ES8388)
-    BSP->>HAL: 4. Register Concrete Drivers (Persistence, AudioSink, Network)
+    BSP->>HAL: 4. Register Concrete Drivers (Persistence, AudioSink, Network, Storage, UART, Flasher)
     BSP->>Core: 5. Init Core Subsystems (Config, EventBus, UI)
     Core->>Core: 6. Load Theme & Launch Home View (LVGL 9.5)
 ```
 
 ---
 
-## 📁 5. Estructura de Directorios Definitiva
+## 📁 5. Tabla Maestra de Módulos HAL y Nomenclatura Homogénea
 
-```
-cbdos/
-├── core/                                # 100% Agnóstico (C++17 + LVGL 9.5)
-│   ├── include/cbdos/                   # Contratos de interfaces abstractas
-│   │   ├── persistence.hpp              # IPersistenceBackend
-│   │   ├── audio_sink.hpp               # IAudioSink
-│   │   ├── network_adapter.hpp          # INetworkAdapter
-│   │   ├── event_bus.hpp                # EventBus & EventId
-│   │   ├── native_app.hpp               # INativeApp Lifecycle
-│   │   ├── display.hpp                  # Display Capabilities & API
-│   │   └── storage.hpp                  # Storage abstraction
-│   ├── src/
-│   │   ├── system/                      # ConfigManager, EventBus, Services
-│   │   ├── audio/                       # Decoders (MP3/AAC/WAV), HttpStreamer
-│   │   ├── ui/                          # LVGL Views, Modals, Components, Themes
-│   │   ├── lua/                         # Lua Engine & Modular Bindings
-│   │   └── fs/                          # FileOperationsService
-│   └── CMakeLists.txt
-│
-├── bsp/                                 # Drivers y Soporte de Hardware
-│   ├── esp32_p4_jc4880/                 # ESP32-P4 (ESP-IDF 5.5)
-│   │   ├── hal/                         # EspIdfNvsBackend, ES8311AudioSink, etc.
-│   │   ├── drivers/                     # ST7701S MIPI DPI, GT911 Touch
-│   │   └── main/main_p4.cpp
-│   │
-│   ├── esp32_s3_jc3248/                 # ESP32-S3 (PlatformIO + Arduino)
-│   │   ├── hal/                         # PreferencesBackend, ArduinoAudioSink
-│   │   ├── src/                         # AXS15231B Display/Touch Driver
-│   │   └── src/main_s3.cpp
-│   │
-│   └── pc_simulator/                    # Simulador PC (SDL2)
-│       └── hal/                         # SdlAudioSink, JsonFilePersistence
-│
-└── docs/                                # Documentación de Arquitectura y Hardware
-```
+| Subsistema / Módulo | Interfaz Core (`core/include/cbdos/`) | Implementación P4 (`bsp/esp32_p4_jc4880/hal/`) | Implementación S3 (`bsp/esp32_s3_jc3248/hal/`) |
+| :--- | :--- | :--- | :--- |
+| **Flasheador Serial** | `flasher.hpp` | `hal_flasher_p4.cpp` | `hal_flasher_s3.cpp` |
+| **Terminal UART** | `uart.hpp` | `hal_uart_p4.cpp` | `hal_uart_s3.cpp` |
+| **Almacenamiento** | `storage.hpp` | `hal_storage_p4.cpp` | `hal_storage_s3.cpp` |
+| **Audio (I2S / Códec)** | `audio.hpp` | `hal_audio_p4.cpp` | `hal_audio_s3.cpp` |
+| **Red (WiFi / Host)** | `network.hpp` | `hal_network_p4.cpp` | `hal_network_s3.cpp` |
+| **Pantalla (Display)** | `display.hpp` | `hal_display_p4.cpp` | `hal_display_s3.cpp` |
+| **Entrada Táctil** | `input.hpp` | `hal_input_p4.cpp` | `hal_input_s3.cpp` |
+| **Persistencia (NVS)** | `persistence.hpp` | `hal_persistence_p4.cpp` | `hal_persistence_s3.cpp` |
+| **Sistema & Ticks** | `system.hpp` | `hal_system_p4.cpp` | `hal_system_s3.cpp` |

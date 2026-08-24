@@ -6,9 +6,9 @@
 namespace cbdos {
 namespace system {
 
-class C6FlasherService {
+class FlasherServiceP4 {
 public:
-    static C6FlasherService& getInstance();
+    static FlasherServiceP4& getInstance();
 
     // Inicia el proceso de flasheo universal en segundo plano
     bool startFlash(const cbdos::flasher::FlasherConfig& config, cbdos::flasher::FlasherProgressCb progressCb = nullptr);
@@ -23,7 +23,7 @@ public:
     cbdos::flasher::FlasherConfig getDefaultConfig() const;
 
 private:
-    C6FlasherService();
+    FlasherServiceP4();
     static void flashTaskWrapper(void* arg);
     void runFlashTask();
 
@@ -38,4 +38,3 @@ private:
 
 } // namespace system
 } // namespace cbdos
-

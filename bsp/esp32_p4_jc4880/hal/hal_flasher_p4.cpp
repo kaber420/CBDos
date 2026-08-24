@@ -1,4 +1,4 @@
-#include "C6FlasherService.hpp"
+#include "hal_flasher_p4.hpp"
 #include "cbdos/flasher.hpp"
 #include <esp_loader.h>
 #include <esp_loader_io.h>
@@ -14,7 +14,7 @@
 #include <cstring>
 #include <sys/stat.h>
 
-static const char* TAG_FLASHER = "UNIVERSAL_FLASHER";
+static const char* TAG_FLASHER = "HAL_FLASHER_P4";
 
 // Símbolos del binario SDIO C6 embebido
 extern const uint8_t c6_slave_bin_start[] asm("_binary_c6_slave_bin_start");
@@ -25,7 +25,7 @@ extern const uint8_t c6_slave_bin_end[]   asm("_binary_c6_slave_bin_end");
 namespace cbdos {
 namespace system {
 
-C6FlasherService::C6FlasherService() {
+FlasherServiceP4::FlasherServiceP4() {
     // 1. Preset Coprocesador ESP32-C6 (Integrado en placa JC4880P443C)
     cbdos::flasher::FlasherPreset p1;
     p1.id = "p4_c6_internal";
@@ -134,23 +134,23 @@ C6FlasherService::C6FlasherService() {
     m_activeConfig = m_presets[0].config;
 }
 
-C6FlasherService& C6FlasherService::getInstance() {
-    static C6FlasherService instance;
+FlasherServiceP4& FlasherServiceP4::getInstance() {
+    static FlasherServiceP4 instance;
     return instance;
 }
 
-const std::vector<cbdos::flasher::FlasherPreset>& C6FlasherService::getPresets() const {
+const std::vector<cbdos::flasher::FlasherPreset>& FlasherServiceP4::getPresets() const {
     return m_presets;
 }
 
-cbdos::flasher::FlasherConfig C6FlasherService::getDefaultConfig() const {
+cbdos::flasher::FlasherConfig FlasherServiceP4::getDefaultConfig() const {
     if (!m_presets.empty()) {
         return m_presets[0].config;
     }
     return cbdos::flasher::FlasherConfig();
 }
 
-bool C6FlasherService::startFlash(const cbdos::flasher::FlasherConfig& config, cbdos::flasher::FlasherProgressCb progressCb) {
+bool FlasherServiceP4::startFlash(const cbdos::flasher::FlasherConfig& config, cbdos::flasher::FlasherProgressCb progressCb) {
     if (m_busy) {
         ESP_LOGW(TAG_FLASHER, "Flasheador ocupado actualmente");
         return false;
@@ -168,17 +168,17 @@ bool C6FlasherService::startFlash(const cbdos::flasher::FlasherConfig& config, c
     return true;
 }
 
-bool C6FlasherService::startFlash(cbdos::flasher::FlasherProgressCb progressCb) {
+bool FlasherServiceP4::startFlash(cbdos::flasher::FlasherProgressCb progressCb) {
     return startFlash(getDefaultConfig(), progressCb);
 }
 
-void C6FlasherService::flashTaskWrapper(void* arg) {
-    auto* self = static_cast<C6FlasherService*>(arg);
+void FlasherServiceP4::flashTaskWrapper(void* arg) {
+    auto* self = static_cast<FlasherServiceP4*>(arg);
     self->runFlashTask();
     vTaskDelete(nullptr);
 }
 
-void C6FlasherService::runFlashTask() {
+void FlasherServiceP4::runFlashTask() {
     ESP_LOGI(TAG_FLASHER, "=== Iniciando Flasheo Universal [%s] ===", m_activeConfig.presetName.c_str());
     ESP_LOGI(TAG_FLASHER, "Pines: TX=%d, RX=%d, BOOT=%d, RST=%d, Baud=%lu, Offset=0x%lx",
              m_activeConfig.txPin, m_activeConfig.rxPin, m_activeConfig.bootPin,
@@ -370,27 +370,24 @@ bool isSupported() {
 }
 
 bool isBusy() {
-    return system::C6FlasherService::getInstance().isBusy();
+    return system::FlasherServiceP4::getInstance().isBusy();
 }
 
 const std::vector<FlasherPreset>& getPresets() {
-    return system::C6FlasherService::getInstance().getPresets();
+    return system::FlasherServiceP4::getInstance().getPresets();
 }
 
 FlasherConfig getDefaultConfig() {
-    return system::C6FlasherService::getInstance().getDefaultConfig();
+    return system::FlasherServiceP4::getInstance().getDefaultConfig();
 }
 
 bool startFlash(const FlasherConfig& config, FlasherProgressCb progressCb) {
-    return system::C6FlasherService::getInstance().startFlash(config, progressCb);
+    return system::FlasherServiceP4::getInstance().startFlash(config, progressCb);
 }
 
 bool startFlash(FlasherProgressCb progressCb) {
-    return system::C6FlasherService::getInstance().startFlash(progressCb);
+    return system::FlasherServiceP4::getInstance().startFlash(progressCb);
 }
 
 } // namespace flasher
 } // namespace cbdos
-
-
-

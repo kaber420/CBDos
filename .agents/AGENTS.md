@@ -57,8 +57,10 @@ El proyecto opera bajo un modelo desacoplado:
 
 ## ⚠️ 3. Reglas Obligatorias de Desarrollo
 
-1. **Persistencia Obligatoria de Hardware:**
-   - Toda información técnica descubierta (pines GPIO, buses I2C, registros de códec, timers, LDOs) DEBE documentarse y actualizarse inmediatamente en `/home/kaber420/Documentos/proyectos/cbdos/docs/hardware_pinouts_reference.md` para evitar pérdida de contexto y búsquedas redundantes.
+1. **Persistencia Obligatoria y Modularidad de Documentación (`docs/`):**
+   - **Hardware y Pines:** Toda información técnica (GPIOs, buses, LDOs, puertos UART) DEBE documentarse y actualizarse en `/home/kaber420/Documentos/proyectos/cbdos/docs/hardware/pinouts_and_ports.md`.
+   - **Arquitectura de Software y HAL:** Toda interfaz abstracta, módulo HAL o patrón arquitectónico DEBE documentarse en `/home/kaber420/Documentos/proyectos/cbdos/docs/architecture/hal_and_core_architecture.md`.
+   - **APIs para Desarrolladores y SDK:** Todo nuevo servicio o API accesible para aplicaciones DEBE documentarse con ejemplos en `/home/kaber420/Documentos/proyectos/cbdos/docs/api/core_apis_reference.md` y guías en `/home/kaber420/Documentos/proyectos/cbdos/docs/api/how_to_create_an_app.md`.
 
 2. **Verificación Multi-Target Obligatoria:**
    - Cada cambio en `core/` debe compilar limpiamente en **AMBOS** entornos:
