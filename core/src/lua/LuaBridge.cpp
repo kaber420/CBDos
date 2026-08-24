@@ -5,13 +5,17 @@
 #include "cbdos/network.hpp"
 #include "cbdos/display.hpp"
 #include "cbdos/input.hpp"
+#include "cbdos/uart.hpp"
+#include "../UIManager.hpp"
+#include "../themes/DefaultTheme.h"
 
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include <string>
+#include <vector>
 #include <algorithm>
-#include <driver/gpio.h>
 #include <lvgl.h>
 
 extern "C" {
@@ -145,43 +149,26 @@ static int lua_get_ip(lua_State* L) {
     return 1;
 }
 
+static int lua_cpu_temp(lua_State* L) {
+    lua_pushnumber(L, (lua_Number)cbdos::system::getCpuTemperature());
+    return 1;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GPIO API
 // ─────────────────────────────────────────────────────────────────────────────
 static int lua_pin_mode(lua_State* L) {
-    int pin = (int)luaL_checkinteger(L, 1);
-    const char* modeStr = luaL_checkstring(L, 2);
-
-    gpio_reset_pin((gpio_num_t)pin);
-    if (strcmp(modeStr, "input") == 0) {
-        gpio_set_direction((gpio_num_t)pin, GPIO_MODE_INPUT);
-    } else if (strcmp(modeStr, "pullup") == 0) {
-        gpio_set_direction((gpio_num_t)pin, GPIO_MODE_INPUT);
-        gpio_set_pull_mode((gpio_num_t)pin, GPIO_PULLUP_ONLY);
-    } else if (strcmp(modeStr, "pulldown") == 0) {
-        gpio_set_direction((gpio_num_t)pin, GPIO_MODE_INPUT);
-        gpio_set_pull_mode((gpio_num_t)pin, GPIO_PULLDOWN_ONLY);
-    } else if (strcmp(modeStr, "output") == 0) {
-        gpio_set_direction((gpio_num_t)pin, GPIO_MODE_OUTPUT);
-    }
+    (void)L;
     return 0;
 }
 
 static int lua_digital_write(lua_State* L) {
-    int pin = (int)luaL_checkinteger(L, 1);
-    int val = 0;
-    if (lua_isboolean(L, 2)) {
-        val = lua_toboolean(L, 2) ? 1 : 0;
-    } else {
-        val = (int)luaL_checkinteger(L, 2) ? 1 : 0;
-    }
-    gpio_set_level((gpio_num_t)pin, val);
+    (void)L;
     return 0;
 }
 
 static int lua_digital_read(lua_State* L) {
-    int pin = (int)luaL_checkinteger(L, 1);
-    lua_pushinteger(L, gpio_get_level((gpio_num_t)pin));
+    lua_pushinteger(L, 0);
     return 1;
 }
 
@@ -190,37 +177,21 @@ static int lua_digital_read(lua_State* L) {
 // ─────────────────────────────────────────────────────────────────────────────
 static int lua_read_file(lua_State* L) {
     const char* path = luaL_checkstring(L, 1);
-    std::string pathTry = path;
-    FILE* f = fopen(pathTry.c_str(), "rb");
-    if (!f && pathTry.rfind("/sdcard/", 0) != 0) {
-        pathTry = std::string("/sdcard/") + (path[0] == '/' ? path + 1 : path);
-        f = fopen(pathTry.c_str(), "rb");
+    std::string content = cbdos::storage::readFile(path);
+    if (content.empty() && !cbdos::storage::fileExists(path)) {
+        if (std::string(path).rfind("/sdcard/", 0) != 0) {
+            std::string alt = std::string("/sdcard/") + (path[0] == '/' ? path + 1 : path);
+            content = cbdos::storage::readFile(alt.c_str());
+        }
     }
 
-    if (!f) {
+    if (content.empty() && !cbdos::storage::fileExists(path)) {
         lua_pushnil(L);
-        lua_pushstring(L, "No se pudo abrir el archivo");
+        lua_pushstring(L, "No se pudo leer el archivo");
         return 2;
     }
 
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char* buf = (char*)malloc(sz + 1);
-    if (!buf) {
-        fclose(f);
-        lua_pushnil(L);
-        lua_pushstring(L, "Memoria insuficiente");
-        return 2;
-    }
-
-    size_t readLen = fread(buf, 1, sz, f);
-    buf[readLen] = '\0';
-    fclose(f);
-
-    lua_pushlstring(L, buf, readLen);
-    free(buf);
+    lua_pushlstring(L, content.data(), content.size());
     return 1;
 }
 
@@ -228,24 +199,15 @@ static int lua_write_file(lua_State* L) {
     const char* path = luaL_checkstring(L, 1);
     size_t dataLen = 0;
     const char* data = luaL_checklstring(L, 2, &dataLen);
+    std::string content(data, dataLen);
 
-    std::string pathTry = path;
-    FILE* f = fopen(pathTry.c_str(), "wb");
-    if (!f && pathTry.rfind("/sdcard/", 0) != 0) {
-        pathTry = std::string("/sdcard/") + (path[0] == '/' ? path + 1 : path);
-        f = fopen(pathTry.c_str(), "wb");
+    bool ok = cbdos::storage::writeFile(path, content);
+    if (!ok && std::string(path).rfind("/sdcard/", 0) != 0) {
+        std::string alt = std::string("/sdcard/") + (path[0] == '/' ? path + 1 : path);
+        ok = cbdos::storage::writeFile(alt.c_str(), content);
     }
 
-    if (!f) {
-        lua_pushboolean(L, 0);
-        lua_pushstring(L, "No se pudo crear/abrir el archivo para escritura");
-        return 2;
-    }
-
-    size_t written = fwrite(data, 1, dataLen, f);
-    fclose(f);
-
-    lua_pushboolean(L, written == dataLen);
+    lua_pushboolean(L, ok);
     return 1;
 }
 
@@ -263,6 +225,10 @@ static int lua_file_exists(lua_State* L) {
 static int lua_list_dir(lua_State* L) {
     const char* path = luaL_optstring(L, 1, "/sdcard");
     auto entries = cbdos::storage::listDir(path);
+    if (entries.empty() && strcmp(path, "/sdcard") == 0) {
+        entries = cbdos::storage::listDir("/");
+    }
+
     lua_newtable(L);
     for (size_t i = 0; i < entries.size(); i++) {
         lua_newtable(L);
@@ -272,137 +238,903 @@ static int lua_list_dir(lua_State* L) {
         lua_setfield(L, -2, "size");
         lua_pushboolean(L, entries[i].isDirectory);
         lua_setfield(L, -2, "isDirectory");
+        lua_pushboolean(L, entries[i].isDirectory);
+        lua_setfield(L, -2, "is_directory");
+        lua_pushboolean(L, entries[i].isDirectory);
+        lua_setfield(L, -2, "is_dir");
         lua_rawseti(L, -2, i + 1);
     }
     return 1;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Graphics API (Exact espOS32 Legacy Canvas & Hardware Integration)
+// UART API
 // ─────────────────────────────────────────────────────────────────────────────
-#ifdef ARDUINO
-#include <JC3248W535.h>
-extern JC3248W535_Display& get_s3_display_driver();
-extern JC3248W535_Touch& get_s3_touch_driver();
+static int lua_uart_init(lua_State* L) {
+    uint32_t baud = (uint32_t)luaL_optinteger(L, 1, 115200);
+    int tx = (int)luaL_optinteger(L, 2, cbdos::uart::getDefaultTxPin());
+    int rx = (int)luaL_optinteger(L, 3, cbdos::uart::getDefaultRxPin());
 
-static inline uint16_t toRGB565(uint32_t c) {
-    uint8_t r = (c >> 16) & 0xFF;
-    uint8_t g = (c >> 8) & 0xFF;
-    uint8_t b = c & 0xFF;
-    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
-}
-
-static int lua_gfx_clear(lua_State* L) {
-    uint32_t col = (uint32_t)luaL_optinteger(L, 1, 0x000000);
-    auto& drv = get_s3_display_driver();
-    if (drv.getCanvas()) {
-        drv.getCanvas()->fillScreen(toRGB565(col));
-        drv.flush();
-    }
-    return 0;
-}
-
-static int lua_gfx_draw_rect(lua_State* L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    int w = (int)luaL_checkinteger(L, 3);
-    int h = (int)luaL_checkinteger(L, 4);
-    uint32_t col = (uint32_t)luaL_checkinteger(L, 5);
-    bool filled = lua_toboolean(L, 6);
-    auto& drv = get_s3_display_driver();
-    if (drv.getCanvas()) {
-        if (filled) {
-            drv.getCanvas()->fillRect(x, y, w, h, toRGB565(col));
-        } else {
-            drv.getCanvas()->drawRect(x, y, w, h, toRGB565(col));
-        }
-        drv.flush();
-    }
-    return 0;
-}
-
-static int lua_gfx_draw_circle(lua_State* L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    int r = (int)luaL_checkinteger(L, 3);
-    uint32_t col = (uint32_t)luaL_checkinteger(L, 4);
-    bool filled = lua_toboolean(L, 5);
-    auto& drv = get_s3_display_driver();
-    if (drv.getCanvas()) {
-        if (filled) {
-            drv.getCanvas()->fillCircle(x, y, r, toRGB565(col));
-        } else {
-            drv.getCanvas()->drawCircle(x, y, r, toRGB565(col));
-        }
-        drv.flush();
-    }
-    return 0;
-}
-
-static int lua_gfx_draw_line(lua_State* L) {
-    int x0 = (int)luaL_checkinteger(L, 1);
-    int y0 = (int)luaL_checkinteger(L, 2);
-    int x1 = (int)luaL_checkinteger(L, 3);
-    int y1 = (int)luaL_checkinteger(L, 4);
-    uint32_t col = (uint32_t)luaL_checkinteger(L, 5);
-    auto& drv = get_s3_display_driver();
-    if (drv.getCanvas()) {
-        drv.getCanvas()->drawLine(x0, y0, x1, y1, toRGB565(col));
-        drv.flush();
-    }
-    return 0;
-}
-
-static int lua_gfx_draw_text(lua_State* L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    const char* text = luaL_checkstring(L, 3);
-    uint32_t col = (uint32_t)luaL_optinteger(L, 4, 0xFFFFFF);
-    int size = (int)luaL_optinteger(L, 5, 1);
-    auto& drv = get_s3_display_driver();
-    if (drv.getCanvas()) {
-        drv.getCanvas()->setCursor(x, y);
-        drv.getCanvas()->setTextColor(toRGB565(col));
-        drv.getCanvas()->setTextSize(size);
-        drv.getCanvas()->print(text);
-        drv.flush();
-    }
-    return 0;
-}
-
-static int lua_gfx_touch(lua_State* L) {
-    ::TouchPoint tp;
-    auto& touchDrv = get_s3_touch_driver();
-    bool touched = touchDrv.read(tp) && tp.touched;
-    lua_newtable(L);
-    lua_pushboolean(L, touched);
-    lua_setfield(L, -2, "touched");
-    lua_pushinteger(L, tp.x);
-    lua_setfield(L, -2, "x");
-    lua_pushinteger(L, tp.y);
-    lua_setfield(L, -2, "y");
+    bool ok = cbdos::uart::init(tx, rx, baud);
+    lua_pushboolean(L, ok);
     return 1;
 }
 
-static int lua_gfx_flush(lua_State* L) {
-    (void)L;
-    auto& drv = get_s3_display_driver();
-    drv.flush();
+static int lua_uart_write(lua_State* L) {
+    const char* str = luaL_checkstring(L, 1);
+    size_t written = cbdos::uart::writeString(str);
+    lua_pushinteger(L, written);
+    return 1;
+}
+
+static int lua_uart_read(lua_State* L) {
+    size_t maxLen = (size_t)luaL_optinteger(L, 1, 512);
+    std::string data = cbdos::uart::readString(maxLen);
+    lua_pushstring(L, data.c_str());
+    return 1;
+}
+
+static int lua_uart_available(lua_State* L) {
+    lua_pushinteger(L, cbdos::uart::available());
+    return 1;
+}
+
+static int lua_uart_flush(lua_State* L) {
+    cbdos::uart::flush();
     return 0;
 }
 
-#else
-// Fallback para ESP32-P4
-static inline uint16_t toRGB565(uint32_t c) {
+// ─────────────────────────────────────────────────────────────────────────────
+// LVGL 9.5 UI API (cbdos.ui.*)
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct LuaUIEventData {
+    lua_State* L;
+    int fnRef;
+};
+
+static void lua_ui_generic_event_cb(lv_event_t* e) {
+    auto* data = static_cast<LuaUIEventData*>(lv_event_get_user_data(e));
+    if (!data || !data->L) return;
+
+    lv_event_code_t code = lv_event_get_code(e);
+
+    if (code == LV_EVENT_DELETE) {
+        if (data->fnRef != LUA_NOREF) {
+            luaL_unref(data->L, LUA_REGISTRYINDEX, data->fnRef);
+        }
+        delete data;
+        return;
+    }
+
+    if (data->fnRef == LUA_NOREF) return;
+
+    lua_rawgeti(data->L, LUA_REGISTRYINDEX, data->fnRef);
+    if (!lua_isfunction(data->L, -1)) {
+        lua_pop(data->L, 1);
+        return;
+    }
+
+    lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+    int nargs = 0;
+
+    if (code == LV_EVENT_VALUE_CHANGED) {
+        if (lv_obj_check_type(target, &lv_slider_class)) {
+            lua_pushinteger(data->L, lv_slider_get_value(target));
+            nargs = 1;
+        } else if (lv_obj_check_type(target, &lv_switch_class)) {
+            lua_pushboolean(data->L, lv_obj_has_state(target, LV_STATE_CHECKED));
+            nargs = 1;
+        }
+    }
+
+    if (lua_pcall(data->L, nargs, 0, 0) != 0) {
+        const char* err = lua_tostring(data->L, -1);
+        printf("[LuaUI Error] %s\n", err ? err : "Error desconocido");
+        lua_pop(data->L, 1);
+    }
+}
+
+static inline int32_t parse_coord(lua_State* L, int argIdx, int32_t defaultVal) {
+    if (lua_isnoneornil(L, argIdx)) return defaultVal;
+    int32_t val = (int32_t)luaL_checkinteger(L, argIdx);
+    if (val <= 0 || val == -1) return defaultVal;
+    return val;
+}
+
+static lv_obj_t* get_target_parent(lua_State* L, int argIdx) {
+    if (lua_islightuserdata(L, argIdx)) {
+        lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, argIdx);
+        if (obj && lv_obj_is_valid(obj)) return obj;
+    }
+    return lv_screen_active();
+}
+
+static int lua_ui_create_card(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    int32_t w = parse_coord(L, 2, LV_PCT(100));
+    int32_t h = parse_coord(L, 3, LV_SIZE_CONTENT);
+
+    lv_obj_t* card = lv_obj_create(parent);
+    lv_obj_set_size(card, w, h);
+    DefaultTheme::applyRaisedCard(card, 16);
+    lv_obj_set_style_pad_all(card, 12, 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(card, 10, 0);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lua_pushlightuserdata(L, card);
+    return 1;
+}
+
+static int lua_ui_create_sunken_card(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    int32_t w = parse_coord(L, 2, LV_PCT(100));
+    int32_t h = parse_coord(L, 3, LV_SIZE_CONTENT);
+
+    lv_obj_t* card = lv_obj_create(parent);
+    lv_obj_set_size(card, w, h);
+    DefaultTheme::applySunkenCard(card, 16);
+    lv_obj_set_style_pad_all(card, 12, 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(card, 6, 0);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lua_pushlightuserdata(L, card);
+    return 1;
+}
+
+static int lua_ui_create_label(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    const char* text = luaL_optstring(L, 2, "");
+
+    lv_obj_t* lbl = lv_label_create(parent);
+    lv_label_set_text(lbl, text);
+    lv_obj_set_style_text_color(lbl, DefaultTheme::getTextColor(), 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
+
+    lua_pushlightuserdata(L, lbl);
+    return 1;
+}
+
+static int lua_ui_set_text(lua_State* L) {
+    lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, 1);
+    const char* text = luaL_checkstring(L, 2);
+    if (obj && lv_obj_is_valid(obj)) {
+        lv_label_set_text(obj, text);
+    }
+    return 0;
+}
+
+static int lua_ui_set_color(lua_State* L) {
+    lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, 1);
+    uint32_t hexColor = (uint32_t)luaL_checkinteger(L, 2);
+    if (obj && lv_obj_is_valid(obj)) {
+        lv_obj_set_style_text_color(obj, lv_color_hex(hexColor), 0);
+    }
+    return 0;
+}
+
+static int lua_ui_set_font_size(lua_State* L) {
+    lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, 1);
+    int size = (int)luaL_checkinteger(L, 2);
+    if (obj && lv_obj_is_valid(obj)) {
+        if (size >= 24) {
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_24, 0);
+        } else if (size >= 16) {
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_16, 0);
+        } else if (size >= 14) {
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_14, 0);
+        } else {
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_12, 0);
+        }
+    }
+    return 0;
+}
+
+static int lua_ui_create_button(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    const char* text = luaL_optstring(L, 2, "Boton");
+
+    lv_obj_t* btn = lv_button_create(parent);
+    DefaultTheme::applyButton(btn, 16);
+    lv_obj_set_size(btn, LV_SIZE_CONTENT, 38);
+    lv_obj_set_style_pad_hor(btn, 16, 0);
+    lv_obj_set_style_pad_ver(btn, 8, 0);
+
+    lv_obj_t* lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, text);
+    lv_obj_set_style_text_color(lbl, DefaultTheme::getTextColor(), 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
+    lv_obj_center(lbl);
+
+    if (lua_isfunction(L, 3)) {
+        lua_pushvalue(L, 3);
+        int fnRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+        auto* data = new LuaUIEventData{ L, fnRef };
+        lv_obj_add_event_cb(btn, lua_ui_generic_event_cb, LV_EVENT_CLICKED, data);
+        lv_obj_add_event_cb(btn, lua_ui_generic_event_cb, LV_EVENT_DELETE, data);
+    }
+
+    lua_pushlightuserdata(L, btn);
+    return 1;
+}
+
+static int lua_ui_create_slider(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    int32_t minVal = (int32_t)luaL_optinteger(L, 2, 0);
+    int32_t maxVal = (int32_t)luaL_optinteger(L, 3, 100);
+    int32_t val = (int32_t)luaL_optinteger(L, 4, 50);
+
+    lv_obj_t* slider = lv_slider_create(parent);
+    lv_slider_set_range(slider, minVal, maxVal);
+    lv_slider_set_value(slider, val, LV_ANIM_OFF);
+    lv_obj_set_size(slider, LV_PCT(100), 16);
+
+    if (lua_isfunction(L, 5)) {
+        lua_pushvalue(L, 5);
+        int fnRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+        auto* data = new LuaUIEventData{ L, fnRef };
+        lv_obj_add_event_cb(slider, lua_ui_generic_event_cb, LV_EVENT_VALUE_CHANGED, data);
+        lv_obj_add_event_cb(slider, lua_ui_generic_event_cb, LV_EVENT_DELETE, data);
+    }
+
+    lua_pushlightuserdata(L, slider);
+    return 1;
+}
+
+static int lua_ui_create_switch(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    bool state = lua_toboolean(L, 2);
+
+    lv_obj_t* sw = lv_switch_create(parent);
+    if (state) {
+        lv_obj_add_state(sw, LV_STATE_CHECKED);
+    }
+
+    if (lua_isfunction(L, 3)) {
+        lua_pushvalue(L, 3);
+        int fnRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+        auto* data = new LuaUIEventData{ L, fnRef };
+        lv_obj_add_event_cb(sw, lua_ui_generic_event_cb, LV_EVENT_VALUE_CHANGED, data);
+        lv_obj_add_event_cb(sw, lua_ui_generic_event_cb, LV_EVENT_DELETE, data);
+    }
+
+    lua_pushlightuserdata(L, sw);
+    return 1;
+}
+
+static int lua_ui_create_row(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    lv_obj_t* row = lv_obj_create(parent);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 4, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(row, 8, 0);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lua_pushlightuserdata(L, row);
+    return 1;
+}
+
+static int lua_ui_create_column(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    lv_obj_t* col = lv_obj_create(parent);
+    lv_obj_set_size(col, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(col, 0, 0);
+    lv_obj_set_style_pad_all(col, 4, 0);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(col, 8, 0);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lua_pushlightuserdata(L, col);
+    return 1;
+}
+
+static int lua_ui_set_size(lua_State* L) {
+    lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, 1);
+    int32_t w = (int32_t)luaL_checkinteger(L, 2);
+    int32_t h = (int32_t)luaL_checkinteger(L, 3);
+    if (obj && lv_obj_is_valid(obj)) {
+        lv_obj_set_size(obj, w, h);
+    }
+    return 0;
+}
+
+static int lua_ui_show_toast(lua_State* L) {
+    const char* msg = luaL_checkstring(L, 1);
+    cbdos::ui::UIManager::showToast(msg);
+    return 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LVGL 9.5 Custom Pixel Canvas API (cbdos.canvas.*)
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct LuaCanvasCtx {
+    uint16_t* buffer;
+    uint32_t width;
+    uint32_t height;
+    lua_State* L;
+    int clickRef;
+    int touchRef;
+};
+
+static inline uint16_t colorToRGB565(uint32_t c) {
     uint8_t r = (c >> 16) & 0xFF;
     uint8_t g = (c >> 8) & 0xFF;
     uint8_t b = c & 0xFF;
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
+static inline uint32_t rgb565ToColor(uint16_t c565) {
+    uint8_t r = ((c565 >> 11) & 0x1F) << 3;
+    uint8_t g = ((c565 >> 5) & 0x3F) << 2;
+    uint8_t b = (c565 & 0x1F) << 3;
+    return (r << 16) | (g << 8) | b;
+}
+
+// 5x7 Font Bitmap table (ASCII 32..126)
+static const uint8_t font5x7[96][5] = {
+    {0x00,0x00,0x00,0x00,0x00}, {0x00,0x00,0x5F,0x00,0x00}, {0x00,0x07,0x00,0x07,0x00}, {0x14,0x7F,0x14,0x7F,0x14},
+    {0x24,0x2A,0x7F,0x2A,0x12}, {0x23,0x13,0x08,0x64,0x62}, {0x36,0x49,0x55,0x22,0x50}, {0x00,0x05,0x03,0x00,0x00},
+    {0x00,0x1C,0x22,0x41,0x00}, {0x00,0x41,0x22,0x1C,0x00}, {0x14,0x08,0x3E,0x08,0x14}, {0x08,0x08,0x3E,0x08,0x08},
+    {0x00,0x50,0x30,0x00,0x00}, {0x08,0x08,0x08,0x08,0x08}, {0x00,0x60,0x60,0x00,0x00}, {0x20,0x10,0x08,0x04,0x02},
+    {0x3E,0x51,0x49,0x45,0x3E}, {0x00,0x42,0x7F,0x40,0x00}, {0x42,0x61,0x51,0x49,0x46}, {0x21,0x41,0x45,0x4B,0x31},
+    {0x18,0x14,0x12,0x7F,0x10}, {0x27,0x45,0x45,0x45,0x39}, {0x3C,0x4A,0x49,0x49,0x30}, {0x01,0x71,0x09,0x05,0x03},
+    {0x36,0x49,0x49,0x49,0x36}, {0x06,0x49,0x49,0x29,0x1E}, {0x00,0x36,0x36,0x00,0x00}, {0x00,0x56,0x36,0x00,0x00},
+    {0x08,0x14,0x22,0x41,0x00}, {0x14,0x14,0x14,0x14,0x14}, {0x00,0x41,0x22,0x14,0x08}, {0x02,0x01,0x51,0x09,0x06},
+    {0x32,0x49,0x79,0x41,0x3E}, {0x7E,0x11,0x11,0x11,0x7E}, {0x7F,0x49,0x49,0x49,0x36}, {0x3E,0x41,0x41,0x41,0x22},
+    {0x7F,0x41,0x41,0x22,0x1C}, {0x7F,0x49,0x49,0x49,0x41}, {0x7F,0x09,0x09,0x09,0x01}, {0x3E,0x41,0x49,0x49,0x7A},
+    {0x7F,0x08,0x08,0x08,0x7F}, {0x00,0x41,0x7F,0x41,0x00}, {0x20,0x40,0x41,0x3F,0x01}, {0x7F,0x08,0x14,0x22,0x41},
+    {0x7F,0x40,0x40,0x40,0x40}, {0x7F,0x02,0x0C,0x02,0x7F}, {0x7F,0x04,0x08,0x10,0x7F}, {0x3E,0x41,0x41,0x41,0x3E},
+    {0x7F,0x09,0x09,0x09,0x06}, {0x3E,0x41,0x51,0x21,0x5E}, {0x7F,0x09,0x19,0x29,0x46}, {0x46,0x49,0x49,0x49,0x31},
+    {0x01,0x01,0x7F,0x01,0x01}, {0x3F,0x40,0x40,0x40,0x3F}, {0x1F,0x20,0x40,0x20,0x1F}, {0x3F,0x40,0x38,0x40,0x3F},
+    {0x63,0x14,0x08,0x14,0x63}, {0x07,0x08,0x70,0x08,0x07}, {0x61,0x51,0x49,0x45,0x43}, {0x00,0x7F,0x41,0x41,0x00},
+    {0x02,0x04,0x08,0x10,0x20}, {0x00,0x41,0x41,0x7F,0x00}, {0x04,0x02,0x01,0x02,0x04}, {0x40,0x40,0x40,0x40,0x40},
+    {0x00,0x01,0x02,0x04,0x00}, {0x20,0x54,0x54,0x54,0x78}, {0x7F,0x48,0x44,0x44,0x38}, {0x38,0x44,0x44,0x44,0x20},
+    {0x38,0x44,0x44,0x48,0x7F}, {0x38,0x54,0x54,0x54,0x18}, {0x08,0x7E,0x09,0x01,0x02}, {0x0C,0x52,0x52,0x52,0x3E},
+    {0x7F,0x08,0x04,0x04,0x78}, {0x00,0x44,0x7D,0x40,0x00}, {0x20,0x40,0x44,0x3D,0x00}, {0x7F,0x10,0x28,0x44,0x00},
+    {0x00,0x41,0x7F,0x40,0x00}, {0x7C,0x04,0x18,0x04,0x78}, {0x7C,0x08,0x04,0x04,0x78}, {0x38,0x44,0x44,0x44,0x38},
+    {0x7C,0x14,0x14,0x14,0x08}, {0x08,0x14,0x14,0x18,0x7C}, {0x7C,0x08,0x04,0x04,0x08}, {0x48,0x54,0x54,0x54,0x20},
+    {0x04,0x3F,0x44,0x40,0x20}, {0x3C,0x40,0x40,0x20,0x7C}, {0x1C,0x20,0x40,0x20,0x1C}, {0x3C,0x40,0x30,0x40,0x3C},
+    {0x44,0x28,0x10,0x28,0x44}, {0x0C,0x50,0x50,0x50,0x3C}, {0x44,0x64,0x54,0x4C,0x44}, {0x00,0x08,0x36,0x41,0x00},
+    {0x00,0x00,0x7F,0x00,0x00}, {0x00,0x41,0x36,0x08,0x00}, {0x10,0x08,0x08,0x10,0x08}
+};
+
+static void canvas_event_cb(lv_event_t* e) {
+    auto* ctx = static_cast<LuaCanvasCtx*>(lv_event_get_user_data(e));
+    if (!ctx) return;
+
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_DELETE) {
+        if (ctx->L) {
+            if (ctx->clickRef != LUA_NOREF) {
+                luaL_unref(ctx->L, LUA_REGISTRYINDEX, ctx->clickRef);
+            }
+            if (ctx->touchRef != LUA_NOREF) {
+                luaL_unref(ctx->L, LUA_REGISTRYINDEX, ctx->touchRef);
+            }
+        }
+        if (ctx->buffer) {
+            free(ctx->buffer);
+            ctx->buffer = nullptr;
+        }
+        delete ctx;
+        return;
+    }
+
+    if (code == LV_EVENT_CLICKED && ctx->L && ctx->clickRef != LUA_NOREF) {
+        lv_point_t point;
+        lv_indev_get_point(lv_indev_active(), &point);
+        lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+        lv_area_t coords;
+        lv_obj_get_coords(target, &coords);
+        int32_t relX = point.x - coords.x1;
+        int32_t relY = point.y - coords.y1;
+
+        lua_rawgeti(ctx->L, LUA_REGISTRYINDEX, ctx->clickRef);
+        if (lua_isfunction(ctx->L, -1)) {
+            lua_pushinteger(ctx->L, relX);
+            lua_pushinteger(ctx->L, relY);
+            if (lua_pcall(ctx->L, 2, 0, 0) != 0) {
+                const char* err = lua_tostring(ctx->L, -1);
+                printf("[Canvas Click Error] %s\n", err ? err : "Unknown");
+                lua_pop(ctx->L, 1);
+            }
+        } else {
+            lua_pop(ctx->L, 1);
+        }
+    }
+
+    if ((code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING || code == LV_EVENT_RELEASED) && ctx->L && ctx->touchRef != LUA_NOREF) {
+        lv_point_t point;
+        lv_indev_get_point(lv_indev_active(), &point);
+        lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+        lv_area_t coords;
+        lv_obj_get_coords(target, &coords);
+        int32_t relX = point.x - coords.x1;
+        int32_t relY = point.y - coords.y1;
+
+        const char* eventStr = "pressed";
+        if (code == LV_EVENT_PRESSING) eventStr = "drag";
+        else if (code == LV_EVENT_RELEASED) eventStr = "released";
+
+        lua_rawgeti(ctx->L, LUA_REGISTRYINDEX, ctx->touchRef);
+        if (lua_isfunction(ctx->L, -1)) {
+            lua_pushstring(ctx->L, eventStr);
+            lua_pushinteger(ctx->L, relX);
+            lua_pushinteger(ctx->L, relY);
+            if (lua_pcall(ctx->L, 3, 0, 0) != 0) {
+                const char* err = lua_tostring(ctx->L, -1);
+                printf("[Canvas Touch Error] %s\n", err ? err : "Unknown");
+                lua_pop(ctx->L, 1);
+            }
+        } else {
+            lua_pop(ctx->L, 1);
+        }
+    }
+}
+
+static LuaCanvasCtx* get_canvas_ctx(lv_obj_t* canvas) {
+    if (!canvas || !lv_obj_is_valid(canvas)) return nullptr;
+    return (LuaCanvasCtx*)lv_obj_get_user_data(canvas);
+}
+
+static int lua_ui_create_canvas(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    uint32_t w = (uint32_t)luaL_optinteger(L, 2, 300);
+    uint32_t h = (uint32_t)luaL_optinteger(L, 3, 200);
+
+    lv_obj_t* canvas = lv_canvas_create(parent);
+    lv_obj_set_size(canvas, w, h);
+
+    size_t bufSize = w * h * sizeof(uint16_t);
+    uint16_t* buf = (uint16_t*)malloc(bufSize);
+    if (!buf) {
+        lua_pushnil(L);
+        return 1;
+    }
+    memset(buf, 0, bufSize);
+
+    lv_canvas_set_buffer(canvas, buf, w, h, LV_COLOR_FORMAT_RGB565);
+
+    auto* ctx = new LuaCanvasCtx{ buf, w, h, L, LUA_NOREF, LUA_NOREF };
+    lv_obj_set_user_data(canvas, ctx);
+    lv_obj_add_event_cb(canvas, canvas_event_cb, LV_EVENT_ALL, ctx);
+    lv_obj_add_flag(canvas, LV_OBJ_FLAG_CLICKABLE);
+
+    lua_pushlightuserdata(L, canvas);
+    return 1;
+}
+
+static int lua_canvas_fill(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    uint32_t hexColor = (uint32_t)luaL_optinteger(L, 2, 0x000000);
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) return 0;
+
+    uint16_t c565 = colorToRGB565(hexColor);
+    size_t total = ctx->width * ctx->height;
+    for (size_t i = 0; i < total; i++) {
+        ctx->buffer[i] = c565;
+    }
+    lv_obj_invalidate(canvas);
+    return 0;
+}
+
+static int lua_canvas_set_px(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    int x = (int)luaL_checkinteger(L, 2);
+    int y = (int)luaL_checkinteger(L, 3);
+    uint32_t hexColor = (uint32_t)luaL_checkinteger(L, 4);
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) return 0;
+
+    if (x >= 0 && x < (int)ctx->width && y >= 0 && y < (int)ctx->height) {
+        ctx->buffer[y * ctx->width + x] = colorToRGB565(hexColor);
+    }
+    return 0;
+}
+
+static int lua_canvas_draw_rect(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    int rx = (int)luaL_checkinteger(L, 2);
+    int ry = (int)luaL_checkinteger(L, 3);
+    int rw = (int)luaL_checkinteger(L, 4);
+    int rh = (int)luaL_checkinteger(L, 5);
+    uint32_t hexColor = (uint32_t)luaL_checkinteger(L, 6);
+    bool filled = lua_toboolean(L, 7);
+
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) return 0;
+
+    uint16_t c565 = colorToRGB565(hexColor);
+    int x1 = std::max(0, rx);
+    int y1 = std::max(0, ry);
+    int x2 = std::min((int)ctx->width - 1, rx + rw - 1);
+    int y2 = std::min((int)ctx->height - 1, ry + rh - 1);
+
+    if (x1 > x2 || y1 > y2) return 0;
+
+    if (filled) {
+        for (int y = y1; y <= y2; y++) {
+            uint16_t* row = &ctx->buffer[y * ctx->width];
+            for (int x = x1; x <= x2; x++) {
+                row[x] = c565;
+            }
+        }
+    } else {
+        for (int x = x1; x <= x2; x++) {
+            if (ry >= 0 && ry < (int)ctx->height) ctx->buffer[ry * ctx->width + x] = c565;
+            if (ry + rh - 1 >= 0 && ry + rh - 1 < (int)ctx->height) ctx->buffer[(ry + rh - 1) * ctx->width + x] = c565;
+        }
+        for (int y = y1; y <= y2; y++) {
+            if (rx >= 0 && rx < (int)ctx->width) ctx->buffer[y * ctx->width + rx] = c565;
+            if (rx + rw - 1 >= 0 && rx + rw - 1 < (int)ctx->width) ctx->buffer[y * ctx->width + (rx + rw - 1)] = c565;
+        }
+    }
+    return 0;
+}
+
+static int lua_canvas_draw_line(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    int x0 = (int)luaL_checkinteger(L, 2);
+    int y0 = (int)luaL_checkinteger(L, 3);
+    int x1 = (int)luaL_checkinteger(L, 4);
+    int y1 = (int)luaL_checkinteger(L, 5);
+    uint32_t hexColor = (uint32_t)luaL_checkinteger(L, 6);
+
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) return 0;
+
+    uint16_t c565 = colorToRGB565(hexColor);
+    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2;
+
+    while (true) {
+        if (x0 >= 0 && x0 < (int)ctx->width && y0 >= 0 && y0 < (int)ctx->height) {
+            ctx->buffer[y0 * ctx->width + x0] = c565;
+        }
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+    return 0;
+}
+
+static int lua_canvas_draw_circle(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    int cx = (int)luaL_checkinteger(L, 2);
+    int cy = (int)luaL_checkinteger(L, 3);
+    int r = (int)luaL_checkinteger(L, 4);
+    uint32_t hexColor = (uint32_t)luaL_checkinteger(L, 5);
+    bool filled = lua_toboolean(L, 6);
+
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer || r <= 0) return 0;
+
+    uint16_t c565 = colorToRGB565(hexColor);
+
+    auto setPx = [&](int x, int y) {
+        if (x >= 0 && x < (int)ctx->width && y >= 0 && y < (int)ctx->height) {
+            ctx->buffer[y * ctx->width + x] = c565;
+        }
+    };
+
+    if (filled) {
+        for (int y = -r; y <= r; y++) {
+            for (int x = -r; x <= r; x++) {
+                if (x * x + y * y <= r * r) {
+                    setPx(cx + x, cy + y);
+                }
+            }
+        }
+    } else {
+        int x = r, y = 0;
+        int err = 0;
+        while (x >= y) {
+            setPx(cx + x, cy + y); setPx(cx + y, cy + x);
+            setPx(cx - y, cy + x); setPx(cx - x, cy + y);
+            setPx(cx - x, cy - y); setPx(cx - y, cy - x);
+            setPx(cx + y, cy - x); setPx(cx + x, cy - y);
+            if (err <= 0) { y += 1; err += 2 * y + 1; }
+            if (err > 0) { x -= 1; err -= 2 * x + 1; }
+        }
+    }
+    return 0;
+}
+
+static int lua_canvas_draw_text(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    int startX = (int)luaL_checkinteger(L, 2);
+    int startY = (int)luaL_checkinteger(L, 3);
+    const char* text = luaL_checkstring(L, 4);
+    uint32_t hexColor = (uint32_t)luaL_optinteger(L, 5, 0xFFFFFF);
+    int scale = (int)luaL_optinteger(L, 6, 1);
+    if (scale < 1) scale = 1;
+
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer || !text) return 0;
+
+    uint16_t c565 = colorToRGB565(hexColor);
+    int curX = startX;
+
+    while (*text) {
+        char ch = *text++;
+        if (ch >= 32 && ch <= 126) {
+            const uint8_t* charData = font5x7[ch - 32];
+            for (int col = 0; col < 5; col++) {
+                uint8_t line = charData[col];
+                for (int row = 0; row < 7; row++) {
+                    if (line & (1 << row)) {
+                        for (int sx = 0; sx < scale; sx++) {
+                            for (int sy = 0; sy < scale; sy++) {
+                                int px = curX + col * scale + sx;
+                                int py = startY + row * scale + sy;
+                                if (px >= 0 && px < (int)ctx->width && py >= 0 && py < (int)ctx->height) {
+                                    ctx->buffer[py * ctx->width + px] = c565;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            curX += 6 * scale;
+        } else if (ch == '\n') {
+            startY += 8 * scale;
+            curX = startX;
+        }
+    }
+    return 0;
+}
+
+static int lua_canvas_on_click(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx) return 0;
+
+    if (ctx->clickRef != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, ctx->clickRef);
+        ctx->clickRef = LUA_NOREF;
+    }
+
+    if (lua_isfunction(L, 2)) {
+        lua_pushvalue(L, 2);
+        ctx->clickRef = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    return 0;
+}
+
+static int lua_canvas_on_touch(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx) return 0;
+
+    if (ctx->touchRef != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, ctx->touchRef);
+        ctx->touchRef = LUA_NOREF;
+    }
+
+    if (lua_isfunction(L, 2)) {
+        lua_pushvalue(L, 2);
+        ctx->touchRef = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    return 0;
+}
+
+static int lua_canvas_get_px(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    int x = (int)luaL_checkinteger(L, 2);
+    int y = (int)luaL_checkinteger(L, 3);
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) {
+        lua_pushinteger(L, 0);
+        return 1;
+    }
+    if (x >= 0 && x < (int)ctx->width && y >= 0 && y < (int)ctx->height) {
+        uint16_t c565 = ctx->buffer[y * ctx->width + x];
+        lua_pushinteger(L, (lua_Integer)rgb565ToColor(c565));
+    } else {
+        lua_pushinteger(L, 0);
+    }
+    return 1;
+}
+
+static int lua_canvas_flood_fill(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    int startX = (int)luaL_checkinteger(L, 2);
+    int startY = (int)luaL_checkinteger(L, 3);
+    uint32_t fillHex = (uint32_t)luaL_checkinteger(L, 4);
+
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) return 0;
+
+    int w = (int)ctx->width;
+    int h = (int)ctx->height;
+    if (startX < 0 || startX >= w || startY < 0 || startY >= h) return 0;
+
+    uint16_t target565 = ctx->buffer[startY * w + startX];
+    uint16_t fill565 = colorToRGB565(fillHex);
+    if (target565 == fill565) return 0;
+
+    std::vector<std::pair<int, int>> queue;
+    queue.reserve(1024);
+    queue.push_back({startX, startY});
+    ctx->buffer[startY * w + startX] = fill565;
+
+    size_t head = 0;
+    while (head < queue.size()) {
+        auto pt = queue[head++];
+        int cx = pt.first;
+        int cy = pt.second;
+
+        const int dx[4] = {0, 0, -1, 1};
+        const int dy[4] = {-1, 1, 0, 0};
+        for (int i = 0; i < 4; ++i) {
+            int nx = cx + dx[i];
+            int ny = cy + dy[i];
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                if (ctx->buffer[ny * w + nx] == target565) {
+                    ctx->buffer[ny * w + nx] = fill565;
+                    queue.push_back({nx, ny});
+                }
+            }
+        }
+    }
+    lv_obj_invalidate(canvas);
+    return 0;
+}
+
+#pragma pack(push, 1)
+struct BMPHeader {
+    uint16_t bfType{0x4D42}; // "BM"
+    uint32_t bfSize{0};
+    uint16_t bfReserved1{0};
+    uint16_t bfReserved2{0};
+    uint32_t bfOffBits{54};
+    uint32_t biSize{40};
+    int32_t biWidth{0};
+    int32_t biHeight{0};
+    uint16_t biPlanes{1};
+    uint16_t biBitCount{24};
+    uint32_t biCompression{0};
+    uint32_t biSizeImage{0};
+    int32_t biXPelsPerMeter{2835};
+    int32_t biYPelsPerMeter{2835};
+    uint32_t biClrUsed{0};
+    uint32_t biClrImportant{0};
+};
+#pragma pack(pop)
+
+static int lua_canvas_save_bmp(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    const char* path = luaL_checkstring(L, 2);
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    FILE* f = fopen(path, "wb");
+    if (!f) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    int32_t w = (int32_t)ctx->width;
+    int32_t h = (int32_t)ctx->height;
+    int rowSize = ((w * 3 + 3) / 4) * 4;
+    uint32_t imageSize = rowSize * h;
+
+    BMPHeader hdr;
+    hdr.bfSize = 54 + imageSize;
+    hdr.biWidth = w;
+    hdr.biHeight = h;
+    hdr.biSizeImage = imageSize;
+
+    if (fwrite(&hdr, sizeof(hdr), 1, f) != 1) {
+        fclose(f);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    std::vector<uint8_t> rowBuf(rowSize, 0);
+    for (int y = h - 1; y >= 0; y--) {
+        for (int x = 0; x < w; x++) {
+            uint16_t c565 = ctx->buffer[y * w + x];
+            uint8_t r = ((c565 >> 11) & 0x1F) << 3;
+            uint8_t g = ((c565 >> 5) & 0x3F) << 2;
+            uint8_t b = (c565 & 0x1F) << 3;
+            rowBuf[x * 3 + 0] = b;
+            rowBuf[x * 3 + 1] = g;
+            rowBuf[x * 3 + 2] = r;
+        }
+        fwrite(rowBuf.data(), 1, rowSize, f);
+    }
+
+    fclose(f);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int lua_canvas_load_bmp(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    const char* path = luaL_checkstring(L, 2);
+    auto* ctx = get_canvas_ctx(canvas);
+    if (!ctx || !ctx->buffer) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    BMPHeader hdr;
+    if (fread(&hdr, sizeof(hdr), 1, f) != 1 || hdr.bfType != 0x4D42) {
+        fclose(f);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    int32_t bmpW = hdr.biWidth;
+    int32_t bmpH = abs(hdr.biHeight);
+    bool flipY = (hdr.biHeight > 0);
+
+    if (hdr.biBitCount == 24) {
+        int rowSize = ((bmpW * 3 + 3) / 4) * 4;
+        std::vector<uint8_t> rowBuf(rowSize);
+        fseek(f, hdr.bfOffBits, SEEK_SET);
+
+        for (int row = 0; row < bmpH; row++) {
+            if (fread(rowBuf.data(), 1, rowSize, f) != (size_t)rowSize) break;
+            int targetY = flipY ? (bmpH - 1 - row) : row;
+            if (targetY >= (int)ctx->height) continue;
+
+            for (int col = 0; col < bmpW && col < (int)ctx->width; col++) {
+                uint8_t b = rowBuf[col * 3 + 0];
+                uint8_t g = rowBuf[col * 3 + 1];
+                uint8_t r = rowBuf[col * 3 + 2];
+                uint16_t c565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+                ctx->buffer[targetY * ctx->width + col] = c565;
+            }
+        }
+        fclose(f);
+        lv_obj_invalidate(canvas);
+        lua_pushboolean(L, true);
+        return 1;
+    }
+
+    fclose(f);
+    lua_pushboolean(L, false);
+    return 1;
+}
+
+static int lua_canvas_refresh(lua_State* L) {
+    lv_obj_t* canvas = (lv_obj_t*)lua_touserdata(L, 1);
+    if (canvas && lv_obj_is_valid(canvas)) {
+        lv_obj_invalidate(canvas);
+    }
+    return 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Graphics API (Direct Framebuffer / Canvas agnóstico vía cbdos::display)
+// ─────────────────────────────────────────────────────────────────────────────
 static int lua_gfx_clear(lua_State* L) {
     uint32_t col = (uint32_t)luaL_optinteger(L, 1, 0x000000);
-    uint16_t col565 = toRGB565(col);
+    uint16_t col565 = colorToRGB565(col);
     auto caps = cbdos::display::getCapabilities();
     uint16_t* fb0 = (uint16_t*)cbdos::display::getFramebuffer(0);
     size_t totalPixels = caps.width * caps.height;
@@ -413,25 +1145,10 @@ static int lua_gfx_clear(lua_State* L) {
     return 0;
 }
 
-static int lua_gfx_draw_rect(lua_State* L) {
-    (void)L;
-    return 0;
-}
-
-static int lua_gfx_draw_circle(lua_State* L) {
-    (void)L;
-    return 0;
-}
-
-static int lua_gfx_draw_line(lua_State* L) {
-    (void)L;
-    return 0;
-}
-
-static int lua_gfx_draw_text(lua_State* L) {
-    (void)L;
-    return 0;
-}
+static int lua_gfx_draw_rect(lua_State* L) { (void)L; return 0; }
+static int lua_gfx_draw_circle(lua_State* L) { (void)L; return 0; }
+static int lua_gfx_draw_line(lua_State* L) { (void)L; return 0; }
+static int lua_gfx_draw_text(lua_State* L) { (void)L; return 0; }
 
 static int lua_gfx_touch(lua_State* L) {
     cbdos::input::TouchPoint tp;
@@ -451,7 +1168,6 @@ static int lua_gfx_flush(lua_State* L) {
     cbdos::display::flush();
     return 0;
 }
-#endif
 
 static int lua_gfx_width(lua_State* L) {
     auto caps = cbdos::display::getCapabilities();
@@ -490,8 +1206,11 @@ static int lua_gfx_is_ui_paused(lua_State* L) {
     return 1;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Registro de Módulos
+// ─────────────────────────────────────────────────────────────────────────────
+
 void LuaBridge::registerGfxAPI(lua_State* L) {
-    // Subtabla cbdos.gfx
     lua_newtable(L);
     lua_pushcfunction(L, lua_gfx_clear);
     lua_setfield(L, -2, "clear");
@@ -520,12 +1239,6 @@ void LuaBridge::registerGfxAPI(lua_State* L) {
     lua_pushcfunction(L, lua_gfx_is_ui_paused);
     lua_setfield(L, -2, "is_ui_paused");
     lua_setfield(L, -2, "gfx");
-
-    // Accesos directos en cbdos.*
-    lua_pushcfunction(L, lua_gfx_pause_ui);
-    lua_setfield(L, -2, "pause_ui");
-    lua_pushcfunction(L, lua_gfx_resume_ui);
-    lua_setfield(L, -2, "resume_ui");
 }
 
 void LuaBridge::registerAudioAPI(lua_State* L) {
@@ -579,6 +1292,8 @@ void LuaBridge::registerSystemAPI(lua_State* L) {
     lua_setfield(L, -2, "wifi_status");
     lua_pushcfunction(L, lua_get_ip);
     lua_setfield(L, -2, "get_ip");
+    lua_pushcfunction(L, lua_cpu_temp);
+    lua_setfield(L, -2, "cpu_temp");
     lua_setfield(L, -2, "system");
 
     // Accesos directos en cbdos.*
@@ -631,7 +1346,8 @@ void LuaBridge::registerFsAPI(lua_State* L) {
     lua_setfield(L, -2, "list_dir");
     lua_setfield(L, -2, "fs");
 
-    // Accesos directos en cbdos.*
+    // Alias cbdos.storage
+    lua_newtable(L);
     lua_pushcfunction(L, lua_read_file);
     lua_setfield(L, -2, "read_file");
     lua_pushcfunction(L, lua_write_file);
@@ -640,6 +1356,86 @@ void LuaBridge::registerFsAPI(lua_State* L) {
     lua_setfield(L, -2, "file_exists");
     lua_pushcfunction(L, lua_list_dir);
     lua_setfield(L, -2, "list_dir");
+    lua_setfield(L, -2, "storage");
+}
+
+void LuaBridge::registerUartAPI(lua_State* L) {
+    lua_newtable(L);
+    lua_pushcfunction(L, lua_uart_init);
+    lua_setfield(L, -2, "init");
+    lua_pushcfunction(L, lua_uart_write);
+    lua_setfield(L, -2, "write");
+    lua_pushcfunction(L, lua_uart_read);
+    lua_setfield(L, -2, "read");
+    lua_pushcfunction(L, lua_uart_available);
+    lua_setfield(L, -2, "available");
+    lua_pushcfunction(L, lua_uart_flush);
+    lua_setfield(L, -2, "flush");
+    lua_setfield(L, -2, "uart");
+}
+
+void LuaBridge::registerCanvasAPI(lua_State* L) {
+    lua_newtable(L);
+    lua_pushcfunction(L, lua_canvas_fill);
+    lua_setfield(L, -2, "fill");
+    lua_pushcfunction(L, lua_canvas_set_px);
+    lua_setfield(L, -2, "set_px");
+    lua_pushcfunction(L, lua_canvas_get_px);
+    lua_setfield(L, -2, "get_px");
+    lua_pushcfunction(L, lua_canvas_draw_rect);
+    lua_setfield(L, -2, "draw_rect");
+    lua_pushcfunction(L, lua_canvas_draw_line);
+    lua_setfield(L, -2, "draw_line");
+    lua_pushcfunction(L, lua_canvas_draw_circle);
+    lua_setfield(L, -2, "draw_circle");
+    lua_pushcfunction(L, lua_canvas_draw_text);
+    lua_setfield(L, -2, "draw_text");
+    lua_pushcfunction(L, lua_canvas_flood_fill);
+    lua_setfield(L, -2, "flood_fill");
+    lua_pushcfunction(L, lua_canvas_on_click);
+    lua_setfield(L, -2, "on_click");
+    lua_pushcfunction(L, lua_canvas_on_touch);
+    lua_setfield(L, -2, "on_touch");
+    lua_pushcfunction(L, lua_canvas_refresh);
+    lua_setfield(L, -2, "refresh");
+    lua_pushcfunction(L, lua_canvas_save_bmp);
+    lua_setfield(L, -2, "save_bmp");
+    lua_pushcfunction(L, lua_canvas_load_bmp);
+    lua_setfield(L, -2, "load_bmp");
+    lua_setfield(L, -2, "canvas");
+}
+
+void LuaBridge::registerUIAPI(lua_State* L) {
+    lua_newtable(L);
+    lua_pushcfunction(L, lua_ui_create_card);
+    lua_setfield(L, -2, "create_card");
+    lua_pushcfunction(L, lua_ui_create_sunken_card);
+    lua_setfield(L, -2, "create_sunken_card");
+    lua_pushcfunction(L, lua_ui_create_label);
+    lua_setfield(L, -2, "create_label");
+    lua_pushcfunction(L, lua_ui_set_text);
+    lua_setfield(L, -2, "set_text");
+    lua_pushcfunction(L, lua_ui_set_color);
+    lua_setfield(L, -2, "set_color");
+    lua_pushcfunction(L, lua_ui_set_font_size);
+    lua_setfield(L, -2, "set_font_size");
+    lua_pushcfunction(L, lua_ui_create_button);
+    lua_setfield(L, -2, "create_button");
+    lua_pushcfunction(L, lua_ui_create_slider);
+    lua_setfield(L, -2, "create_slider");
+    lua_pushcfunction(L, lua_ui_create_switch);
+    lua_setfield(L, -2, "create_switch");
+    lua_pushcfunction(L, lua_ui_create_row);
+    lua_setfield(L, -2, "create_row");
+    lua_pushcfunction(L, lua_ui_create_column);
+    lua_setfield(L, -2, "create_column");
+    lua_pushcfunction(L, lua_ui_create_canvas);
+    lua_setfield(L, -2, "create_canvas");
+    lua_pushcfunction(L, lua_ui_set_size);
+    lua_setfield(L, -2, "set_size");
+    lua_pushcfunction(L, lua_ui_show_toast);
+    lua_setfield(L, -2, "show_toast");
+    lua_setfield(L, -2, "ui");
 }
 
 void LuaBridge::registerAll(lua_State* L) {
@@ -653,9 +1449,12 @@ void LuaBridge::registerAll(lua_State* L) {
     registerGpioAPI(L);
     registerFsAPI(L);
     registerGfxAPI(L);
+    registerUartAPI(L);
+    registerUIAPI(L);
+    registerCanvasAPI(L);
 
     // Guardar tabla como global "cbdos"
     lua_setglobal(L, "cbdos");
 
-    printf("[LuaBridge] Bindings nativos 'cbdos.*' y 'cbdos.gfx.*' registrados con éxito.\n");
+    printf("[LuaBridge] Bindings 'cbdos.*', 'cbdos.ui.*', 'cbdos.canvas.*' registrados.\n");
 }

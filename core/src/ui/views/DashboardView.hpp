@@ -1,15 +1,18 @@
 #pragma once
 #include "BaseView.hpp"
 #include <vector>
+#include <string>
 
 namespace cbdos {
 namespace ui {
 
 struct AppItem {
-    const char* id;
-    const char* title;
-    const char* icon;
+    std::string id;
+    std::string title;
+    std::string icon;
     uint32_t accentColor;
+    bool isLuapp = false;
+    std::string luappPath = "";
 };
 
 class DashboardView : public BaseView {

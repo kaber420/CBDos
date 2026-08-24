@@ -181,7 +181,77 @@ En `core/src/ui/views/DashboardView.cpp`:
 
 ---
 
-## ✅ 4. Verificación Multi-Target
+## ⚡ 4. Creación de Apps Portables en Lua++ (`.luapp` - Cero Compilación)
+
+A partir de CBDos v0.2.1+, puedes crear aplicaciones interactivas completas **sin necesidad de compilar el firmware**, guardándolas simplemente como archivos `.luapp` en la carpeta `/sdcard/apps/` de tu tarjeta MicroSD.
+
+### 4.1. Estructura de un archivo `.luapp`
+
+Un archivo `.luapp` es un script en Lua con metadatos en su encabezado y funciones de ciclo de vida:
+
+```lua
+-- @name: Mi App Portable
+-- @icon: LV_SYMBOL_FILE
+-- @accent: #00F5D4
+-- @author: Tu Nombre
+-- @version: 1.0
+-- @description: Aplicación de ejemplo sin compilación
+
+local lblCount = nil
+local counter = 0
+
+function on_create(parent)
+    local card = cbdos.ui.create_card(parent, -1, -1)
+    
+    local title = cbdos.ui.create_label(card, "HOLA DESDE LUA++")
+    cbdos.ui.set_color(title, 0x00F5D4)
+    cbdos.ui.set_font_size(title, 16)
+
+    lblCount = cbdos.ui.create_label(card, "Contador: 0")
+    cbdos.ui.set_font_size(lblCount, 14)
+
+    local row = cbdos.ui.create_row(card)
+    cbdos.ui.create_button(row, "+1 Sumar", function()
+        counter = counter + 1
+        cbdos.ui.set_text(lblCount, "Contador: " .. counter)
+        cbdos.ui.show_toast("Incrementado a " .. counter)
+    end)
+end
+
+function on_show()
+    print("[Mi App] Visible")
+end
+
+function on_destroy()
+    print("[Mi App] Cerrada y memoria liberada")
+end
+```
+
+### 4.2. APIs Disponibles en Lua++ (`cbdos.*`)
+
+- **UI LVGL 9.5 (`cbdos.ui`):**
+  - `cbdos.ui.create_card(parent, w, h)`: Crea tarjeta elevada con `DefaultTheme`.
+  - `cbdos.ui.create_sunken_card(parent, w, h)`: Crea caja hundida para displays LCD o terminales.
+  - `cbdos.ui.create_label(parent, text)`: Crea etiqueta de texto.
+  - `cbdos.ui.set_text(obj, text)` / `cbdos.ui.set_color(obj, 0xRRGGBB)` / `cbdos.ui.set_font_size(obj, 12|14|16|24)`.
+  - `cbdos.ui.create_button(parent, text, onClickCallback)`: Botón interactivo.
+  - `cbdos.ui.create_slider(parent, min, max, val, onChangeCallback)`: Slider táctil.
+  - `cbdos.ui.create_switch(parent, state, onToggleCallback)`: Interruptor booleano.
+  - `cbdos.ui.create_row(parent)` / `cbdos.ui.create_column(parent)`: Contenedores Flex layout.
+  - `cbdos.ui.show_toast(mensaje)`: Muestra una notificación flotante en la interfaz.
+
+- **Audio (`cbdos.audio`):**
+  - `cbdos.audio.play_file(path)` / `cbdos.audio.stop()` / `cbdos.audio.set_volume(0-100)` / `cbdos.audio.beep(freq, ms)`.
+
+- **UART y Comunicaciones (`cbdos.uart`):**
+  - `cbdos.uart.init(baud, txPin, rxPin)` / `cbdos.uart.write(str)` / `cbdos.uart.read(maxLen)` / `cbdos.uart.available()`.
+
+- **Sistema y Telemetría (`cbdos.system`):**
+  - `cbdos.system.free_heap()` / `cbdos.system.free_psram()` / `cbdos.system.cpu_temp()` / `cbdos.system.get_time()` / `cbdos.system.sleep(ms)`.
+
+---
+
+## ✅ 5. Verificación Multi-Target
 Compila en ambos entornos para garantizar compatibilidad total:
 ```bash
 # Target ESP32-P4 (ESP-IDF)

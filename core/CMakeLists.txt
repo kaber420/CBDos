@@ -52,11 +52,13 @@ idf_component_register(
         "src/tlv/mesh_header.cpp"
         "src/tlv/tlv_parser.cpp"
 
+        "src/ui/views/LuappView.cpp"
         "src/network/ConfigManager.cpp"
         "src/network/TimeService.cpp"
         "src/lua/LuaEngine.cpp"
         "src/lua/LuaBridge.cpp"
         "src/lua/LuaRunner.cpp"
+        "src/lua/LuappManager.cpp"
         ${HELIX_SRCS}
         ${LUA_SRCS}
     INCLUDE_DIRS 

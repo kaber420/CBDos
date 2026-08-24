@@ -234,3 +234,26 @@ lv_color_t second   = DefaultTheme::getSecondaryAccent();   // Violeta Cyberpunk
 lv_color_t text     = DefaultTheme::getTextColor();         // Blanco suave (#F1F5F9)
 lv_color_t muted    = DefaultTheme::getMutedTextColor();    // Gris (#94A3B8)
 ```
+
+---
+
+## 9. `cbdos::lua::LuappManager` y `LuappView`
+Header: `#include "lua/LuappManager.hpp"` y `#include "ui/views/LuappView.hpp"`
+
+Servicio de escaneo, parseo de metadatos y lanzamiento aislado de aplicaciones portables `.luapp`.
+
+```cpp
+// Escanear carpeta de aplicaciones en la SD
+auto& mgr = cbdos::lua::LuappManager::getInstance();
+mgr.scanApps("/sdcard/apps");
+
+// Iterar aplicaciones descubiertas
+for (const auto& app : mgr.getDiscoveredApps()) {
+    printf("App: %s | Icono: %s | Color: 0x%06X | Ruta: %s\n",
+           app.name.c_str(), app.icon.c_str(), (unsigned)app.accentColor, app.filePath.c_str());
+}
+
+// Instanciar y lanzar la vista de una App Lua
+auto view = std::make_shared<cbdos::ui::LuappView>("/sdcard/apps/winamp_mini.luapp", "Winamp Retro", LV_SYMBOL_AUDIO);
+cbdos::ui::UIManager::getInstance().pushView(view);
+```
