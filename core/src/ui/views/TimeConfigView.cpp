@@ -44,6 +44,7 @@ TimeConfigView::TimeConfigView()
       m_statusLabel(nullptr),
       m_tzDropdown(nullptr),
       m_dstSwitch(nullptr),
+      m_ntpSwitch(nullptr),
       m_ntpDropdown(nullptr),
       m_clockTimer(nullptr) {
 }
@@ -128,7 +129,12 @@ void TimeConfigView::saveAndApply() {
         cfg.daylightOffsetSeconds = dstEnabled ? 3600 : 0;
     }
 
-    // 3. Servidor NTP
+    // 3. Sincronización Automática NTP
+    if (m_ntpSwitch && lv_obj_is_valid(m_ntpSwitch)) {
+        cfg.enabled = lv_obj_has_state(m_ntpSwitch, LV_STATE_CHECKED);
+    }
+
+    // 4. Servidor NTP
     if (m_ntpDropdown && lv_obj_is_valid(m_ntpDropdown)) {
         uint32_t ntpIdx = lv_dropdown_get_selected(m_ntpDropdown);
         if (ntpIdx < sizeof(s_ntpServers) / sizeof(s_ntpServers[0])) {
@@ -136,9 +142,13 @@ void TimeConfigView::saveAndApply() {
         }
     }
 
-    // Guardar y aplicar
+    // Guardar en NVS y aplicar
     ConfigManager::getInstance().saveTime(cfg);
+    TimeService::getInstance().setEnabled(cfg.enabled);
     TimeService::getInstance().setTimezone(cfg.gmtOffsetSeconds, cfg.daylightOffsetSeconds);
+    if (cfg.enabled && cbdos::network::isConnected()) {
+        TimeService::getInstance().sync();
+    }
     updateClockDisplay();
     UIManager::showToast("Zona horaria y NTP guardados");
 }
@@ -253,7 +263,45 @@ bool TimeConfigView::onCreate(lv_obj_t* parent) {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 4. Selector de Servidor NTP
+    // 4. Tarjeta de Sincronización Automática NTP
+    // ──────────────────────────────────────────────────────────
+    lv_obj_t* ntpCard = lv_obj_create(m_container);
+    lv_obj_set_width(ntpCard, lv_pct(100));
+    lv_obj_set_height(ntpCard, 52);
+    DefaultTheme::applyRaisedCard(ntpCard, 12);
+    lv_obj_set_flex_flow(ntpCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(ntpCard, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(ntpCard, 14, 0);
+    lv_obj_set_style_pad_ver(ntpCard, 6, 0);
+
+    lv_obj_t* ntpTextCont = lv_obj_create(ntpCard);
+    lv_obj_set_flex_grow(ntpTextCont, 1);
+    lv_obj_set_style_bg_opa(ntpTextCont, 0, 0);
+    lv_obj_set_style_border_width(ntpTextCont, 0, 0);
+    lv_obj_set_flex_flow(ntpTextCont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(ntpTextCont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_all(ntpTextCont, 0, 0);
+    lv_obj_remove_flag(ntpTextCont, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t* ntpTitle = lv_label_create(ntpTextCont);
+    lv_label_set_text(ntpTitle, "Sincronización Automática (NTP)");
+    lv_obj_set_style_text_color(ntpTitle, DefaultTheme::getTextColor(), 0);
+    lv_obj_set_style_text_font(ntpTitle, &lv_font_montserrat_14, 0);
+
+    lv_obj_t* ntpSub = lv_label_create(ntpTextCont);
+    lv_label_set_text(ntpSub, "Actualizar hora vía Wi-Fi en segundo plano");
+    lv_obj_set_style_text_color(ntpSub, DefaultTheme::getMutedTextColor(), 0);
+    lv_obj_set_style_text_font(ntpSub, &lv_font_montserrat_12, 0);
+
+    m_ntpSwitch = lv_switch_create(ntpCard);
+    if (cfg.enabled) {
+        lv_obj_add_state(m_ntpSwitch, LV_STATE_CHECKED);
+    } else {
+        lv_obj_remove_state(m_ntpSwitch, LV_STATE_CHECKED);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 5. Selector de Servidor NTP
     // ──────────────────────────────────────────────────────────
     lv_obj_t* ntpLabel = lv_label_create(m_container);
     lv_label_set_text(ntpLabel, "Servidor de Tiempo NTP:");
@@ -281,7 +329,7 @@ bool TimeConfigView::onCreate(lv_obj_t* parent) {
     lv_dropdown_set_selected(m_ntpDropdown, selectedNtpIdx);
 
     // ──────────────────────────────────────────────────────────
-    // 5. Botones de Acción
+    // 6. Botones de Acción
     // ──────────────────────────────────────────────────────────
     lv_obj_t* saveBtn = lv_button_create(m_container);
     lv_obj_set_width(saveBtn, lv_pct(100));

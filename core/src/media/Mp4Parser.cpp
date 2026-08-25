@@ -156,8 +156,13 @@ bool Mp4Parser::open(const std::string& filepath) {
     }
 
     if (m_info.hasAudio && m_audioTrack >= 0) {
+        m_audioFile = fopen(filepath.c_str(), "rb");
+        if (m_audioFile) {
+            setvbuf(m_audioFile, nullptr, _IOFBF, 32 * 1024);
+        }
         initAacDecoder();
     }
+    setvbuf(m_file, nullptr, _IOFBF, 64 * 1024);
 
     m_currentVideoSample = 0;
     m_currentAudioSample = 0;
@@ -172,6 +177,10 @@ void Mp4Parser::close() {
         MP4D_close(demux);
         free(demux);
         m_demuxer = nullptr;
+    }
+    if (m_audioFile) {
+        fclose(m_audioFile);
+        m_audioFile = nullptr;
     }
     if (m_file) {
         fclose(m_file);
@@ -390,7 +399,8 @@ void Mp4Parser::cleanupAacDecoder() {
 
 bool Mp4Parser::readNextAudioFrame(uint8_t* outBuffer, size_t maxBufferSize, size_t& outFrameSize) {
     outFrameSize = 0;
-    if (!m_file || !m_demuxer || m_audioTrack < 0 || !outBuffer) return false;
+    FILE* aFile = m_audioFile ? m_audioFile : m_file;
+    if (!aFile || !m_demuxer || m_audioTrack < 0 || !outBuffer) return false;
     MP4D_demux_t* demux = (MP4D_demux_t*)m_demuxer;
 
     if (m_currentAudioSample >= m_info.totalAudioSamples) {
@@ -427,8 +437,11 @@ bool Mp4Parser::readNextAudioFrame(uint8_t* outBuffer, size_t maxBufferSize, siz
     outBuffer[5] = ((adtsLen & 7) << 5) | 0x1F;
     outBuffer[6] = 0xFC;
 
-    fseek(m_file, offset, SEEK_SET);
-    if (fread(outBuffer + 7, 1, frameBytes, m_file) != frameBytes) {
+    if (fseek(aFile, offset, SEEK_SET) != 0) {
+        m_currentAudioSample++;
+        return false;
+    }
+    if (fread(outBuffer + 7, 1, frameBytes, aFile) != frameBytes) {
         m_currentAudioSample++;
         return false;
     }

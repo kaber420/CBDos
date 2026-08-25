@@ -38,7 +38,7 @@ bool ConfigManager::clearLegacyConfig() {
 
 bool ConfigManager::clearAllNvs() {
     auto* backend = cbdos::persistence::getBackend();
-    const char* namespaces[] = {"cbdos_sys", "cbdos_wifi", "cbdos_time", "cbdos_lora", "cbdos_flrc", "wifi", "tablehub"};
+    const char* namespaces[] = {"cbdos_sys", "cbdos_wifi", "cbdos_radio", "cbdos_time", "cbdos_lora", "cbdos_flrc", "wifi", "tablehub"};
     if (backend) {
         for (const char* ns : namespaces) {
             if (backend->begin(ns, false)) {
@@ -358,3 +358,38 @@ bool ConfigManager::loadActiveGateway(GatewayConfig& gw) {
     }
     return false;
 }
+
+// ─── Radio Config (2.4 GHz) ───
+static cbdos::radio::RadioConfig s_cachedRadio;
+
+bool ConfigManager::loadRadio(cbdos::radio::RadioConfig& cfg) {
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_radio", true)) {
+        cfg.enabled = backend->getBool("enabled", true);
+        uint8_t m = backend->getUChar("mode", static_cast<uint8_t>(cbdos::radio::RadioMode::EspNow));
+        cfg.mode = static_cast<cbdos::radio::RadioMode>(m);
+        cfg.channel = backend->getUChar("channel", 1);
+        if (cfg.channel < 1 || cfg.channel > 13) cfg.channel = 1;
+        cfg.txPower = static_cast<int8_t>(backend->getUChar("tx_pwr", 20));
+        backend->end();
+        s_cachedRadio = cfg;
+        return true;
+    }
+    cfg = s_cachedRadio;
+    return true;
+}
+
+bool ConfigManager::saveRadio(const cbdos::radio::RadioConfig& cfg) {
+    s_cachedRadio = cfg;
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_radio", false)) {
+        backend->setBool("enabled", cfg.enabled);
+        backend->setUChar("mode", static_cast<uint8_t>(cfg.mode));
+        backend->setUChar("channel", cfg.channel);
+        backend->setUChar("tx_pwr", static_cast<uint8_t>(cfg.txPower));
+        backend->end();
+        return true;
+    }
+    return false;
+}
+

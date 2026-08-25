@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include "cbdos/radio.hpp"
 
 struct WiFiConfig {
     std::string ssid;
@@ -111,6 +112,10 @@ public:
     std::vector<GatewayConfig> listGateways();
     bool setActiveGateway(const std::string& gwId);
     bool loadActiveGateway(GatewayConfig& gw);
+
+    // Radio Integrada (2.4 GHz)
+    bool loadRadio(cbdos::radio::RadioConfig& cfg);
+    bool saveRadio(const cbdos::radio::RadioConfig& cfg);
 
     // Limpieza NVS
     bool clearLegacyConfig();

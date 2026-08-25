@@ -4,7 +4,10 @@
 #include <string>
 #include <vector>
 #include "../../tlv/mesh_header.hpp"
+#include "../../tlv/tlv_dictionary.hpp"
 #include "../../tlv/tlv_parser.hpp"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace cbdos {
 namespace ui {
@@ -24,14 +27,14 @@ public:
     // Procesa un paquete completo de la red mesh (MeshHeader + TLV)
     void processNetworkPacket(const uint8_t* packet, size_t length);
 
-    // Navega a una URL especificada codificando la trama de petición
+    // Navega a una URL especificada (local file:// o remota por red al Gateway)
     void navigateToUrl(const char* url);
-
-    // Renderiza la página de demostración offline
-    void renderDemo();
 
     // Carga un archivo binario TLV desde almacenamiento local (MicroSD / Flash)
     bool loadLocalFile(const char* path);
+
+    // Configura el Gateway de red por defecto
+    void setGateway(const char* host, uint16_t port);
 
     static TlvBrowserView* getInstance() { return s_instance; }
 
@@ -43,9 +46,19 @@ private:
     lv_obj_t* m_bookmarkBar = nullptr;
     lv_obj_t* m_contentArea = nullptr;
 
+    std::string m_currentUrl = "home.mesh";
+    std::string m_gatewayHost = "192.168.66.254";
+    uint16_t m_gatewayPort = 8080;
+
+    TaskHandle_t m_fetchTaskHandle = nullptr;
+
     static void onUrlSubmit(lv_event_t* e);
     static void onBookmarkClick(lv_event_t* e);
     static void onUplinkFrameGenerated(const uint8_t* frame, size_t len);
+
+    void showInitialState();
+    void fetchFromGatewayAsync(const std::string& host, uint16_t port, const std::string& path);
+    static void fetchTask(void* param);
 };
 
 } // namespace ui

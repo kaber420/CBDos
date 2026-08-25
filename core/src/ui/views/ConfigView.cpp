@@ -1,4 +1,5 @@
 #include "ConfigView.hpp"
+#include "RadioConfigView.hpp"
 #include "WiFiConfigView.hpp"
 #include "WallpaperConfigView.hpp"
 #include "StorageConfigView.hpp"
@@ -72,9 +73,8 @@ void ConfigView::nvs_btn_event_cb(lv_event_t* e) {
         s_nvsStartTime = lv_tick_get();
         if (s_nvsTimer) {
             lv_timer_delete(s_nvsTimer);
-            s_nvsTimer = nullptr;
         }
-        s_nvsTimer = lv_timer_create(nvs_timer_cb, 30, nullptr);
+        s_nvsTimer = lv_timer_create(nvs_timer_cb, 50, NULL);
     } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
         cancel_nvs_reset();
     } else if (code == LV_EVENT_DELETE) {
@@ -90,7 +90,9 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
     
     if (code == LV_EVENT_CLICKED) {
         int id = (int)(intptr_t)lv_obj_get_user_data(btn);
-        if (id == 1) {
+        if (id == 9) {
+            UIManager::getInstance().pushView(std::make_shared<RadioConfigView>());
+        } else if (id == 1) {
             UIManager::getInstance().pushView(std::make_shared<WiFiConfigView>());
         } else if (id == 2) {
             UIManager::getInstance().pushView(std::make_shared<StorageConfigView>());
@@ -127,6 +129,7 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
     };
 
     OptionItem options[] = {
+        {"Radio Integrada (2.4 GHz)", "Wi-Fi, ESP-NOW, Long Range y Canales", 9},
         {"WiFi", "Red local y parametros IP", 1},
         {"Fecha y Hora", "Zona horaria, horario de verano y NTP", 3},
         {"Almacenamiento", "Gestion de MicroSD, Flash y USB", 2},

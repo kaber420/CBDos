@@ -4,114 +4,46 @@
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
 #include "cbdos/storage.hpp"
+#include "cbdos/network.hpp"
+#include "cbdos/radio.hpp"
+#include "cbdos/mesh/mesh_engine.hpp"
 #include <cstring>
 #include <cstdio>
 #include <vector>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <esp_log.h>
+
+static const char* TAG = "TlvBrowser";
 
 namespace cbdos {
 namespace ui {
 
 TlvBrowserView* TlvBrowserView::s_instance = nullptr;
 
-namespace {
-
-struct TlvBuilder {
-    uint8_t buf[1024];
-    size_t len = 0;
-
-    void push8(uint8_t v) { 
-        if (len < sizeof(buf)) buf[len++] = v; 
-    }
-    
-    void push16(uint16_t v) { 
-        push8(v >> 8); 
-        push8(v & 0xFF); 
-    }
-    
-    void push(const uint8_t* p, size_t n) { 
-        while (n-- && len < sizeof(buf)) buf[len++] = *p++; 
-    }
-
-    void magic() { 
-        push8(0x50); 
-        push8(0x48); 
-    }
-
-    void node(uint8_t type, const uint8_t* value, size_t vlen) {
-        if (len + 3 + vlen > sizeof(buf)) return;
-        push8(type);
-        push16((uint16_t)vlen);
-        if (value && vlen > 0) {
-            push(value, vlen);
-        }
-    }
-
-    void page() { 
-        node(TYPE_ABS_PAGE, nullptr, 0); 
-    }
-
-    void panel(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-        uint8_t v[8];
-        v[0]=x>>8; v[1]=x&0xFF; v[2]=y>>8; v[3]=y&0xFF;
-        v[4]=w>>8; v[5]=w&0xFF; v[6]=h>>8; v[7]=h&0xFF;
-        node(TYPE_ABS_PANEL, v, 8);
-    }
-
-    void text(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t style, const char* s) {
-        if (!s) return;
-        uint8_t v[9];
-        v[0]=x>>8; v[1]=x&0xFF; v[2]=y>>8; v[3]=y&0xFF;
-        v[4]=w>>8; v[5]=w&0xFF; v[6]=h>>8; v[7]=h&0xFF; v[8]=style;
-        size_t slen = strlen(s);
-        uint8_t combined[256];
-        if (9 + slen > sizeof(combined)) slen = sizeof(combined) - 9;
-        memcpy(combined, v, 9);
-        memcpy(combined + 9, s, slen);
-        node(TYPE_ABS_TEXT, combined, 9 + slen);
-    }
-
-    void link(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t id, const char* s) {
-        if (!s) return;
-        uint8_t v[9];
-        v[0]=x>>8; v[1]=x&0xFF; v[2]=y>>8; v[3]=y&0xFF;
-        v[4]=w>>8; v[5]=w&0xFF; v[6]=h>>8; v[7]=h&0xFF; v[8]=id;
-        size_t slen = strlen(s);
-        uint8_t combined[256];
-        if (9 + slen > sizeof(combined)) slen = sizeof(combined) - 9;
-        memcpy(combined, v, 9);
-        memcpy(combined + 9, s, slen);
-        node(TYPE_ABS_LINK, combined, 9 + slen);
-    }
-
-    void checkbox(uint8_t id, uint8_t state, const char* text) {
-        if (!text) return;
-        size_t slen = strlen(text);
-        uint8_t combined[128];
-        if (2 + slen > sizeof(combined)) slen = sizeof(combined) - 2;
-        combined[0] = id;
-        combined[1] = state;
-        memcpy(combined + 2, text, slen);
-        node(TYPE_ABS_CHECKBOX, combined, 2 + slen);
-    }
-
-    void end() { push8(TYPE_END); }
+struct FetchParams {
+    std::string host;
+    uint16_t port;
+    std::string path;
+    uint8_t uplink_frame[256];
+    size_t uplink_len;
 };
 
-void buildDemoPage(TlvBuilder& b) {
-    b.magic();
-    b.page();
-    b.panel(10, 10, 290, 75);
-    b.text(20, 20, 270, 25, 1, "Navegador TLV / CBML");
-    b.text(20, 48, 270, 20, 0, "Renderizador binario ultraligero");
+struct RenderAsyncPayload {
+    std::vector<uint8_t> data;
+};
 
-    b.text(15, 95, 270, 20, 1, "Servicios Alternet / Mesh:");
-    b.link(15, 125, 290, 38, 1, "📰 Noticias Locales");
-    b.link(15, 170, 290, 38, 2, "🌤️ Estacion Meteorologica");
-    b.link(15, 215, 290, 38, 3, "🖼️ Galeria Distribuida");
-    b.end();
+static void render_async_cb(void* user_data) {
+    RenderAsyncPayload* payload = (RenderAsyncPayload*)user_data;
+    if (payload && TlvBrowserView::getInstance()) {
+        TlvBrowserView::getInstance()->processNetworkPacket(payload->data.data(), payload->data.size());
+        UIManager::showToast("Pagina cargada");
+        delete payload;
+    }
 }
-
-} // namespace
 
 TlvBrowserView::TlvBrowserView()
     : BaseView("TlvBrowser") {
@@ -122,12 +54,21 @@ TlvBrowserView::~TlvBrowserView() {
     if (s_instance == this) {
         s_instance = nullptr;
     }
+    if (m_fetchTaskHandle) {
+        vTaskDelete(m_fetchTaskHandle);
+        m_fetchTaskHandle = nullptr;
+    }
 }
 
 void TlvBrowserView::onDestroy() {
     if (s_instance == this) {
         s_instance = nullptr;
     }
+    if (m_fetchTaskHandle) {
+        vTaskDelete(m_fetchTaskHandle);
+        m_fetchTaskHandle = nullptr;
+    }
+    cbdos::mesh::MeshEngine::getInstance().unregisterServiceHandler(cbdos::mesh::ServiceId::TlvglResponse);
     UIManager::getInstance().getHeaderBar().clearRightAction();
     m_urlContainer = nullptr;
     m_urlInput = nullptr;
@@ -136,25 +77,54 @@ void TlvBrowserView::onDestroy() {
     BaseView::onDestroy();
 }
 
+void TlvBrowserView::setGateway(const char* host, uint16_t port) {
+    if (host && strlen(host) > 0) {
+        m_gatewayHost = host;
+    }
+    if (port > 0) {
+        m_gatewayPort = port;
+    }
+}
+
 void TlvBrowserView::onUplinkFrameGenerated(const uint8_t* frame, size_t len) {
     if (!frame || len == 0 || !s_instance) return;
-    
-    // Construir trama Mesh Header ultra-corta
-    MeshHeader hdr;
-    memset(&hdr, 0, sizeof(hdr));
-    hdr.control = MESH_CTRL_DST_ONLY | MESH_SVC_TLVGL_REQUEST;
-    hdr.dst_id = 0x0001; // ID de Gateway / Servidor de Hosting
-    hdr.is_dst_only = true;
 
-    uint8_t packet[512];
-    size_t hdr_len = build_mesh_header(packet, sizeof(packet), &hdr);
-    if (hdr_len > 0 && hdr_len + len <= sizeof(packet)) {
-        memcpy(packet + hdr_len, frame, len);
-        // Si en el futuro se conecta el cliente de red o mesh, se enruta aquí
+    uint8_t tag = frame[0];
+
+    if (tag == TYPE_REQ_LINK_CLICK && len >= 4) {
+        uint8_t link_id = frame[3];
+        ESP_LOGI(TAG, "Link click #%u -> enviando al gateway", link_id);
+    } else if (tag == TYPE_REQ_CONTROL_EVT && len >= 6) {
+        uint8_t elem_id = frame[3];
+        int16_t val = (frame[4] << 8) | frame[5];
         char toastMsg[64];
-        snprintf(toastMsg, sizeof(toastMsg), "Trama TLV: %uB enviada", (unsigned int)(hdr_len + len));
+        snprintf(toastMsg, sizeof(toastMsg), "Control %u: %d", elem_id, val);
+        UIManager::showToast(toastMsg);
+    } else if (tag == TYPE_REQ_INPUT_SUBMIT && len >= 4) {
+        uint8_t elem_id = frame[3];
+        char toastMsg[64];
+        snprintf(toastMsg, sizeof(toastMsg), "Input %u enviado", elem_id);
         UIManager::showToast(toastMsg);
     }
+
+    // Si estamos en modo radio / espnow, emitir trama por ESP-NOW
+    if (s_instance->m_currentUrl.starts_with("espnow://") || s_instance->m_currentUrl.starts_with("radio://")) {
+        auto& meshEngine = cbdos::mesh::MeshEngine::getInstance();
+        if (meshEngine.isRunning()) {
+            meshEngine.sendPacket(cbdos::mesh::ServiceId::TlvglRequest, 0xFFFF, frame, len, true, nullptr);
+            return;
+        }
+    }
+
+    // Enviar trama binaria al Gateway TCP
+    FetchParams* params = new FetchParams();
+    params->host = s_instance->m_gatewayHost;
+    params->port = s_instance->m_gatewayPort;
+    params->path = "";
+    params->uplink_len = (len < sizeof(params->uplink_frame)) ? len : sizeof(params->uplink_frame);
+    memcpy(params->uplink_frame, frame, params->uplink_len);
+
+    xTaskCreatePinnedToCore(fetchTask, "tlv_fetch", 8192, params, 5, nullptr, 1);
 }
 
 void TlvBrowserView::render(const uint8_t* data, size_t length) {
@@ -164,25 +134,33 @@ void TlvBrowserView::render(const uint8_t* data, size_t length) {
 }
 
 void TlvBrowserView::processNetworkPacket(const uint8_t* packet, size_t length) {
+    if (!packet || length < 2) return;
+
+    // Si empieza con 'PH', es payload TLV directo
+    if (packet[0] == 0x50 && packet[1] == 0x48) {
+        render(packet, length);
+        return;
+    }
+
+    // Si viene con MeshHeader
     MeshHeader hdr;
     size_t hdr_len = parse_mesh_header(packet, length, &hdr);
     if (hdr_len > 0 && hdr_len < length) {
-        uint8_t service = hdr.control & 0x3F;
-        if (service == MESH_SVC_TLVGL_RESPONSE) {
-            render(packet + hdr_len, length - hdr_len);
-        }
+        render(packet + hdr_len, length - hdr_len);
+    } else {
+        render(packet, length);
     }
 }
 
 void TlvBrowserView::navigateToUrl(const char* url) {
     if (!url || strlen(url) == 0) return;
-    
-    if (strcmp(url, "demo") == 0 || strcmp(url, "about:demo") == 0) {
-        renderDemo();
-        return;
+    m_currentUrl = url;
+
+    if (m_urlInput && lv_obj_is_valid(m_urlInput)) {
+        lv_textarea_set_text(m_urlInput, url);
     }
 
-    // Verificar si es un archivo local en SD o Storage
+    // 1. Archivo local en almacenamiento MicroSD o Flash
     if (strncmp(url, "file://", 7) == 0) {
         loadLocalFile(url + 7);
         return;
@@ -192,11 +170,209 @@ void TlvBrowserView::navigateToUrl(const char* url) {
         return;
     }
 
-    uint8_t tlv_frame[256];
-    size_t frame_len = tlv_build_req_url(tlv_frame, sizeof(tlv_frame), url);
-    if (frame_len > 0) {
-        onUplinkFrameGenerated(tlv_frame, frame_len);
+    // 2. Limpieza de protocolo y autodetección
+    std::string clean = url;
+    bool explicit_mesh = false;
+    bool explicit_http = false;
+
+    if (clean.starts_with("espnow://")) {
+        clean = clean.substr(9);
+        explicit_mesh = true;
+    } else if (clean.starts_with("radio://")) {
+        clean = clean.substr(8);
+        explicit_mesh = true;
+    } else if (clean.starts_with("mesh://")) {
+        clean = clean.substr(7);
+        explicit_mesh = true;
+    } else if (clean.starts_with("http://")) {
+        clean = clean.substr(7);
+        explicit_http = true;
+    } else if (clean.starts_with("https://")) {
+        clean = clean.substr(8);
+        explicit_http = true;
     }
+
+    // Identificar si es un dominio .mesh o nombre directo (ej: "clima.mesh", "bento", "home.mesh")
+    bool is_mesh_domain = clean.ends_with(".mesh") || explicit_mesh || 
+                         (!explicit_http && clean.find('/') == std::string::npos && clean.find(':') == std::string::npos);
+
+    std::string path = clean;
+    if (is_mesh_domain && !path.ends_with(".mesh")) {
+        path += ".mesh";
+    }
+
+    cbdos::radio::RadioMode currentRadio = cbdos::radio::getMode();
+    bool use_radio = (currentRadio != cbdos::radio::RadioMode::WifiSta);
+
+    // Si el modo de radio es ESP-NOW, ESP-NOW LR, Híbrido o similar: emitir por radio
+    if (use_radio) {
+        auto& meshEngine = cbdos::mesh::MeshEngine::getInstance();
+        if (!meshEngine.isRunning()) {
+            meshEngine.init(cbdos::radio::getChannel());
+        }
+
+        meshEngine.registerServiceHandler(cbdos::mesh::ServiceId::TlvglResponse, [](const cbdos::mesh::MeshPacket& packet) {
+            if (!packet.payload.empty() && s_instance) {
+                RenderAsyncPayload* async_payload = new RenderAsyncPayload();
+                async_payload->data = packet.payload;
+                lv_async_call(render_async_cb, async_payload);
+            }
+        });
+
+        // Extraer únicamente el nombre de archivo si contiene slash
+        size_t slash_pos = path.find('/');
+        std::string filename = (slash_pos != std::string::npos) ? path.substr(slash_pos + 1) : path;
+        if (filename.empty()) filename = "home.mesh";
+
+        bool ok = meshEngine.sendTlvRequest(filename.c_str(), 0xFFFF);
+        if (ok) {
+            char tbuf[64];
+            snprintf(tbuf, sizeof(tbuf), "Transmitiendo por %s", cbdos::radio::getModeName(currentRadio));
+            UIManager::showToast(tbuf);
+        } else {
+            UIManager::showToast("Fallo transmision radio");
+        }
+        return;
+    }
+
+    // 3. Wi-Fi conectado: Consultar al Gateway TCP
+    std::string host = m_gatewayHost;
+    uint16_t port = m_gatewayPort;
+
+    size_t slash_pos = clean.find('/');
+    std::string host_port_part = (slash_pos != std::string::npos) ? clean.substr(0, slash_pos) : clean;
+    if (slash_pos != std::string::npos) {
+        path = clean.substr(slash_pos + 1);
+    }
+
+    if (host_port_part.find('.') != std::string::npos && !host_port_part.ends_with(".mesh")) {
+        size_t colon_pos = host_port_part.find(':');
+        if (colon_pos != std::string::npos) {
+            host = host_port_part.substr(0, colon_pos);
+            port = (uint16_t)atoi(host_port_part.substr(colon_pos + 1).c_str());
+        } else {
+            host = host_port_part;
+            port = 8080;
+        }
+        m_gatewayHost = host;
+        m_gatewayPort = port;
+    }
+
+    fetchFromGatewayAsync(host, port, path);
+}
+
+void TlvBrowserView::fetchFromGatewayAsync(const std::string& host, uint16_t port, const std::string& path) {
+    FetchParams* params = new FetchParams();
+    params->host = host;
+    params->port = port;
+    params->path = path;
+    params->uplink_len = 0;
+
+    xTaskCreatePinnedToCore(fetchTask, "tlv_fetch", 8192, params, 5, nullptr, 1);
+}
+
+void TlvBrowserView::fetchTask(void* param) {
+    FetchParams* p = (FetchParams*)param;
+    if (!p) {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Conectando a Gateway en %s:%u (path: %s)...", p->host.c_str(), p->port, p->path.c_str());
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        ESP_LOGE(TAG, "No se pudo crear socket");
+        UIManager::showToast("Error de socket");
+        delete p;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Timeout de 3 segundos
+    struct timeval tv;
+    tv.tv_sec = 3;
+    tv.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    struct sockaddr_in dest_addr;
+    dest_addr.sin_family = AF_INET;
+    dest_addr.sin_port = htons(p->port);
+    dest_addr.sin_addr.s_addr = inet_addr(p->host.c_str());
+
+    if (dest_addr.sin_addr.s_addr == INADDR_NONE) {
+        struct hostent *hp = gethostbyname(p->host.c_str());
+        if (hp != NULL) {
+            memcpy(&dest_addr.sin_addr, hp->h_addr_list[0], hp->h_length);
+        } else {
+            ESP_LOGE(TAG, "DNS fallo para %s", p->host.c_str());
+            close(sock);
+            UIManager::showToast("Error de host/DNS");
+            delete p;
+            vTaskDelete(NULL);
+            return;
+        }
+    }
+
+    if (connect(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr)) != 0) {
+        ESP_LOGE(TAG, "Fallo al conectar con %s:%u", p->host.c_str(), p->port);
+        char errBuf[64];
+        snprintf(errBuf, sizeof(errBuf), "No se pudo conectar a %s:%u", p->host.c_str(), p->port);
+        UIManager::showToast(errBuf);
+        close(sock);
+        delete p;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // 1. Construir trama MeshHeader + Payload
+    uint8_t packet[512];
+    MeshHeader hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    hdr.control = MESH_CTRL_DST_ONLY | MESH_SVC_TLVGL_REQUEST;
+    hdr.dst_id = 0x0001;
+    hdr.is_dst_only = true;
+
+    size_t hdr_len = build_mesh_header(packet, sizeof(packet), &hdr);
+    size_t total_tx = hdr_len;
+
+    if (p->uplink_len > 0) {
+        // Trama uplink ya provista (link click, input, control)
+        memcpy(packet + total_tx, p->uplink_frame, p->uplink_len);
+        total_tx += p->uplink_len;
+    } else {
+        // Trama de petición URL
+        size_t req_len = tlv_build_req_url(packet + total_tx, sizeof(packet) - total_tx, p->path.c_str());
+        total_tx += req_len;
+    }
+
+    // 2. Enviar petición
+    send(sock, packet, total_tx, 0);
+    ESP_LOGI(TAG, "Enviados %u bytes al Gateway", (unsigned int)total_tx);
+
+    // 3. Recibir respuesta
+    std::vector<uint8_t> response_buf;
+    uint8_t rx_chunk[1024];
+    int r;
+    while ((r = recv(sock, rx_chunk, sizeof(rx_chunk), 0)) > 0) {
+        response_buf.insert(response_buf.end(), rx_chunk, rx_chunk + r);
+        if (response_buf.size() > 65536) break;
+    }
+
+    close(sock);
+    ESP_LOGI(TAG, "Recibidos %u bytes desde Gateway", (unsigned int)response_buf.size());
+
+    if (!response_buf.empty()) {
+        RenderAsyncPayload* async_payload = new RenderAsyncPayload();
+        async_payload->data = std::move(response_buf);
+        lv_async_call(render_async_cb, async_payload);
+    } else {
+        UIManager::showToast("Respuesta vacia del servidor");
+    }
+
+    delete p;
+    vTaskDelete(NULL);
 }
 
 bool TlvBrowserView::loadLocalFile(const char* path) {
@@ -216,7 +392,7 @@ bool TlvBrowserView::loadLocalFile(const char* path) {
 
     if (sz <= 0 || sz > 65536) {
         fclose(f);
-        UIManager::showToast("Archivo TLV invalido o muy grande");
+        UIManager::showToast("Archivo invalido");
         return false;
     }
 
@@ -225,11 +401,36 @@ bool TlvBrowserView::loadLocalFile(const char* path) {
     fclose(f);
 
     if (readBytes == (size_t)sz) {
-        render(buffer.data(), readBytes);
-        UIManager::showToast("Pagina TLV cargada localmente");
+        processNetworkPacket(buffer.data(), readBytes);
+        UIManager::showToast("Archivo cargado");
         return true;
     }
     return false;
+}
+
+void TlvBrowserView::showInitialState() {
+    if (!m_contentArea || !lv_obj_is_valid(m_contentArea)) return;
+    lv_obj_clean(m_contentArea);
+
+    // Mensaje de estado inicial del navegador
+    lv_obj_t* card = lv_obj_create(m_contentArea);
+    lv_obj_set_size(card, LV_PCT(100), 130);
+    lv_obj_set_style_radius(card, 8, 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_20, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_border_color(card, lv_palette_main(LV_PALETTE_GREY), 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(card, 12, 0);
+
+    lv_obj_t* title = lv_label_create(card);
+    lv_label_set_text(title, "Navegador Alternet / TLVGL");
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(title, lv_palette_main(LV_PALETTE_CYAN), 0);
+
+    lv_obj_t* sub = lv_label_create(card);
+    lv_label_set_text(sub, "Escribe un dominio (ej: clima.mesh) o toca un marcador.\nEnrutamiento automático vía Wi-Fi o Radio Mesh.");
+    lv_obj_set_width(sub, LV_PCT(100));
+    lv_label_set_long_mode(sub, LV_LABEL_LONG_MODE_WRAP);
 }
 
 void TlvBrowserView::onUrlSubmit(lv_event_t* e) {
@@ -243,17 +444,8 @@ void TlvBrowserView::onUrlSubmit(lv_event_t* e) {
 void TlvBrowserView::onBookmarkClick(lv_event_t* e) {
     const char* url = (const char*)lv_event_get_user_data(e);
     if (url && s_instance) {
-        if (s_instance->m_urlInput && lv_obj_is_valid(s_instance->m_urlInput)) {
-            lv_textarea_set_text(s_instance->m_urlInput, url);
-        }
         s_instance->navigateToUrl(url);
     }
-}
-
-void TlvBrowserView::renderDemo() {
-    TlvBuilder b;
-    buildDemoPage(b);
-    render(b.buf, b.len);
 }
 
 bool TlvBrowserView::onCreate(lv_obj_t* parent) {
@@ -266,7 +458,7 @@ bool TlvBrowserView::onCreate(lv_obj_t* parent) {
         UIManager::getInstance().popView();
     });
     UIManager::getInstance().getHeaderBar().setRightAction(LV_SYMBOL_REFRESH, [this]() {
-        this->renderDemo();
+        this->navigateToUrl(this->m_currentUrl.c_str());
     });
 
     // Contenedor base de la vista
@@ -296,8 +488,8 @@ bool TlvBrowserView::onCreate(lv_obj_t* parent) {
     lv_obj_set_flex_grow(m_urlInput, 1);
     lv_obj_set_height(m_urlInput, LV_PCT(100));
     lv_textarea_set_one_line(m_urlInput, true);
-    lv_textarea_set_placeholder_text(m_urlInput, "http://... o demo");
-    lv_textarea_set_text(m_urlInput, "http://noticias.mesh");
+    lv_textarea_set_placeholder_text(m_urlInput, "clima.mesh, bento.mesh...");
+    lv_textarea_set_text(m_urlInput, m_currentUrl.c_str());
 
     lv_obj_t* goBtn = lv_button_create(m_urlContainer);
     lv_obj_set_size(goBtn, 55, LV_PCT(100));
@@ -320,17 +512,17 @@ bool TlvBrowserView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_border_width(m_bookmarkBar, 0, 0);
 
     const char* bookmarks[] = {
-        "http://noticias.mesh",
-        "http://clima.mesh",
-        "http://galeria.mesh",
-        "demo"
+        "home.mesh",
+        "clima.mesh",
+        "bento.mesh",
+        "config.mesh"
     };
 
     const char* bmLabels[] = {
-        "📰 noticias",
-        "🌤️ clima",
-        "🖼️ galeria",
-        "⚡ demo"
+        "⚡ Inicio",
+        "🌤️ Clima",
+        "📱 Bento",
+        "⚙️ Config"
     };
 
     for (int i = 0; i < 4; i++) {
@@ -355,8 +547,8 @@ bool TlvBrowserView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_pad_all(m_contentArea, 0, 0);
     lv_obj_set_scrollbar_mode(m_contentArea, LV_SCROLLBAR_MODE_AUTO);
 
-    // Cargar página inicial de demostración
-    renderDemo();
+    // Estado inicial
+    showInitialState();
 
     return true;
 }

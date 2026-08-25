@@ -1,9 +1,13 @@
 #include "QuickSettingsPanel.hpp"
 #include "../themes/DefaultTheme.h"
+#include "../UIManager.hpp"
+#include "../views/RadioConfigView.hpp"
 #include "cbdos/display.hpp"
 #include "cbdos/audio.hpp"
 #include "cbdos/network.hpp"
 #include "cbdos/system.hpp"
+#include "cbdos/radio.hpp"
+#include "cbdos/mesh/mesh_engine.hpp"
 #include "../../network/ConfigManager.h"
 #include <cstdio>
 
@@ -72,8 +76,24 @@ void QuickSettingsPanel::wifi_switch_cb(lv_event_t* e) {
     }
 }
 
-void QuickSettingsPanel::restart_btn_cb(lv_event_t* e) {
-    cbdos::system::restart();
+void QuickSettingsPanel::radio_mode_dropdown_cb(lv_event_t* e) {
+    lv_obj_t* dd = (lv_obj_t*)lv_event_get_target(e);
+    if (!dd) return;
+
+    uint32_t sel = lv_dropdown_get_selected(dd);
+    cbdos::radio::RadioMode mode = cbdos::radio::RadioMode::EspNow;
+    switch (sel) {
+        case 0: mode = cbdos::radio::RadioMode::WifiSta; break;
+        case 1: mode = cbdos::radio::RadioMode::EspNow; break;
+        case 2: mode = cbdos::radio::RadioMode::EspNowLR; break;
+        case 3: mode = cbdos::radio::RadioMode::Hybrid; break;
+        default: break;
+    }
+    cbdos::radio::setMode(mode);
+
+    char toast[64];
+    snprintf(toast, sizeof(toast), "Radio: %s", cbdos::radio::getModeName(mode));
+    UIManager::showToast(toast);
 }
 
 static lv_obj_t* createSliderRow(lv_obj_t* parent, const char* labelText,
@@ -192,19 +212,61 @@ void QuickSettingsPanel::toggle() {
                     10, 100, cbdos::display::getBrightness(),
                     brightness_slider_cb);
 
-    // Fila 4: Botón Reiniciar
-    lv_obj_t* btnRestart = lv_button_create(panelObj);
-    lv_obj_set_width(btnRestart, lv_pct(100));
-    lv_obj_set_height(btnRestart, 34);
-    DefaultTheme::applyButton(btnRestart, 10);
-    lv_obj_set_style_bg_color(btnRestart, lv_color_hex(0x991B1B), 0);
-    lv_obj_add_event_cb(btnRestart, restart_btn_cb, LV_EVENT_CLICKED, NULL);
+    // Fila 4: Selector Modo de Radio
+    lv_obj_t* rowRadio = lv_obj_create(panelObj);
+    lv_obj_set_width(rowRadio, lv_pct(100));
+    lv_obj_set_height(rowRadio, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(rowRadio, 0, 0);
+    lv_obj_set_style_border_width(rowRadio, 0, 0);
+    lv_obj_set_style_pad_all(rowRadio, 0, 0);
+    lv_obj_set_style_pad_row(rowRadio, 4, 0);
+    lv_obj_set_flex_flow(rowRadio, LV_FLEX_FLOW_COLUMN);
+    DefaultTheme::disableScroll(rowRadio);
 
-    lv_obj_t* lblRestart = lv_label_create(btnRestart);
-    lv_label_set_text(lblRestart, LV_SYMBOL_POWER " Reiniciar Sistema");
-    lv_obj_set_style_text_color(lblRestart, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(lblRestart, &lv_font_montserrat_12, 0);
-    lv_obj_center(lblRestart);
+    lv_obj_t* lblRadio = lv_label_create(rowRadio);
+    lv_label_set_text(lblRadio, LV_SYMBOL_SETTINGS " Modo Radio Integrada");
+    lv_obj_set_style_text_color(lblRadio, DefaultTheme::getTextColor(), 0);
+    lv_obj_set_style_text_font(lblRadio, &lv_font_montserrat_12, 0);
+
+    lv_obj_t* ddRadio = lv_dropdown_create(rowRadio);
+    lv_obj_set_width(ddRadio, lv_pct(100));
+    lv_obj_set_height(ddRadio, 34);
+    lv_dropdown_set_options(ddRadio,
+        "📶 Wi-Fi (Estación TCP/IP)\n"
+        "📻 ESP-NOW Normal (1-2 Mbps)\n"
+        "🚀 ESP-NOW Long Range\n"
+        "⚡ Híbrido (Wi-Fi + ESP-NOW)"
+    );
+    uint16_t currentModeIdx = 1;
+    auto curMode = cbdos::radio::getMode();
+    if (curMode == cbdos::radio::RadioMode::WifiSta) currentModeIdx = 0;
+    else if (curMode == cbdos::radio::RadioMode::EspNow) currentModeIdx = 1;
+    else if (curMode == cbdos::radio::RadioMode::EspNowLR) currentModeIdx = 2;
+    else if (curMode == cbdos::radio::RadioMode::Hybrid) currentModeIdx = 3;
+
+    lv_dropdown_set_selected(ddRadio, currentModeIdx);
+    lv_obj_set_style_radius(ddRadio, 8, 0);
+    lv_obj_set_style_bg_color(ddRadio, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_text_color(ddRadio, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(ddRadio, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_border_color(ddRadio, DefaultTheme::getPrimaryAccent(), 0);
+    lv_obj_add_event_cb(ddRadio, radio_mode_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Botón directo a Configuración de Radio
+    lv_obj_t* btnOpenRadio = lv_button_create(panelObj);
+    lv_obj_set_width(btnOpenRadio, lv_pct(100));
+    lv_obj_set_height(btnOpenRadio, 32);
+    DefaultTheme::applyButton(btnOpenRadio, 8);
+    lv_obj_set_style_bg_color(btnOpenRadio, lv_color_hex(0x0284C7), 0);
+    lv_obj_add_event_cb(btnOpenRadio, [](lv_event_t* e) {
+        QuickSettingsPanel::hide();
+        UIManager::getInstance().pushView(std::make_shared<RadioConfigView>());
+    }, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t* lblBtnOpen = lv_label_create(btnOpenRadio);
+    lv_label_set_text(lblBtnOpen, "📻 Configuración de Radio Integrada");
+    lv_obj_set_style_text_font(lblBtnOpen, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblBtnOpen);
 }
 
 } // namespace ui

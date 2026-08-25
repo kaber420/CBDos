@@ -43,6 +43,8 @@ idf_component_register(
         "src/ui/views/SerialTerminalView.cpp"
         "src/ui/views/UtilitiesView.cpp"
         "src/ui/views/TlvBrowserView.cpp"
+        "src/ui/views/MeshConfigView.cpp"
+        "src/ui/views/RadioConfigView.cpp"
         "src/ui/views/utilities/CalculatorApp.cpp"
         "src/ui/views/utilities/StopwatchApp.cpp"
         "src/ui/views/utilities/PomodoroApp.cpp"
@@ -57,7 +59,9 @@ idf_component_register(
         "src/media/Mp4Parser.cpp"
 
         "src/tlv/mesh_header.cpp"
+        "src/tlv/tlv_dictionary.cpp"
         "src/tlv/tlv_parser.cpp"
+        "src/mesh/MeshEngine.cpp"
 
         "src/ui/views/LuappView.cpp"
         "src/network/ConfigManager.cpp"
@@ -75,6 +79,7 @@ idf_component_register(
         "src/ui/views"
         "src/ui/views/utilities"
         "src/tlv"
+        "src/mesh"
         "src/cartridge"
         "src/media"
         "src/media/libh264"
@@ -100,6 +105,11 @@ idf_component_register(
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-maybe-uninitialized -Wno-unused-but-set-variable -Wno-unused-variable)
 
+# Optimizaciones de máximo rendimiento para decodificadores de medios (H.264 y Helix)
+set_source_files_properties(${H264_SRCS} "src/media/Mp4Parser.cpp" "src/media/AviParser.cpp"
+    PROPERTIES COMPILE_FLAGS "-O3 -funroll-loops"
+)
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC -DESP32 -DUSE_DEFAULT_STDLIB -DHELIX_LOGGING_ACTIVE=0 -DLUA_32BITS)
 target_compile_options(${COMPONENT_LIB} PUBLIC -Wno-error -Wno-format -Wno-unused-variable)
+

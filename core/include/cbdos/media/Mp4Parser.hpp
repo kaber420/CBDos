@@ -49,7 +49,8 @@ public:
     bool seekToSample(uint32_t sampleIndex);
 
 private:
-    FILE* m_file{nullptr};
+    FILE* m_file{nullptr};       // Descriptor dedicado para video
+    FILE* m_audioFile{nullptr};  // Descriptor dedicado para audio (evita saltos de sector en SD)
     std::string m_filepath;
     Mp4StreamInfo m_info;
 

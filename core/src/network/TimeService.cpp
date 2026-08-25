@@ -34,20 +34,41 @@ TimeService::TimeService()
     : m_gmtOffsetSec(-21600),
       m_daylightOffsetSec(0),
       m_ntpServer("pool.ntp.org"),
+      m_enabled(true),
+      m_retryCount(0),
+      m_wasConnected(false),
       m_lastSyncAttempt(0),
       m_lastSuccessfulSync(0),
       m_sntpConfigured(false) {
 }
 
-void TimeService::init(long gmtOffsetSec, int daylightOffsetSec, const char* ntpServer) {
+void TimeService::init(long gmtOffsetSec, int daylightOffsetSec, const char* ntpServer, bool enabled) {
     m_gmtOffsetSec = gmtOffsetSec;
     m_daylightOffsetSec = daylightOffsetSec;
+    m_enabled = enabled;
     if (ntpServer && strlen(ntpServer) > 0) {
         m_ntpServer = ntpServer;
     }
     m_sntpConfigured = false;
+    m_retryCount = 0;
+    m_wasConnected = false;
     m_lastSyncAttempt = 0;
     applyPosixTimezone(m_gmtOffsetSec, m_daylightOffsetSec);
+}
+
+void TimeService::setEnabled(bool enabled) {
+    m_enabled = enabled;
+    m_retryCount = 0;
+    if (!m_enabled) {
+#ifdef ESP_PLATFORM
+        if (esp_sntp_enabled()) {
+            esp_sntp_stop();
+        }
+#endif
+        m_sntpConfigured = false;
+    } else {
+        m_sntpConfigured = false;
+    }
 }
 
 void TimeService::sync() {
@@ -63,8 +84,8 @@ void TimeService::sync() {
     }
 #elif defined(ESP_PLATFORM)
     if (cbdos::network::isConnected()) {
-        ESP_LOGI("TimeService", "Iniciando sincronizacion SNTP con %s (Offset: %ld, DST: %d)...",
-                 m_ntpServer.c_str(), m_gmtOffsetSec, m_daylightOffsetSec);
+        ESP_LOGI("TimeService", "Iniciando sincronizacion SNTP con %s (Offset: %ld, DST: %d, Intento: %d)...",
+                 m_ntpServer.c_str(), m_gmtOffsetSec, m_daylightOffsetSec, (int)m_retryCount + 1);
         if (esp_sntp_enabled()) {
             esp_sntp_stop();
         }
@@ -80,10 +101,20 @@ void TimeService::sync() {
 }
 
 void TimeService::update() {
+    if (!m_enabled) return;
+
     bool connected = cbdos::network::isConnected();
 #ifdef ARDUINO
     connected = connected || (WiFi.status() == WL_CONNECTED);
 #endif
+
+    // Detectar nueva conexión para reiniciar el backoff
+    if (connected && !m_wasConnected) {
+        m_retryCount = 0;
+        m_sntpConfigured = false;
+    }
+    m_wasConnected = connected;
+
     if (!connected) return;
 
     uint32_t now = cbdos::system::getTimeMs();
@@ -95,13 +126,28 @@ void TimeService::update() {
 
     if (isSynced()) {
         m_lastSuccessfulSync = now;
+        m_retryCount = 0; // Sincronizado exitosamente
         // Refresco de fondo cada 3 horas
         if (now - m_lastSyncAttempt >= SYNC_REFRESH_INTERVAL_MS) {
             sync();
         }
     } else {
-        // Reintento si no ha sincronizado tras 30 segundos
-        if (now - m_lastSyncAttempt >= SYNC_RETRY_INTERVAL_MS) {
+        // Retroceso Exponencial con límite de 15 minutos:
+        // Intento 0: 30s | 1: 60s | 2: 120s | 3: 240s | 4+: 900s (15 min)
+        uint32_t currentRetryInterval = BASE_RETRY_INTERVAL_MS;
+        if (m_retryCount < 5) {
+            currentRetryInterval = BASE_RETRY_INTERVAL_MS * (1UL << m_retryCount);
+        } else {
+            currentRetryInterval = MAX_RETRY_INTERVAL_MS;
+        }
+        if (currentRetryInterval > MAX_RETRY_INTERVAL_MS) {
+            currentRetryInterval = MAX_RETRY_INTERVAL_MS;
+        }
+
+        if (now - m_lastSyncAttempt >= currentRetryInterval) {
+            if (m_retryCount < 255) {
+                m_retryCount++;
+            }
             sync();
         }
     }

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><title>Estacion Climatica</title></head>
+<body>
+  <panel style="left: 12px; top: 10px; width: 456px; height: 90px; background-color: #181c26;">
+    <h1>Estacion Meteorologica</h1>
+    <h2>24.5 °C | Humedad: 62%</h2>
+    <p>Presion: 1013 hPa | Calidad Aire: Buena</p>
+  </panel>
+
+  <p style="left: 12px; top: 110px;">Historial Temperatura Ultimas 8h (°C):</p>
+  <chart type="line" values="18,19,21,24,27,26,25,23" style="left: 12px; top: 135px; width: 456px; height: 100px;"></chart>
+
+  <p style="left: 12px; top: 245px;">Precipitaciones Recientes (mm):</p>
+  <chart type="bar" values="5,12,0,8,15,3" style="left: 12px; top: 270px; width: 456px; height: 80px;"></chart>
+
+  <p style="left: 12px; top: 360px;">Sensibilidad de Sensor:</p>
+  <input type="range" min="0" max="100" value="75" style="left: 12px; top: 385px; width: 456px; height: 26px;">
+
+  <p style="left: 12px; top: 420px;">Nivel de Bateria Solar:</p>
+  <progress min="0" max="100" value="88" style="left: 12px; top: 442px; width: 456px; height: 20px;"></progress>
+
+  <a href="/index.html" style="left: 12px; top: 475px; width: 456px;">⬅️ Volver al Inicio</a>
+</body>
+</html>

@@ -5,6 +5,7 @@
 #include "cbdos/media/Mp4Parser.hpp"
 #include <vector>
 #include <string>
+#include <atomic>
 
 namespace cbdos {
 namespace ui {
@@ -39,7 +40,7 @@ private:
     void updateNavHeaderBtn();
     void toggleControlsVisibility();
 
-    static void videoTimerCb(lv_timer_t* timer);
+    static void uiTimerCb(lv_timer_t* timer);
     static void itemClickCb(lv_event_t* e);
     static void playPauseCb(lv_event_t* e);
     static void stopClickCb(lv_event_t* e);
@@ -56,7 +57,7 @@ private:
     lv_obj_t* m_playBtnLabel{nullptr};
     lv_obj_t* m_seekSlider{nullptr};
 
-    lv_timer_t* m_videoTimer{nullptr};
+    lv_timer_t* m_uiTimer{nullptr};
     lv_timer_t* m_autoHideTimer{nullptr};
 
     std::vector<VideoItem> m_playlist;
@@ -71,6 +72,25 @@ private:
     size_t m_frameBufferSize{0};
     uint32_t m_canvasWidth{480};
     uint32_t m_canvasHeight{320};
+
+    // Buffer de audio en PSRAM (2MB) y Worker Task en Core 0
+    uint8_t* m_audioRingBuf{nullptr};
+    size_t m_audioRingCapacity{2 * 1024 * 1024};
+    size_t m_audioRingHead{0};
+    size_t m_audioRingTail{0};
+    size_t m_audioRingCount{0};
+    void* m_audioMutex{nullptr};
+    void* m_audioTaskHandle{nullptr};
+    void* m_videoTaskHandle{nullptr};
+
+    std::atomic<bool> m_videoRunning{false};
+    std::atomic<uint32_t> m_audioClockMs{0};
+    std::atomic<uint64_t> m_audioSamplesPlayed{0};
+    uint32_t m_sampleRate{44100};
+
+    void pushAudioPcm(const void* data, size_t size);
+    static void audioWorkerTask(void* param);
+    static void videoWorkerTask(void* param);
 };
 
 } // namespace ui

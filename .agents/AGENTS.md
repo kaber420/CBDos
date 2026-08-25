@@ -96,3 +96,11 @@ El proyecto opera bajo un modelo desacoplado:
    - **PROHIBIDO** incluir headers de plataformas o frameworks dentro de `core/` (ej. `<Arduino.h>`, `<Preferences.h>`, `<SD.h>`, `<WiFi.h>`, `<esp_wifi.h>`, `<driver/...>`).
    - **PROHIBIDO** bifurcar la lógica de negocio mediante `#ifdef ARDUINO` o `#ifdef ESP_PLATFORM` dentro de `core/`.
    - **Patrón de Abstracción HAL / Interfaces:** Todo acceso a hardware, NVS, sistema de archivos o red DEBE realizarse mediante interfaces abstractas (`IStorageBackend`, `IAudioSink`, `INetworkAdapter`). Las implementaciones concretas residen ÚNICAMENTE en sus respectivos directorios `bsp/` y se inyectan en tiempo de inicialización.
+
+9. **Integridad Absoluta de Documentación e Historial (`docs/`):**
+   - **ESTRICTAMENTE PROHIBIDO** sobreescribir, borrar, truncar o reciclar archivos de documentación existentes en `docs/` o `docs/drafts/` a menos que el usuario lo ordene explícitamente indicando el archivo.
+   - Toda nueva investigación, borrador o análisis DEBE crearse en un archivo nuevo con nombre único y descriptivo.
+
+10. **Prohibición Universal de Resúmenes y Ediciones Destructivas (Aplica a TODO el Proyecto):**
+    - **ESTRICTAMENTE PROHIBIDO** condensar, simplificar, resumir, truncar o sobreescribir de forma destructiva **CUALQUIER archivo del repositorio** (código fuente `.cpp`/`.c`, cabeceras `.hpp`/`.h`, documentación `.md`, planes, especificaciones, scripts `.lua`/`.py`, Makefiles o configuraciones).
+    - Toda modificación en cualquier archivo del proyecto debe ser **estrictamente quirúrgica**, preservando intacto todo el código preexistente, comentarios, contratos de funciones, diagramas ASCII, tablas y explicaciones técnicas previamente desarrolladas.

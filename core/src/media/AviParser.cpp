@@ -1,4 +1,5 @@
 #include "cbdos/media/AviParser.hpp"
+#include "src/libs/tjpgd/tjpgd.h"
 #include <cstring>
 #include <algorithm>
 
@@ -100,6 +101,7 @@ bool AviParser::open(const std::string& filepath) {
     if (!m_file) {
         return false;
     }
+    setvbuf(m_file, nullptr, _IOFBF, 64 * 1024);
 
     if (!parseRiffHeaders()) {
         close();
@@ -393,5 +395,112 @@ bool AviParser::seekToFrame(uint32_t frameIndex) {
     return true;
 }
 
+struct AviJpegState {
+    const uint8_t* src;
+    size_t size;
+    size_t offset;
+    uint16_t* dst;
+    uint32_t dstWidth;
+    uint32_t dstHeight;
+    uint32_t offsetX;
+    uint32_t offsetY;
+};
+
+static size_t avi_jd_input(JDEC* jd, uint8_t* buff, size_t nbyte) {
+    auto* st = static_cast<AviJpegState*>(jd->device);
+    if (!st || st->offset >= st->size) return 0;
+    size_t toRead = std::min(nbyte, st->size - st->offset);
+    if (buff) {
+        memcpy(buff, st->src + st->offset, toRead);
+    }
+    st->offset += toRead;
+    return toRead;
+}
+
+static int avi_jd_output(JDEC* jd, void* bitmap, JRECT* rect) {
+    auto* st = static_cast<AviJpegState*>(jd->device);
+    if (!st || !st->dst || !bitmap || !rect) return 0;
+
+    const uint8_t* srcRgb888 = static_cast<const uint8_t*>(bitmap);
+    uint32_t blockW = rect->right - rect->left + 1;
+    uint32_t blockH = rect->bottom - rect->top + 1;
+
+    for (uint32_t y = 0; y < blockH; y++) {
+        uint32_t dstY = st->offsetY + rect->top + y;
+        if (dstY >= st->dstHeight) break;
+
+        uint32_t dstX = st->offsetX + rect->left;
+        if (dstX >= st->dstWidth) continue;
+
+        uint16_t* dstRow = st->dst + (dstY * st->dstWidth) + dstX;
+        const uint8_t* srcRow = srcRgb888 + (y * blockW * 3);
+        uint32_t copyW = std::min(blockW, (st->dstWidth > dstX) ? (st->dstWidth - dstX) : 0);
+
+        for (uint32_t x = 0; x < copyW; x++) {
+            uint8_t r = srcRow[x * 3 + 0];
+            uint8_t g = srcRow[x * 3 + 1];
+            uint8_t b = srcRow[x * 3 + 2];
+            dstRow[x] = (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+        }
+    }
+    return 1;
+}
+
+bool AviParser::decodeNextVideoFrame(uint8_t* outRgb565, uint32_t outWidth, uint32_t outHeight,
+                                     uint8_t* outAudioBuf, size_t maxAudioSize, size_t* outAudioBytes) {
+    if (outAudioBytes) *outAudioBytes = 0;
+    if (!m_file || !outRgb565 || outWidth == 0 || outHeight == 0) return false;
+
+    AviChunk chunk;
+    while (readNextChunkHeader(chunk)) {
+        if (chunk.isAudio) {
+            if (outAudioBuf && maxAudioSize > 0) {
+                size_t toRead = std::min(chunk.size, maxAudioSize);
+                size_t read = readChunkData(chunk, outAudioBuf, toRead);
+                if (outAudioBytes) *outAudioBytes = read;
+            } else {
+                skipChunk(chunk);
+            }
+        } else if (chunk.isVideo) {
+            static std::vector<uint8_t> s_jpegBuf;
+            if (s_jpegBuf.size() < chunk.size) {
+                s_jpegBuf.resize(chunk.size + 2048);
+            }
+
+            size_t bytesRead = readChunkData(chunk, s_jpegBuf.data(), s_jpegBuf.size());
+            if (bytesRead == 0) return false;
+
+            AviJpegState state;
+            state.src = s_jpegBuf.data();
+            state.size = bytesRead;
+            state.offset = 0;
+            state.dst = (uint16_t*)outRgb565;
+            state.dstWidth = outWidth;
+            state.dstHeight = outHeight;
+
+            uint32_t renderW = outWidth;
+            uint32_t renderH = (m_info.width > 0) ? (outWidth * m_info.height) / m_info.width : outHeight;
+            if (renderH > outHeight && m_info.height > 0) {
+                renderH = outHeight;
+                renderW = (outHeight * m_info.width) / m_info.height;
+            }
+            state.offsetX = (outWidth > renderW) ? (outWidth - renderW) / 2 : 0;
+            state.offsetY = (outHeight > renderH) ? (outHeight - renderH) / 2 : 0;
+
+            static uint8_t s_pool[4096];
+            JDEC jdec;
+            JRESULT res = jd_prepare(&jdec, avi_jd_input, s_pool, sizeof(s_pool), &state);
+            if (res != JDR_OK) return false;
+
+            res = jd_decomp(&jdec, avi_jd_output, 0);
+            return (res == JDR_OK);
+        } else {
+            skipChunk(chunk);
+        }
+    }
+    return false;
+}
+
 } // namespace media
 } // namespace cbdos
+

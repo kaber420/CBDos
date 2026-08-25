@@ -4,6 +4,7 @@
 #include "cbdos/audio.hpp"
 #include "cbdos/storage.hpp"
 #include "cbdos/network.hpp"
+#include "cbdos/radio.hpp"
 #include "cbdos/ui.hpp"
 #include "../../core/src/network/ConfigManager.h"
 #include "../../core/src/network/TimeService.h"
@@ -19,6 +20,7 @@ extern JC3248W535_Touch& get_s3_touch_driver();
 namespace cbdos {
 namespace bsp {
     void initPersistenceBackend();
+    void initMeshTransportS3();
 }
 }
 
@@ -67,8 +69,9 @@ void setup() {
     cbdos::system::sleepMs(500);
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) [Target: ESP32-S3] ===");
     
-    // Inyectar el backend de persistencia NVS
+    // Inyectar el backend de persistencia NVS y Transporte de Malla
     cbdos::bsp::initPersistenceBackend();
+    cbdos::bsp::initMeshTransportS3();
 
     // Cargar configuraciones del sistema desde NVS
     SystemConfig sysCfg;
@@ -91,13 +94,16 @@ void setup() {
         cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Touch AXS15231B calibrado y asociado a la rotación");
     }
 
-    // 3. Inicializar Red y Servicio de Hora NTP
-    cbdos::network::init();
+    // 3. Inicializar Subsistema de Radio según NVS (Offline-First / Determinista)
+    cbdos::radio::init();
     TimeConfig timeCfg;
     ConfigManager::getInstance().loadTime(timeCfg);
-    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str());
+    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str(), timeCfg.enabled);
 
-    if (sysCfg.autoConnectWifi) {
+    cbdos::radio::RadioConfig radioCfg;
+    ConfigManager::getInstance().loadRadio(radioCfg);
+
+    if (sysCfg.autoConnectWifi && radioCfg.enabled && (radioCfg.mode == cbdos::radio::RadioMode::WifiSta || radioCfg.mode == cbdos::radio::RadioMode::Hybrid)) {
         WiFiConfig wifiCfg;
         if (ConfigManager::getInstance().loadWiFi(wifiCfg) && wifiCfg.ssid.length() > 0) {
             cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Auto-conectando a Wi-Fi: %s", wifiCfg.ssid.c_str());

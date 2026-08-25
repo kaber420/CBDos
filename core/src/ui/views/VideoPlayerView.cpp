@@ -9,6 +9,9 @@
 #include <cstring>
 #include <algorithm>
 #include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
 #if defined(ESP_PLATFORM)
 #include <esp_heap_caps.h>
@@ -21,10 +24,19 @@ static const char* TAG = "VideoPlayer";
 
 VideoPlayerView::VideoPlayerView()
     : BaseView("Reproductor de Video") {
+    m_audioMutex = xSemaphoreCreateMutex();
 }
 
 VideoPlayerView::~VideoPlayerView() {
     stopVideo();
+    if (m_audioMutex) {
+        vSemaphoreDelete((SemaphoreHandle_t)m_audioMutex);
+        m_audioMutex = nullptr;
+    }
+    if (m_audioRingBuf) {
+        free(m_audioRingBuf);
+        m_audioRingBuf = nullptr;
+    }
     if (m_frameBuffer) {
         free(m_frameBuffer);
         m_frameBuffer = nullptr;
@@ -177,9 +189,9 @@ bool VideoPlayerView::onCreate(lv_obj_t* parent) {
 
 void VideoPlayerView::onDestroy() {
     stopVideo();
-    if (m_videoTimer) {
-        lv_timer_delete(m_videoTimer);
-        m_videoTimer = nullptr;
+    if (m_uiTimer) {
+        lv_timer_delete(m_uiTimer);
+        m_uiTimer = nullptr;
     }
     m_canvas = nullptr;
     m_playerContainer = nullptr;
@@ -347,6 +359,153 @@ void VideoPlayerView::renderPlaylist(lv_obj_t* parent) {
     }
 }
 
+void VideoPlayerView::pushAudioPcm(const void* data, size_t size) {
+    if (!m_audioRingBuf || !data || size == 0 || !m_audioMutex) return;
+    const uint8_t* src = (const uint8_t*)data;
+
+    if (xSemaphoreTake((SemaphoreHandle_t)m_audioMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        size_t available = m_audioRingCapacity - m_audioRingCount;
+        size_t toCopy = (size > available) ? available : size;
+        for (size_t i = 0; i < toCopy; i++) {
+            m_audioRingBuf[m_audioRingHead] = src[i];
+            m_audioRingHead = (m_audioRingHead + 1) % m_audioRingCapacity;
+        }
+        m_audioRingCount += toCopy;
+        xSemaphoreGive((SemaphoreHandle_t)m_audioMutex);
+    }
+}
+
+void VideoPlayerView::audioWorkerTask(void* param) {
+    auto* view = static_cast<VideoPlayerView*>(param);
+    if (!view) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    uint8_t chunk[2048];
+
+    while (view->m_videoRunning) {
+        if (!view->m_isPlaying) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+
+        size_t toWrite = 0;
+        if (xSemaphoreTake((SemaphoreHandle_t)view->m_audioMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            if (view->m_audioRingCount > 0) {
+                toWrite = (view->m_audioRingCount > sizeof(chunk)) ? sizeof(chunk) : view->m_audioRingCount;
+                for (size_t i = 0; i < toWrite; i++) {
+                    chunk[i] = view->m_audioRingBuf[view->m_audioRingTail];
+                    view->m_audioRingTail = (view->m_audioRingTail + 1) % view->m_audioRingCapacity;
+                }
+                view->m_audioRingCount -= toWrite;
+            }
+            xSemaphoreGive((SemaphoreHandle_t)view->m_audioMutex);
+        }
+
+        if (toWrite > 0) {
+            cbdos::audio::writeAudio(chunk, toWrite);
+            // 16-bit estéreo = 4 bytes por frame de audio
+            uint64_t frames = toWrite / 4;
+            view->m_audioSamplesPlayed += frames;
+            if (view->m_sampleRate > 0) {
+                view->m_audioClockMs = (uint32_t)((view->m_audioSamplesPlayed.load() * 1000) / view->m_sampleRate);
+            }
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(3));
+        }
+    }
+    view->m_audioTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+}
+
+void VideoPlayerView::videoWorkerTask(void* param) {
+    auto* view = static_cast<VideoPlayerView*>(param);
+    if (!view) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Tarea de decodificacion de video iniciada en Core %d", xPortGetCoreID());
+
+    float fps = 24.0f;
+    if (view->m_isCurrentMp4) {
+        const auto& info = view->m_mp4Parser.getInfo();
+        if (info.fps > 0.0f) fps = info.fps;
+    } else {
+        const auto& info = view->m_aviParser.getInfo();
+        if (info.fps > 0.0f) fps = info.fps;
+    }
+    TickType_t frameTicks = pdMS_TO_TICKS((uint32_t)(1000.0f / fps));
+    if (frameTicks < 1) frameTicks = 1;
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
+    while (view->m_videoRunning) {
+        if (!view->m_isPlaying) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            lastWakeTime = xTaskGetTickCount();
+            continue;
+        }
+
+        if (view->m_isCurrentMp4) {
+            const auto& info = view->m_mp4Parser.getInfo();
+
+            // 1. Precargar audio en el buffer de PSRAM por adelantado (hasta 128 KB)
+            if (info.hasAudio) {
+                static int16_t s_pcmBuf[2048 * 2];
+                size_t outSamples = 0;
+                while (view->m_videoRunning && view->m_isPlaying && view->m_audioRingCount < (128 * 1024)) {
+                    if (view->m_mp4Parser.decodeNextAudioPcm(s_pcmBuf, 2048 * 2, outSamples) && outSamples > 0) {
+                        view->pushAudioPcm(s_pcmBuf, outSamples * sizeof(int16_t));
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            // 2. Decodificar fotograma
+            if (view->m_mp4Parser.decodeNextVideoFrame(view->m_frameBuffer, view->m_canvasWidth, view->m_canvasHeight)) {
+                if (cbdos::display::lock(50)) {
+                    if (view->m_canvas && lv_obj_is_valid(view->m_canvas)) {
+                        lv_obj_invalidate(view->m_canvas);
+                    }
+                    cbdos::display::unlock();
+                }
+            } else {
+                if (view->m_mp4Parser.getCurrentVideoSample() >= info.totalVideoSamples) {
+                    view->m_videoRunning = false;
+                    break;
+                }
+            }
+        } else {
+            // Flujo AVI (MJPEG)
+            static uint8_t s_aviAudioBuf[4096];
+            size_t audioBytes = 0;
+
+            if (view->m_aviParser.decodeNextVideoFrame(view->m_frameBuffer, view->m_canvasWidth, view->m_canvasHeight,
+                                                       s_aviAudioBuf, sizeof(s_aviAudioBuf), &audioBytes)) {
+                if (audioBytes > 0) {
+                    view->pushAudioPcm(s_aviAudioBuf, audioBytes);
+                }
+                if (cbdos::display::lock(50)) {
+                    if (view->m_canvas && lv_obj_is_valid(view->m_canvas)) {
+                        lv_obj_invalidate(view->m_canvas);
+                    }
+                    cbdos::display::unlock();
+                }
+            } else {
+                view->m_videoRunning = false;
+                break;
+            }
+        }
+
+        vTaskDelayUntil(&lastWakeTime, frameTicks);
+    }
+
+    view->m_videoTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+}
+
 void VideoPlayerView::startVideo(int index) {
     if (index < 0 || index >= (int)m_playlist.size()) return;
 
@@ -357,6 +516,7 @@ void VideoPlayerView::startVideo(int index) {
     ESP_LOGI(TAG, "Abriendo archivo video: %s (MP4: %d)", item.path.c_str(), m_isCurrentMp4);
 
     float fps = 30.0f;
+    m_sampleRate = 44100;
 
     if (m_isCurrentMp4) {
         if (!m_mp4Parser.open(item.path)) {
@@ -365,6 +525,7 @@ void VideoPlayerView::startVideo(int index) {
         }
         const auto& info = m_mp4Parser.getInfo();
         if (info.fps > 0.0f) fps = info.fps;
+        if (info.audioSampleRate > 0) m_sampleRate = info.audioSampleRate;
         ESP_LOGI(TAG, "MP4 cargado: %lux%lu @ %.1f FPS, muestras: %lu",
                  (unsigned long)info.width, (unsigned long)info.height, info.fps, (unsigned long)info.totalVideoSamples);
     } else {
@@ -374,40 +535,73 @@ void VideoPlayerView::startVideo(int index) {
         }
         const auto& info = m_aviParser.getInfo();
         if (info.fps > 0.0f) fps = info.fps;
+        if (info.audioSampleRate > 0) m_sampleRate = info.audioSampleRate;
         ESP_LOGI(TAG, "AVI cargado: %lux%lu @ %.1f FPS, frames: %lu",
                  (unsigned long)info.width, (unsigned long)info.height, info.fps, (unsigned long)info.totalFrames);
     }
 
+    // Asignar 2 MB de búfer de audio en PSRAM dedicado
+    if (!m_audioRingBuf) {
+        m_audioRingCapacity = 2 * 1024 * 1024; // 2 MB en Hexal-PSRAM
+#if defined(ESP_PLATFORM)
+        m_audioRingBuf = (uint8_t*)heap_caps_malloc(m_audioRingCapacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#endif
+        if (!m_audioRingBuf) m_audioRingBuf = (uint8_t*)malloc(m_audioRingCapacity);
+    }
+    m_audioRingHead = 0;
+    m_audioRingTail = 0;
+    m_audioRingCount = 0;
+    m_audioClockMs = 0;
+    m_audioSamplesPlayed = 0;
+
     lv_label_set_text(m_titleLabel, item.name.c_str());
     lv_slider_set_value(m_seekSlider, 0, LV_ANIM_OFF);
 
-    uint32_t intervalMs = (fps > 0.0f) ? (uint32_t)(1000.0f / fps) : 33;
-    if (intervalMs < 10) intervalMs = 10;
-    if (intervalMs > 100) intervalMs = 100;
-
     m_isPlaying = true;
+    m_videoRunning = true;
+
+    // 1. Tarea de audio en Core 0 (prioridad alta 6)
+    if (!m_audioTaskHandle) {
+        xTaskCreatePinnedToCore(audioWorkerTask, "vid_audio_task", 4096, this, 6, (TaskHandle_t*)&m_audioTaskHandle, 0);
+    }
+
+    // 2. Tarea de decodificación de video en Core 1 (prioridad 5)
+    if (!m_videoTaskHandle) {
+        xTaskCreatePinnedToCore(videoWorkerTask, "vid_decode_task", 8192, this, 5, (TaskHandle_t*)&m_videoTaskHandle, 1);
+    }
+
     if (m_playBtnLabel && lv_obj_is_valid(m_playBtnLabel)) {
         lv_label_set_text(m_playBtnLabel, LV_SYMBOL_PAUSE);
     }
 
-    if (!m_videoTimer) {
-        m_videoTimer = lv_timer_create(videoTimerCb, intervalMs, this);
+    // 3. Temporizador ligero para actualizar la interfaz gráfica cada 250 ms
+    if (!m_uiTimer) {
+        m_uiTimer = lv_timer_create(uiTimerCb, 250, this);
     } else {
-        lv_timer_set_period(m_videoTimer, intervalMs);
-        lv_timer_resume(m_videoTimer);
+        lv_timer_resume(m_uiTimer);
     }
 
     showPlayerScreen();
 }
 
 void VideoPlayerView::stopVideo() {
-    if (m_videoTimer) {
-        lv_timer_delete(m_videoTimer);
-        m_videoTimer = nullptr;
+    m_isPlaying = false;
+    m_videoRunning = false;
+
+    if (m_uiTimer) {
+        lv_timer_delete(m_uiTimer);
+        m_uiTimer = nullptr;
     }
+
+    // Esperar a que las tareas finalicen limpiamente
+    if (m_audioTaskHandle || m_videoTaskHandle) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+        m_audioTaskHandle = nullptr;
+        m_videoTaskHandle = nullptr;
+    }
+
     m_mp4Parser.close();
     m_aviParser.close();
-    m_isPlaying = false;
     if (m_playBtnLabel && lv_obj_is_valid(m_playBtnLabel)) {
         lv_label_set_text(m_playBtnLabel, LV_SYMBOL_PLAY);
     }
@@ -460,75 +654,48 @@ void VideoPlayerView::toggleControlsVisibility() {
     }
 }
 
-void VideoPlayerView::videoTimerCb(lv_timer_t* timer) {
+void VideoPlayerView::uiTimerCb(lv_timer_t* timer) {
     auto* view = static_cast<VideoPlayerView*>(lv_timer_get_user_data(timer));
-    if (!view || !view->m_isPlaying) return;
+    if (!view) return;
+
+    if (!view->m_videoRunning && view->m_isPlaying) {
+        view->stopVideo();
+        return;
+    }
+
+    if (!view->m_isPlaying) return;
 
     if (view->m_isCurrentMp4) {
-        if (view->m_mp4Parser.decodeNextVideoFrame(view->m_frameBuffer, view->m_canvasWidth, view->m_canvasHeight)) {
-            lv_obj_invalidate(view->m_canvas);
+        const auto& info = view->m_mp4Parser.getInfo();
+        uint32_t curSample = view->m_mp4Parser.getCurrentVideoSample();
+        if (info.totalVideoSamples > 0) {
+            uint32_t pct = (curSample * 100) / info.totalVideoSamples;
+            lv_slider_set_value(view->m_seekSlider, pct, LV_ANIM_OFF);
 
-            const auto& info = view->m_mp4Parser.getInfo();
-            uint32_t curSample = view->m_mp4Parser.getCurrentVideoSample();
+            uint32_t curSec = view->m_audioClockMs.load() / 1000;
+            uint32_t totalSec = info.durationSec;
 
-            // Decodificar tramas de audio correspondientes a este frame de video
-            if (info.hasAudio && info.totalVideoSamples > 0 && info.totalAudioSamples > 0) {
-                static int16_t s_pcmBuf[2048 * 2];
-                size_t outSamples = 0;
-                while ((uint64_t)view->m_mp4Parser.getCurrentAudioSample() * info.totalVideoSamples <=
-                       (uint64_t)curSample * info.totalAudioSamples) {
-                    if (view->m_mp4Parser.decodeNextAudioPcm(s_pcmBuf, 2048 * 2, outSamples) && outSamples > 0) {
-                        cbdos::audio::writeAudio(s_pcmBuf, outSamples * sizeof(int16_t));
-                    } else {
-                        break;
-                    }
-                }
-            }
-
-            if (info.totalVideoSamples > 0) {
-                uint32_t pct = (curSample * 100) / info.totalVideoSamples;
-                lv_slider_set_value(view->m_seekSlider, pct, LV_ANIM_OFF);
-
-                uint32_t curSec = (info.fps > 0.0f) ? (uint32_t)(curSample / info.fps) : 0;
-                uint32_t totalSec = info.durationSec;
-
-                char timeBuf[32];
-                snprintf(timeBuf, sizeof(timeBuf), "%02lu:%02lu / %02lu:%02lu",
-                         (unsigned long)(curSec / 60), (unsigned long)(curSec % 60),
-                         (unsigned long)(totalSec / 60), (unsigned long)(totalSec % 60));
-                lv_label_set_text(view->m_timeLabel, timeBuf);
-            }
-        } else {
-            const auto& info = view->m_mp4Parser.getInfo();
-            if (view->m_mp4Parser.getCurrentVideoSample() >= info.totalVideoSamples) {
-                view->stopVideo();
-            }
+            char timeBuf[32];
+            snprintf(timeBuf, sizeof(timeBuf), "%02lu:%02lu / %02lu:%02lu",
+                     (unsigned long)(curSec / 60), (unsigned long)(curSec % 60),
+                     (unsigned long)(totalSec / 60), (unsigned long)(totalSec % 60));
+            lv_label_set_text(view->m_timeLabel, timeBuf);
         }
     } else {
-        cbdos::media::AviChunk chunk;
-        if (view->m_aviParser.readNextChunkHeader(chunk)) {
-            if (chunk.isVideo) {
-                const auto& info = view->m_aviParser.getInfo();
-                uint32_t curFrame = view->m_aviParser.getCurrentFrameIndex();
-                if (info.totalFrames > 0) {
-                    uint32_t pct = (curFrame * 100) / info.totalFrames;
-                    lv_slider_set_value(view->m_seekSlider, pct, LV_ANIM_OFF);
+        const auto& info = view->m_aviParser.getInfo();
+        uint32_t curFrame = view->m_aviParser.getCurrentFrameIndex();
+        if (info.totalFrames > 0) {
+            uint32_t pct = (curFrame * 100) / info.totalFrames;
+            lv_slider_set_value(view->m_seekSlider, pct, LV_ANIM_OFF);
 
-                    uint32_t curSec = (info.fps > 0.0f) ? (uint32_t)(curFrame / info.fps) : 0;
-                    uint32_t totalSec = (info.fps > 0.0f) ? (uint32_t)(info.totalFrames / info.fps) : 0;
+            uint32_t curSec = view->m_audioClockMs.load() / 1000;
+            uint32_t totalSec = (info.fps > 0.0f) ? (uint32_t)(info.totalFrames / info.fps) : 0;
 
-                    char timeBuf[32];
-                    snprintf(timeBuf, sizeof(timeBuf), "%02lu:%02lu / %02lu:%02lu",
-                             (unsigned long)(curSec / 60), (unsigned long)(curSec % 60),
-                             (unsigned long)(totalSec / 60), (unsigned long)(totalSec % 60));
-                    lv_label_set_text(view->m_timeLabel, timeBuf);
-                }
-                view->m_aviParser.skipChunk(chunk);
-            } else if (chunk.isAudio) {
-                view->m_aviParser.skipChunk(chunk);
-            }
-        } else {
-            view->stopVideo();
+            char timeBuf[32];
+            snprintf(timeBuf, sizeof(timeBuf), "%02lu:%02lu / %02lu:%02lu",
+                     (unsigned long)(curSec / 60), (unsigned long)(curSec % 60),
+                     (unsigned long)(totalSec / 60), (unsigned long)(totalSec % 60));
+            lv_label_set_text(view->m_timeLabel, timeBuf);
         }
     }
 }
@@ -549,11 +716,11 @@ void VideoPlayerView::playPauseCb(lv_event_t* e) {
 
     if (view->m_isPlaying) {
         view->m_isPlaying = false;
-        if (view->m_videoTimer) lv_timer_pause(view->m_videoTimer);
+        if (view->m_uiTimer) lv_timer_pause(view->m_uiTimer);
         lv_label_set_text(view->m_playBtnLabel, LV_SYMBOL_PLAY);
     } else {
         view->m_isPlaying = true;
-        if (view->m_videoTimer) lv_timer_resume(view->m_videoTimer);
+        if (view->m_uiTimer) lv_timer_resume(view->m_uiTimer);
         lv_label_set_text(view->m_playBtnLabel, LV_SYMBOL_PAUSE);
     }
 }

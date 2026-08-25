@@ -18,6 +18,7 @@
 namespace cbdos {
 namespace bsp {
     void initPersistenceBackend();
+    void initMeshTransportP4();
 }
 }
 
@@ -73,8 +74,9 @@ extern "C" void app_main(void) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando NVS Flash: %s", esp_err_to_name(nvsRet));
     }
 
-    // Inyectar el backend de persistencia NVS
+    // Inyectar el backend de persistencia NVS y Transporte de Malla
     cbdos::bsp::initPersistenceBackend();
+    cbdos::bsp::initMeshTransportP4();
 
     // Cargar configuraciones del sistema desde NVS
     SystemConfig sysCfg;
@@ -85,7 +87,7 @@ extern "C" void app_main(void) {
     // Inicializar Servicio de Hora NTP con zona horaria persistida
     TimeConfig timeCfg;
     ConfigManager::getInstance().loadTime(timeCfg);
-    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str());
+    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str(), timeCfg.enabled);
 
     // 1. Inicializar Subsistema de Almacenamiento (MicroSD / Flash)
     if (!cbdos::storage::init()) {

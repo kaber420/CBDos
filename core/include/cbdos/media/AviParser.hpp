@@ -60,6 +60,10 @@ public:
     size_t readChunkData(const AviChunk& chunk, uint8_t* buffer, size_t bufferSize);
     bool skipChunk(const AviChunk& chunk);
 
+    // Decodifica el siguiente frame de video (MJPEG) y extrae audio intercalado
+    bool decodeNextVideoFrame(uint8_t* outRgb565, uint32_t outWidth, uint32_t outHeight,
+                              uint8_t* outAudioBuf = nullptr, size_t maxAudioSize = 0, size_t* outAudioBytes = nullptr);
+
     bool seekToFrame(uint32_t frameIndex);
     bool rewindToMovi();
 

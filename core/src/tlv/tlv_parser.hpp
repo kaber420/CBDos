@@ -2,6 +2,7 @@
 #include <lvgl.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "tlv_dictionary.hpp"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,24 +21,31 @@ extern "C" {
 #define TYPE_ABS_DROPDOWN  0x19
 #define TYPE_ABS_PANEL     0x1A
 #define TYPE_ABS_CHART     0x1B
+#define TYPE_ABS_ARC       0x1C
+#define TYPE_ABS_SPINNER   0x1D
 #define TYPE_END           0xFE
 
 // Uplink TLV Event Tags
 #define TYPE_REQ_URL          0x01
 #define TYPE_REQ_INPUT_SUBMIT 0x20
 #define TYPE_REQ_LINK_CLICK   0x21
+#define TYPE_REQ_CONTROL_EVT  0x22
 
 // Callback signature for sending uplink binary frames
 typedef void (*tlv_uplink_send_cb_t)(const uint8_t* frame, size_t len);
 
 void tlv_browser_set_uplink_cb(tlv_uplink_send_cb_t cb);
 
+/**
+ * @brief Renderiza una trama binaria TLVGL completa sobre un contenedor LVGL
+ */
 lv_obj_t* tlv_browser_render(lv_obj_t* root_parent, const uint8_t* data, size_t length);
 
 // Builder functions for Uplink TLV frames
 size_t tlv_build_req_url(uint8_t* buf, size_t max_len, const char* url);
 size_t tlv_build_req_submit(uint8_t* buf, size_t max_len, uint8_t element_id, const char* text);
 size_t tlv_build_req_click(uint8_t* buf, size_t max_len, uint8_t link_id);
+size_t tlv_build_req_control(uint8_t* buf, size_t max_len, uint8_t elem_id, int16_t value);
 
 #ifdef __cplusplus
 }

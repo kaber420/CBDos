@@ -34,6 +34,7 @@ private:
     lv_obj_t* m_statusLabel;
     lv_obj_t* m_tzDropdown;
     lv_obj_t* m_dstSwitch;
+    lv_obj_t* m_ntpSwitch;
     lv_obj_t* m_ntpDropdown;
     lv_timer_t* m_clockTimer;
 

@@ -17,7 +17,7 @@ private:
     static void volume_slider_cb(lv_event_t* e);
     static void brightness_slider_cb(lv_event_t* e);
     static void wifi_switch_cb(lv_event_t* e);
-    static void restart_btn_cb(lv_event_t* e);
+    static void radio_mode_dropdown_cb(lv_event_t* e);
 };
 
 } // namespace ui

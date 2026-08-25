@@ -3,6 +3,7 @@
 #include "../themes/DefaultTheme.h"
 #include "cbdos/system.hpp"
 #include "cbdos/network.hpp"
+#include "../../network/TimeService.h"
 #include <cstdio>
 #include <cstring>
 #include <time.h>
@@ -216,6 +217,9 @@ void HeaderBar::setOnClickCallback(ClickCallback cb) {
 
 void HeaderBar::update() {
     if (!m_container || !lv_obj_is_valid(m_container)) return;
+
+    // Actualización y sincronización automática de tiempo (si NTP está activado)
+    TimeService::getInstance().update();
 
     // 1. Reloj NTP Real (HH:MM) - Actualizado cada 15 segundos
     time_t rawtime;
