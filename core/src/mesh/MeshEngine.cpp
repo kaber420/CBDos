@@ -41,6 +41,18 @@ bool MeshEngine::init(uint8_t channel) {
 
     if (m_transport->init(channel)) {
         m_running = true;
+
+        uint8_t mac[6] = {0};
+        if (getMacAddress(mac)) {
+            if (m_localUuid == 0) {
+                // IPv4 Mesh: 10.MAC[3].MAC[4].MAC[5] (RFC 1918)
+                m_localUuid = (10 << 24) | (static_cast<uint32_t>(mac[3]) << 16) | (static_cast<uint32_t>(mac[4]) << 8) | static_cast<uint32_t>(mac[5]);
+            }
+            if (m_localShortId == 0) {
+                // Short ID candidato natural: 0xMAC[4]MAC[5]
+                m_localShortId = (static_cast<uint16_t>(mac[4]) << 8) | static_cast<uint16_t>(mac[5]);
+            }
+        }
         return true;
     }
     return false;

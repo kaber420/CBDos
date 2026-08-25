@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Servidor Gateway Asíncrono TLVGL / Mesh para CBDos.
-Escucha peticiones por TCP (WiFi) y por Serial (Dongle USB ESP-NOW) simultáneamente,
-compilando HTML a TLVGL super denso en tiempo real.
+Integra el motor GatewayRouter con Tabla Pseudo-ARP (10.x.y.z IPv4 Mesh + DAD),
+enrutamiento por Service ID y Proxy Web de transcodificación.
 """
 
 import asyncio
@@ -10,9 +10,8 @@ import argparse
 import struct
 import re
 from pathlib import Path
-from collections import OrderedDict
 
-from tlvgl_compiler import TLVGLCompiler, MAX_W, MAX_H
+from gateway_router import GatewayRouter
 from serial_transport import SerialEspNowTransport
 import mesh_proto as MESH
 
@@ -21,94 +20,13 @@ CONTENT_DIR = Path(__file__).parent / "content"
 
 
 class TLVGLServer:
-    def __init__(self, content_dir: Path = CONTENT_DIR, max_w: int = MAX_W, max_h: int = MAX_H):
-        self.content_dir = Path(content_dir)
-        self.content_dir.mkdir(parents=True, exist_ok=True)
-        self.max_w = max_w
-        self.max_h = max_h
-        self.compiler = TLVGLCompiler()
-        self.cache = OrderedDict()
-        self.cache_limit = 64
+    def __init__(self, content_dir: Path = CONTENT_DIR):
+        self.router = GatewayRouter(content_dir=content_dir)
 
-    def _resolve_mesh_url(self, url: str) -> str:
-        url = url.strip()
-        url = re.sub(r'^https?:/+', '', url, flags=re.IGNORECASE)
-
-        for suffix in ('.mesh', '.tlvgl', '.html'):
-            if url.endswith(suffix):
-                url = url[: -len(suffix)]
-                break
-        url = url.split('#')[0].split('?')[0].rstrip('/')
-        if not url or url == 'home' or url == 'index':
-            return 'index.html'
-        return url + '.html'
-
-    def _compile_or_cache(self, filename: str, w: int, h: int) -> bytes | None:
-        target_path = (self.content_dir / filename).resolve()
-        if not target_path.is_file():
-            return None
-
-        mtime = target_path.stat().st_mtime
-        cache_key = (filename, w, h, mtime)
-        if cache_key in self.cache:
-            return self.cache[cache_key]
-
-        try:
-            with open(target_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-            tlv_bytes = self.compiler.compile(html_content, w, h)
-            self.cache[cache_key] = tlv_bytes
-            if len(self.cache) > self.cache_limit:
-                self.cache.popitem(last=False)
-            return tlv_bytes
-        except Exception as e:
-            print(f"❌ Error compilando {filename}: {e}")
-            return None
-
-    def process_mesh_packet(self, data: bytes) -> bytes:
-        """Procesa una trama binaria MeshHeader + TLV y devuelve el paquete binario de respuesta."""
-        if len(data) < 3:
-            return b""
-
-        hdr, hdr_len = MESH.parse_mesh_header(data)
-        if not hdr:
-            return b""
-
-        tlv_data = data[hdr_len:]
-        tag, value = MESH.parse_uplink_tlv(tlv_data)
-
-        req_url = "home.mesh"
-        if tag == MESH.TYPE_REQ_URL:
-            req_url = value.decode('utf-8', errors='ignore')
-            print(f"🌐 [Mesh] REQ_URL: '{req_url}'")
-        elif tag == MESH.TYPE_REQ_LINK_CLICK:
-            link_id = value[0] if len(value) > 0 else 0
-            req_url = self.compiler.last_link_map.get(link_id, f"link_{link_id}.mesh")
-            print(f"🖱️ [Mesh] LINK_CLICK #{link_id} → '{req_url}'")
-        elif tag == MESH.TYPE_REQ_INPUT_SUBMIT:
-            elem_id = value[0] if len(value) > 0 else 0
-            txt = value[1:].decode('utf-8', errors='ignore')
-            print(f"⌨️ [Mesh] INPUT_SUBMIT #{elem_id}: '{txt}'")
-        elif tag == MESH.TYPE_REQ_CONTROL_EVT:
-            elem_id = value[0] if len(value) > 0 else 0
-            val = struct.unpack(">h", value[1:3])[0] if len(value) >= 3 else 0
-            print(f"🎛️ [Mesh] CONTROL_EVT #{elem_id}: {val}")
-
-        clean_file = self._resolve_mesh_url(req_url)
-        tlv_bytes = self._compile_or_cache(clean_file, self.max_w, self.max_h)
-        if tlv_bytes is None:
-            tlv_bytes = self._compile_or_cache("index.html", self.max_w, self.max_h)
-
-        if tlv_bytes is None:
-            tlv_bytes = b"PH\x10\x00\x00\xfe"
-        else:
-            tlv_bytes = b"PH" + tlv_bytes
-
-        resp_hdr = MESH.build_response_header(
-            MESH.MESH_CTRL_DST_ONLY | MESH.MESH_SVC_TLVGL_RESPONSE,
-            hdr['dst_id'] if hdr['dst_id'] != 0 else 0x0001
-        )
-        return resp_hdr + tlv_bytes
+    def process_mesh_packet(self, data: bytes, src_mac: bytes = b"", rssi: int = 0) -> bytes:
+        """Delega el procesamiento al motor GatewayRouter."""
+        resp = self.router.route_and_process(data, src_mac=src_mac, rssi=rssi)
+        return resp if resp else b""
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         peer = writer.get_extra_info('peername')
@@ -120,7 +38,7 @@ class TLVGLServer:
                 return
 
             # 1. ¿Trama MeshHeader binaria?
-            if len(data) >= 3 and (data[0] & 0x07) in (MESH.MESH_SVC_TLVGL_REQUEST, MESH.MESH_SVC_PROXY):
+            if len(data) >= 3 and (data[0] & 0x0F) in (MESH.MESH_SVC_TLVGL_REQUEST, MESH.MESH_SVC_PROXY, 0x07, 0x0F):
                 resp = self.process_mesh_packet(data)
                 if resp:
                     writer.write(resp)
@@ -128,13 +46,13 @@ class TLVGLServer:
                     print(f"[{peer_str}] 📤 Enviados {len(resp)} bytes por TCP")
                 return
 
-            # 2. Petición HTTP estándar
+            # 2. Petición HTTP estándar (Legacy / Fallback)
             first_line = data.split(b"\r\n")[0].decode('utf-8', errors='ignore')
             m = re.match(r'GET\s+/([^\s?#]*)', first_line)
             if m:
                 path = m.group(1)
-                clean_file = self._resolve_mesh_url(path)
-                tlv_bytes = self._compile_or_cache(clean_file, self.max_w, self.max_h)
+                clean_file = self.router._resolve_mesh_url(path)
+                tlv_bytes = self.router._compile_or_cache(clean_file)
                 if tlv_bytes:
                     payload = b"PH" + tlv_bytes
                     http_resp = (
@@ -176,14 +94,44 @@ def on_espnow_packet_received(data: bytes, transport: SerialEspNowTransport, ser
         transport.send_packet(resp, msg_id=msg_id)
 
 
+import os
+
+
+def load_config_file(conf_path: Path) -> dict:
+    """Carga variables simples clave=valor desde gateway.conf."""
+    conf = {}
+    if conf_path.is_file():
+        try:
+            with open(conf_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        conf[k.strip().upper()] = v.strip()
+        except Exception as e:
+            print(f"⚠️ Error leyendo {conf_path}: {e}")
+    return conf
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Servidor Gateway TLVGL para CBDos")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Puerto TCP (default: {DEFAULT_PORT})")
-    parser.add_argument("--serial", type=str, default="", help="Puerto Serial del Dongle USB ESP-NOW (ej: /dev/ttyACM1)")
-    parser.add_argument("--content-dir", type=str, default=str(CONTENT_DIR), help="Directorio de contenido HTML")
+    conf_file = Path(__file__).parent / "gateway.conf"
+    cfg = load_config_file(conf_file)
+
+    default_port = int(cfg.get("PORT", DEFAULT_PORT))
+    default_serial = cfg.get("SERIAL_PORT", "")
+    default_debug = cfg.get("DEBUG", "false").lower() in ("true", "1", "yes") or os.environ.get("CBDOS_DEBUG", "0") in ("1", "true") or os.environ.get("DEBUG", "0") in ("1", "true")
+    default_content = cfg.get("CONTENT_DIR", str(CONTENT_DIR))
+
+    parser = argparse.ArgumentParser(description="Servidor Gateway-Router TLVGL para CBDos")
+    parser.add_argument("--port", type=int, default=default_port, help=f"Puerto TCP (default: {default_port})")
+    parser.add_argument("--serial", type=str, default=default_serial, help="Puerto Serial del Dongle USB ESP-NOW (ej: /dev/ttyACM0)")
+    parser.add_argument("--content-dir", type=str, default=default_content, help="Directorio de contenido HTML")
+    parser.add_argument("-d", "--debug", action="store_true", default=default_debug, help="Habilita modo desarrollo/debug con telemetría detallada")
     args = parser.parse_args()
 
     server = TLVGLServer(content_dir=Path(args.content_dir))
+    server.router.debug = args.debug
+
     serial_transport = None
 
     if args.serial:
@@ -195,7 +143,8 @@ if __name__ == '__main__':
 
     async def main():
         srv = await asyncio.start_server(server.handle_client, '0.0.0.0', args.port)
-        print(f"🚀 Servidor TLVGL Gateway activo en TCP puerto {args.port}")
+        mode_str = "🟢 MODO DESARROLLO (Telemetría Detallada)" if args.debug else "⚪ MODO PRODUCCIÓN (Logs Compactos)"
+        print(f"🚀 Gateway-Router TLVGL activo en TCP puerto {args.port} | {mode_str}")
         if args.serial:
             print(f"📻 Puente Dongle USB ESP-NOW activo en {args.serial}")
         print(f"📁 Directorio de contenido: {args.content_dir}")
@@ -208,3 +157,4 @@ if __name__ == '__main__':
         print("\nServidor detenido.")
         if serial_transport:
             serial_transport.stop()
+
