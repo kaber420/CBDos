@@ -2,8 +2,8 @@
 -- @icon: LV_SYMBOL_EDIT
 -- @accent: #38BDF8
 -- @author: CyberDeck Team
--- @version: 1.0
--- @description: Suite retro de dibujo y pixel art tipo MS Paint con zoom, herramientas completas y exportador BMP
+-- @version: 1.1
+-- @description: Suite retro de dibujo tipo MS Paint con dropdowns compactos, herramientas y exportador BMP
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Paletas de Colores Disponibles
@@ -37,7 +37,7 @@ local PALETTES = {
         }
     },
     {
-        name = "GameBoy (4-Tonos)",
+        name = "GameBoy",
         colors = {
             0x0F380F, 0x306230, 0x8BAC0F, 0x9BBC0F,
             0x0F380F, 0x306230, 0x8BAC0F, 0x9BBC0F,
@@ -47,13 +47,34 @@ local PALETTES = {
     }
 }
 
+-- Mapeo de herramientas por índice del Dropdown (0-indexed en LVGL)
+local TOOL_MAP = {
+    [0] = "pencil",
+    [1] = "brush",
+    [2] = "eraser",
+    [3] = "bucket",
+    [4] = "picker",
+    [5] = "line",
+    [6] = "rect",
+    [7] = "circle",
+    [8] = "text"
+}
+
+local THICKNESS_MAP = {
+    [0] = 1,
+    [1] = 2,
+    [2] = 4,
+    [3] = 8,
+    [4] = 16
+}
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Estado de la Aplicación
 -- ─────────────────────────────────────────────────────────────────────────────
 local currentPaletteIdx = 1
 local primaryColor = 0xFFFFFF
 local secondaryColor = 0x000000
-local currentTool = "pencil" -- pencil, brush, eraser, bucket, picker, line, rect, circle, text
+local currentTool = "pencil"
 local brushSize = 2
 local shapeFilled = false
 
@@ -64,9 +85,8 @@ local CANVAS_H = 340
 -- Objetos UI
 local canvas = nil
 local lblStatus = nil
-local lblToolInfo = nil
-local lblColorPreview = nil
-local paletteButtons = {}
+local palCardContainer = nil
+local palButtons = {}
 
 -- Puntos de Trazo / Geometría
 local startX, startY = 0, 0
@@ -94,7 +114,6 @@ local function draw_brush_point(cx, cy, color, size)
     end
 end
 
--- Interpolación lineal para trazo continuo suave (Bresenham)
 local function draw_brush_line(x0, y0, x1, y1, color, size)
     local dx = math.abs(x1 - x0)
     local dy = -math.abs(y1 - y0)
@@ -123,7 +142,6 @@ end
 local function handle_canvas_touch(event, x, y)
     if not canvas then return end
 
-    -- Clamping de coordenadas
     x = math.max(0, math.min(CANVAS_W - 1, x))
     y = math.max(0, math.min(CANVAS_H - 1, y))
 
@@ -143,11 +161,11 @@ local function handle_canvas_touch(event, x, y)
             cbdos.canvas.refresh(canvas)
         elseif currentTool == "bucket" then
             cbdos.canvas.flood_fill(canvas, x, y, primaryColor)
-            update_status(string.format("Relleno completado en (%d, %d)", x, y))
+            update_status(string.format("Relleno en (%d, %d)", x, y))
         elseif currentTool == "picker" then
             local picked = cbdos.canvas.get_px(canvas, x, y)
             primaryColor = picked
-            update_status(string.format("Color seleccionado: #%06X", picked))
+            update_status(string.format("Color obtenido: #%06X", picked))
         elseif currentTool == "text" then
             cbdos.canvas.draw_text(canvas, x, y, "CBDos", primaryColor, math.max(1, math.floor(brushSize / 2)))
             cbdos.canvas.refresh(canvas)
@@ -193,19 +211,6 @@ local function handle_canvas_touch(event, x, y)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Actualización de Paleta en Pantalla
--- ─────────────────────────────────────────────────────────────────────────────
-local function refresh_palette_ui(rowObj)
-    local curPal = PALETTES[currentPaletteIdx]
-    for i, hex in ipairs(curPal.colors) do
-        local btn = paletteButtons[i]
-        if btn then
-            -- Botón de color directo
-        end
-    end
-end
-
--- ─────────────────────────────────────────────────────────────────────────────
 -- Guardado BMP en MicroSD
 -- ─────────────────────────────────────────────────────────────────────────────
 local function save_drawing_bmp()
@@ -214,7 +219,7 @@ local function save_drawing_bmp()
     local ok = cbdos.canvas.save_bmp(canvas, filename)
     if ok then
         cbdos.ui.show_toast("Guardado: " .. filename)
-        update_status("Guardado con éxito en: " .. filename)
+        update_status("Guardado con exito en " .. filename)
         cbdos.audio.beep(880, 80)
     else
         cbdos.ui.show_toast("Error al guardar BMP en MicroSD")
@@ -228,82 +233,30 @@ end
 function on_create(parent)
     local mainCard = cbdos.ui.create_card(parent, -1, -1)
 
-    -- 1. Barra de Herramientas Superior
-    local toolRow = cbdos.ui.create_row(mainCard)
-    
-    cbdos.ui.create_button(toolRow, "✎ Lapiz", function()
-        currentTool = "pencil"
-        update_status("Modo: Lapiz 1px (Pixel Art)")
+    -- 1. Barra Compacta de Dropdowns de Control
+    local topRow = cbdos.ui.create_row(mainCard)
+
+    -- Dropdown de Herramientas
+    cbdos.ui.create_dropdown(topRow, "Lapiz\nPincel\nBorrador\nBote\nGotero\nLinea\nRectangulo\nCirculo\nTexto", function(selIdx, strVal)
+        currentTool = TOOL_MAP[selIdx] or "pencil"
+        update_status("Herramienta: " .. strVal)
     end)
 
-    cbdos.ui.create_button(toolRow, "🖌 Pincel", function()
-        currentTool = "brush"
-        update_status("Modo: Pincel continuo")
+    -- Dropdown de Grosor
+    cbdos.ui.create_dropdown(topRow, "1 px\n2 px\n4 px\n8 px\n16 px", function(selIdx, strVal)
+        brushSize = THICKNESS_MAP[selIdx] or 2
+        update_status("Grosor: " .. strVal)
     end)
 
-    cbdos.ui.create_button(toolRow, "▧ Borrador", function()
-        currentTool = "eraser"
-        update_status("Modo: Borrador")
+    -- Dropdown de Modo de Forma
+    cbdos.ui.create_dropdown(topRow, "Borde\nSolido", function(selIdx, strVal)
+        shapeFilled = (selIdx == 1)
+        update_status("Modo forma: " .. strVal)
     end)
 
-    cbdos.ui.create_button(toolRow, "🪣 Bote", function()
-        currentTool = "bucket"
-        update_status("Modo: Bote de Pintura (Relleno)")
-    end)
-
-    cbdos.ui.create_button(toolRow, "💉 Gotero", function()
-        currentTool = "picker"
-        update_status("Modo: Cuentagotas (Muestrear color)")
-    end)
-
-    -- Segunda fila de herramientas geométricas y acciones
-    local shapeRow = cbdos.ui.create_row(mainCard)
-
-    cbdos.ui.create_button(shapeRow, "╱ Linea", function()
-        currentTool = "line"
-        update_status("Modo: Linea recta")
-    end)
-
-    cbdos.ui.create_button(shapeRow, "▢ Rect", function()
-        currentTool = "rect"
-        update_status("Modo: Rectangulo")
-    end)
-
-    cbdos.ui.create_button(shapeRow, "◯ Circulo", function()
-        currentTool = "circle"
-        update_status("Modo: Circulo")
-    end)
-
-    cbdos.ui.create_button(shapeRow, "🔤 Texto", function()
-        currentTool = "text"
-        update_status("Modo: Estampar texto")
-    end)
-
-    cbdos.ui.create_button(shapeRow, shapeFilled and "⬛ Lleno" or "⬚ Borde", function(btn)
-        shapeFilled = not shapeFilled
-        cbdos.ui.show_toast(shapeFilled and "Formas: Relleno solido" or "Formas: Solo contorno")
-    end)
-
-    cbdos.ui.create_button(shapeRow, "🗑 Limpiar", function()
-        cbdos.canvas.fill(canvas, secondaryColor)
-        cbdos.ui.show_toast("Lienzo limpio")
-        update_status("Lienzo reiniciado")
-    end)
-
-    cbdos.ui.create_button(shapeRow, "💾 Guardar", function()
-        save_drawing_bmp()
-    end)
-
-    -- 2. Selector de Grosor y Paleta
-    local optRow = cbdos.ui.create_row(mainCard)
-    
-    cbdos.ui.create_button(optRow, "Grosor: 1px", function() brushSize = 1; update_status("Grosor: 1px") end)
-    cbdos.ui.create_button(optRow, "Grosor: 2px", function() brushSize = 2; update_status("Grosor: 2px") end)
-    cbdos.ui.create_button(optRow, "Grosor: 4px", function() brushSize = 4; update_status("Grosor: 4px") end)
-    cbdos.ui.create_button(optRow, "Grosor: 8px", function() brushSize = 8; update_status("Grosor: 8px") end)
-
-    cbdos.ui.create_button(optRow, "🎨 Paleta: " .. PALETTES[currentPaletteIdx].name, function(btn)
-        currentPaletteIdx = (currentPaletteIdx % #PALETTES) + 1
+    -- Dropdown de Paleta
+    cbdos.ui.create_dropdown(topRow, "Clasica\nPICO-8\nCyberpunk\nGameBoy", function(selIdx, strVal)
+        currentPaletteIdx = selIdx + 1
         local pal = PALETTES[currentPaletteIdx]
         primaryColor = pal.colors[1]
         secondaryColor = pal.colors[#pal.colors]
@@ -311,7 +264,18 @@ function on_create(parent)
         update_status("Paleta cambiada a " .. pal.name)
     end)
 
-    -- 3. Área del Lienzo Central
+    -- Acciones rápidas
+    cbdos.ui.create_button(topRow, "Limpiar", function()
+        cbdos.canvas.fill(canvas, secondaryColor)
+        cbdos.ui.show_toast("Lienzo limpio")
+        update_status("Lienzo reiniciado")
+    end)
+
+    cbdos.ui.create_button(topRow, "Guardar", function()
+        save_drawing_bmp()
+    end)
+
+    -- 2. Área del Lienzo Central (Canvas Sunken Card)
     local canvasCard = cbdos.ui.create_sunken_card(mainCard, CANVAS_W + 16, CANVAS_H + 16)
     canvas = cbdos.ui.create_canvas(canvasCard, CANVAS_W, CANVAS_H)
     if canvas then
@@ -319,8 +283,8 @@ function on_create(parent)
         cbdos.canvas.on_touch(canvas, handle_canvas_touch)
     end
 
-    -- 4. Barra de Paleta de Colores Rápida (16 botones)
-    local palCard = cbdos.ui.create_card(mainCard, -1, 70)
+    -- 3. Paleta de Colores Rápida (Filas compactas de 8 colores)
+    local palCard = cbdos.ui.create_card(mainCard, -1, 72)
     local palRow1 = cbdos.ui.create_row(palCard)
     local palRow2 = cbdos.ui.create_row(palCard)
 
@@ -340,8 +304,8 @@ function on_create(parent)
         end)
     end
 
-    -- 5. Barra de Estado
-    lblStatus = cbdos.ui.create_label(mainCard, "CBD Paint listo. Toca y arrastra para dibujar.")
+    -- 4. Barra de Estado
+    lblStatus = cbdos.ui.create_label(mainCard, "CBD Paint listo. Selecciona herramienta o color.")
     cbdos.ui.set_color(lblStatus, 0x38BDF8)
     cbdos.ui.set_font_size(lblStatus, 12)
 
@@ -353,5 +317,5 @@ function on_show()
 end
 
 function on_destroy()
-    print("[CBD Paint] Aplicación cerrada.")
+    print("[CBD Paint] Aplicacion cerrada.")
 end

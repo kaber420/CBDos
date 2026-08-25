@@ -537,6 +537,83 @@ static int lua_ui_create_column(lua_State* L) {
     return 1;
 }
 
+static int lua_ui_create_dropdown(lua_State* L) {
+    lv_obj_t* parent = get_target_parent(L, 1);
+    const char* options = luaL_checkstring(L, 2);
+
+    lv_obj_t* dd = lv_dropdown_create(parent);
+    lv_dropdown_set_options(dd, options);
+    lv_obj_set_size(dd, LV_SIZE_CONTENT, 36);
+    lv_obj_set_style_bg_color(dd, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_border_color(dd, lv_color_hex(0x334155), 0);
+    lv_obj_set_style_border_width(dd, 1, 0);
+    lv_obj_set_style_radius(dd, 6, 0);
+    lv_obj_set_style_pad_hor(dd, 10, 0);
+    lv_obj_set_style_pad_ver(dd, 6, 0);
+    lv_obj_set_style_text_color(dd, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_12, 0);
+
+    if (lua_isfunction(L, 3)) {
+        lua_pushvalue(L, 3);
+        int fnRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+        auto* data = new LuaUIEventData{ L, fnRef };
+        lv_obj_add_event_cb(dd, [](lv_event_t* e) {
+            auto* d = static_cast<LuaUIEventData*>(lv_event_get_user_data(e));
+            if (!d) return;
+            lv_event_code_t code = lv_event_get_code(e);
+            if (code == LV_EVENT_DELETE) {
+                if (d->L && d->fnRef != LUA_NOREF) {
+                    luaL_unref(d->L, LUA_REGISTRYINDEX, d->fnRef);
+                }
+                delete d;
+                return;
+            }
+            if (code == LV_EVENT_VALUE_CHANGED && d->L && d->fnRef != LUA_NOREF) {
+                lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+                uint32_t sel = lv_dropdown_get_selected(target);
+                char buf[64];
+                lv_dropdown_get_selected_str(target, buf, sizeof(buf));
+
+                lua_rawgeti(d->L, LUA_REGISTRYINDEX, d->fnRef);
+                if (lua_isfunction(d->L, -1)) {
+                    lua_pushinteger(d->L, sel);
+                    lua_pushstring(d->L, buf);
+                    if (lua_pcall(d->L, 2, 0, 0) != 0) {
+                        const char* err = lua_tostring(d->L, -1);
+                        printf("[Dropdown Event Error] %s\n", err ? err : "Unknown");
+                        lua_pop(d->L, 1);
+                    }
+                } else {
+                    lua_pop(d->L, 1);
+                }
+            }
+        }, LV_EVENT_ALL, data);
+    }
+
+    lua_pushlightuserdata(L, dd);
+    return 1;
+}
+
+static int lua_ui_get_selected(lua_State* L) {
+    lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, 1);
+    if (obj && lv_obj_is_valid(obj)) {
+        lua_pushinteger(L, lv_dropdown_get_selected(obj));
+        return 1;
+    }
+    lua_pushinteger(L, 0);
+    return 1;
+}
+
+static int lua_ui_set_selected(lua_State* L) {
+    lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, 1);
+    uint32_t idx = (uint32_t)luaL_checkinteger(L, 2);
+    if (obj && lv_obj_is_valid(obj)) {
+        lv_dropdown_set_selected(obj, idx);
+    }
+    return 0;
+}
+
 static int lua_ui_set_size(lua_State* L) {
     lv_obj_t* obj = (lv_obj_t*)lua_touserdata(L, 1);
     int32_t w = (int32_t)luaL_checkinteger(L, 2);
@@ -1421,6 +1498,12 @@ void LuaBridge::registerUIAPI(lua_State* L) {
     lua_setfield(L, -2, "set_font_size");
     lua_pushcfunction(L, lua_ui_create_button);
     lua_setfield(L, -2, "create_button");
+    lua_pushcfunction(L, lua_ui_create_dropdown);
+    lua_setfield(L, -2, "create_dropdown");
+    lua_pushcfunction(L, lua_ui_get_selected);
+    lua_setfield(L, -2, "get_selected");
+    lua_pushcfunction(L, lua_ui_set_selected);
+    lua_setfield(L, -2, "set_selected");
     lua_pushcfunction(L, lua_ui_create_slider);
     lua_setfield(L, -2, "create_slider");
     lua_pushcfunction(L, lua_ui_create_switch);
