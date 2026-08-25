@@ -470,6 +470,21 @@ void VideoPlayerView::videoTimerCb(lv_timer_t* timer) {
 
             const auto& info = view->m_mp4Parser.getInfo();
             uint32_t curSample = view->m_mp4Parser.getCurrentVideoSample();
+
+            // Decodificar tramas de audio correspondientes a este frame de video
+            if (info.hasAudio && info.totalVideoSamples > 0 && info.totalAudioSamples > 0) {
+                static int16_t s_pcmBuf[2048 * 2];
+                size_t outSamples = 0;
+                while ((uint64_t)view->m_mp4Parser.getCurrentAudioSample() * info.totalVideoSamples <=
+                       (uint64_t)curSample * info.totalAudioSamples) {
+                    if (view->m_mp4Parser.decodeNextAudioPcm(s_pcmBuf, 2048 * 2, outSamples) && outSamples > 0) {
+                        cbdos::audio::writeAudio(s_pcmBuf, outSamples * sizeof(int16_t));
+                    } else {
+                        break;
+                    }
+                }
+            }
+
             if (info.totalVideoSamples > 0) {
                 uint32_t pct = (curSample * 100) / info.totalVideoSamples;
                 lv_slider_set_value(view->m_seekSlider, pct, LV_ANIM_OFF);

@@ -43,6 +43,9 @@ public:
     // Lee la siguiente trama de audio AAC (con cabecera ADTS lista para Helix AAC)
     bool readNextAudioFrame(uint8_t* outBuffer, size_t maxBufferSize, size_t& outFrameSize);
 
+    // Decodifica la siguiente trama de audio AAC a PCM estéreo 16 bits (para enviar a I2S)
+    bool decodeNextAudioPcm(int16_t* outPcm, size_t maxSamples, size_t& outSamples);
+
     bool seekToSample(uint32_t sampleIndex);
 
 private:
@@ -60,8 +63,14 @@ private:
     uint8_t* m_nalBuffer{nullptr};
     size_t m_nalBufferSize{0};
 
+    void* m_aacDecoder{nullptr};  // Helix HAACDecoder
+    uint8_t* m_aacRawBuf{nullptr};
+    size_t m_aacRawBufSize{0};
+
     bool initH264Decoder();
     void cleanupH264Decoder();
+    bool initAacDecoder();
+    void cleanupAacDecoder();
     void yuv420ToRgb565(const uint8_t* y, const uint8_t* u, const uint8_t* v,
                         uint32_t srcWidth, uint32_t srcHeight,
                         uint8_t* dstRgb565, uint32_t dstWidth, uint32_t dstHeight);

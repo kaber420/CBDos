@@ -17,6 +17,7 @@
 extern "C" {
 #include "libh264/h264bsd_decoder.h"
 #include "libh264/h264bsd_storage.h"
+#include "aacdec.h"
 }
 
 namespace cbdos {
@@ -154,6 +155,10 @@ bool Mp4Parser::open(const std::string& filepath) {
         return false;
     }
 
+    if (m_info.hasAudio && m_audioTrack >= 0) {
+        initAacDecoder();
+    }
+
     m_currentVideoSample = 0;
     m_currentAudioSample = 0;
     return true;
@@ -161,6 +166,7 @@ bool Mp4Parser::open(const std::string& filepath) {
 
 void Mp4Parser::close() {
     cleanupH264Decoder();
+    cleanupAacDecoder();
     if (m_demuxer) {
         MP4D_demux_t* demux = (MP4D_demux_t*)m_demuxer;
         MP4D_close(demux);
@@ -251,9 +257,6 @@ bool Mp4Parser::seekToSample(uint32_t sampleIndex) {
 }
 
 bool Mp4Parser::decodeNextVideoFrame(uint8_t* outRgb565, uint32_t outWidth, uint32_t outHeight) {
-    static uint32_t s_callCount = 0;
-    bool verbose = (s_callCount < 20 || (s_callCount % 100 == 0));
-    s_callCount++;
     if (!m_file || !m_demuxer || !m_h264Decoder || !outRgb565 || outWidth == 0 || outHeight == 0) return false;
     MP4D_demux_t* demux = (MP4D_demux_t*)m_demuxer;
     storage_t* storage = (storage_t*)m_h264Decoder;
@@ -284,12 +287,7 @@ bool Mp4Parser::decodeNextVideoFrame(uint8_t* outRgb565, uint32_t outWidth, uint
     MP4D_file_offset_t offset = MP4D_frame_offset(demux, m_videoTrack, m_currentVideoSample, &frameBytes, &timestamp, &duration);
     m_currentVideoSample++;
 
-    if (verbose) ESP_LOGI(TAG, "[%lu] sample=%lu frameBytes=%u offset=%llu",
-        (unsigned long)s_callCount, (unsigned long)(m_currentVideoSample-1),
-        frameBytes, (unsigned long long)offset);
-
     if (frameBytes == 0 || offset == 0) {
-        ESP_LOGW(TAG, "[%lu] sample=%lu SKIP (empty)", (unsigned long)s_callCount, (unsigned long)(m_currentVideoSample-1));
         return false;
     }
 
@@ -342,20 +340,14 @@ bool Mp4Parser::decodeNextVideoFrame(uint8_t* outRgb565, uint32_t outWidth, uint
         // Si readBytes == 0: el decoder está en estado pendingActivation (2do paso de init).
         // DEBE llamarse de nuevo con el MISMO bytePtr — no avanzar nada.
 
-        if (verbose) ESP_LOGI(TAG, "  h264bsdDecode st=%lu rb=%lu bytesLeft=%lu",
-            (unsigned long)status, (unsigned long)readBytes, (unsigned long)bytesLeft);
-
         if (status == H264BSD_PIC_RDY) {
             pic = h264bsdNextOutputPicture(storage, &picId, &isIdr, &numErr);
-            if (verbose) ESP_LOGI(TAG, "  PIC_RDY pic=%s", pic ? "OK" : "NULL");
             if (pic) break;
         } else if (status == H264BSD_HDRS_RDY) {
-            if (verbose) ESP_LOGI(TAG, "  HDRS_RDY → retry same ptr");
             continue;
         } else if (status == H264BSD_ERROR ||
                    status == H264BSD_PARAM_SET_ERROR ||
                    status == H264BSD_MEMALLOC_ERROR) {
-            ESP_LOGW(TAG, "  DECODE_ERR=%lu sample=%lu", (unsigned long)status, (unsigned long)m_currentVideoSample);
             break;
         }
     }
@@ -363,7 +355,6 @@ bool Mp4Parser::decodeNextVideoFrame(uint8_t* outRgb565, uint32_t outWidth, uint
     if (pic) {
         u32 picW = h264bsdPicWidth(storage) * 16;
         u32 picH = h264bsdPicHeight(storage) * 16;
-        if (verbose) ESP_LOGI(TAG, "  → FRAME OK %lux%lu", (unsigned long)picW, (unsigned long)picH);
         if (picW > 0 && picH > 0) {
             const u8* y = pic;
             const u8* u = y + (picW * picH);
@@ -371,14 +362,31 @@ bool Mp4Parser::decodeNextVideoFrame(uint8_t* outRgb565, uint32_t outWidth, uint
             yuv420ToRgb565(y, u, v, picW, picH, outRgb565, outWidth, outHeight);
             return true;
         }
-    } else {
-        if (verbose) ESP_LOGW(TAG, "  → NO FRAME (call=%lu sample=%lu)", (unsigned long)s_callCount, (unsigned long)m_currentVideoSample);
     }
 
     return false;
 }
 
 
+
+bool Mp4Parser::initAacDecoder() {
+    cleanupAacDecoder();
+    if (m_audioTrack < 0 || !m_info.hasAudio) return true;
+    m_aacDecoder = AACInitDecoder();
+    return m_aacDecoder != nullptr;
+}
+
+void Mp4Parser::cleanupAacDecoder() {
+    if (m_aacDecoder) {
+        AACFreeDecoder((HAACDecoder)m_aacDecoder);
+        m_aacDecoder = nullptr;
+    }
+    if (m_aacRawBuf) {
+        free(m_aacRawBuf);
+        m_aacRawBuf = nullptr;
+        m_aacRawBufSize = 0;
+    }
+}
 
 bool Mp4Parser::readNextAudioFrame(uint8_t* outBuffer, size_t maxBufferSize, size_t& outFrameSize) {
     outFrameSize = 0;
@@ -430,15 +438,74 @@ bool Mp4Parser::readNextAudioFrame(uint8_t* outBuffer, size_t maxBufferSize, siz
     return true;
 }
 
-// Conversor de planos YUV420 a RGB565 con conservación de aspect-ratio (Letterbox)
+bool Mp4Parser::decodeNextAudioPcm(int16_t* outPcm, size_t maxSamples, size_t& outSamples) {
+    outSamples = 0;
+    if (!m_file || !m_demuxer || m_audioTrack < 0 || !m_aacDecoder || !outPcm || maxSamples == 0) return false;
+
+    if (m_currentAudioSample >= m_info.totalAudioSamples) return false;
+
+    if (!m_aacRawBuf) {
+        m_aacRawBufSize = 8192;
+        m_aacRawBuf = (uint8_t*)malloc(m_aacRawBufSize);
+        if (!m_aacRawBuf) return false;
+    }
+
+    size_t adtsBytes = 0;
+    if (!readNextAudioFrame(m_aacRawBuf, m_aacRawBufSize, adtsBytes) || adtsBytes == 0) {
+        return false;
+    }
+
+    unsigned char* inPtr = m_aacRawBuf;
+    int bytesLeft = (int)adtsBytes;
+
+    int err = AACDecode((HAACDecoder)m_aacDecoder, &inPtr, &bytesLeft, (short*)outPcm);
+    if (err != 0) {
+        return false;
+    }
+
+    AACFrameInfo frameInfo;
+    AACGetLastFrameInfo((HAACDecoder)m_aacDecoder, &frameInfo);
+    outSamples = frameInfo.outputSamps;
+    return (outSamples > 0);
+}
+
+// Tablas precalculadas de coeficientes YUV a RGB
+static int16_t s_r_v[256];
+static int16_t s_g_u[256];
+static int16_t s_g_v[256];
+static int16_t s_b_u[256];
+static uint8_t s_clamp[1024];
+static bool s_lut_inited = false;
+
+static void initYuvLut() {
+    if (s_lut_inited) return;
+    for (int i = 0; i < 256; i++) {
+        int val = i - 128;
+        s_r_v[i] = (int16_t)((1436 * val) >> 10);
+        s_g_u[i] = (int16_t)((352 * val) >> 10);
+        s_g_v[i] = (int16_t)((731 * val) >> 10);
+        s_b_u[i] = (int16_t)((1815 * val) >> 10);
+    }
+    for (int i = 0; i < 1024; i++) {
+        int v = i - 256;
+        if (v < 0) s_clamp[i] = 0;
+        else if (v > 255) s_clamp[i] = 255;
+        else s_clamp[i] = (uint8_t)v;
+    }
+    s_lut_inited = true;
+}
+
+// Conversor ultrarrápido de YUV420 a RGB565 (optimizado con LUTs y escritura de 32 bits)
 void Mp4Parser::yuv420ToRgb565(const uint8_t* y, const uint8_t* u, const uint8_t* v,
                                uint32_t srcWidth, uint32_t srcHeight,
                                uint8_t* dstRgb565, uint32_t dstWidth, uint32_t dstHeight) {
     if (!y || !u || !v || !dstRgb565 || srcWidth == 0 || srcHeight == 0 || dstWidth == 0 || dstHeight == 0) return;
 
+    initYuvLut();
+    const uint8_t* const clamp = s_clamp + 256;
     uint16_t* dst = (uint16_t*)dstRgb565;
 
-    // Calcular dimensiones de escalado proporcional (mantener aspect ratio)
+    // Calcular dimensiones de escalado proporcional (Letterbox)
     uint32_t renderW = dstWidth;
     uint32_t renderH = (dstWidth * srcHeight) / srcWidth;
 
@@ -446,20 +513,45 @@ void Mp4Parser::yuv420ToRgb565(const uint8_t* y, const uint8_t* u, const uint8_t
         renderH = dstHeight;
         renderW = (dstHeight * srcWidth) / srcHeight;
     }
+    renderW &= ~1; // asegurar ancho par para escrituras de 32 bits
 
     uint32_t offsetX = (dstWidth > renderW) ? (dstWidth - renderW) / 2 : 0;
     uint32_t offsetY = (dstHeight > renderH) ? (dstHeight - renderH) / 2 : 0;
 
-    // Limpiar barras negras superior e inferior si el marco cambió
-    if (offsetY > 0) {
-        memset(dst, 0, offsetY * dstWidth * sizeof(uint16_t));
-        uint32_t bottomStart = offsetY + renderH;
-        if (bottomStart < dstHeight) {
-            memset(dst + (bottomStart * dstWidth), 0, (dstHeight - bottomStart) * dstWidth * sizeof(uint16_t));
+    // Vía rápida: 1 a 1 sin reescalado
+    if (srcWidth == renderW && srcHeight == renderH) {
+        for (uint32_t dy = 0; dy < renderH; dy++) {
+            const uint8_t* yRow = y + (dy * srcWidth);
+            const uint8_t* uRow = u + ((dy >> 1) * (srcWidth >> 1));
+            const uint8_t* vRow = v + ((dy >> 1) * (srcWidth >> 1));
+            uint32_t* outRow32 = (uint32_t*)(dst + ((offsetY + dy) * dstWidth) + offsetX);
+
+            for (uint32_t dx = 0; dx < renderW; dx += 2) {
+                uint8_t u_val = uRow[dx >> 1];
+                uint8_t v_val = vRow[dx >> 1];
+                int rv = s_r_v[v_val];
+                int guv = -(s_g_u[u_val] + s_g_v[v_val]);
+                int bu = s_b_u[u_val];
+
+                uint8_t y0 = yRow[dx];
+                uint8_t r0 = clamp[y0 + rv];
+                uint8_t g0 = clamp[y0 + guv];
+                uint8_t b0 = clamp[y0 + bu];
+                uint32_t p0 = ((r0 & 0xF8) << 8) | ((g0 & 0xFC) << 3) | (b0 >> 3);
+
+                uint8_t y1 = yRow[dx + 1];
+                uint8_t r1 = clamp[y1 + rv];
+                uint8_t g1 = clamp[y1 + guv];
+                uint8_t b1 = clamp[y1 + bu];
+                uint32_t p1 = ((r1 & 0xF8) << 8) | ((g1 & 0xFC) << 3) | (b1 >> 3);
+
+                outRow32[dx >> 1] = p0 | (p1 << 16);
+            }
         }
+        return;
     }
 
-    // Precalcular tabla horizontal X para evitar divisiones en el loop interno
+    // Vía general con escalado
     static std::vector<uint32_t> s_xMap;
     if (s_xMap.size() < renderW) {
         s_xMap.resize(renderW);
@@ -473,22 +565,17 @@ void Mp4Parser::yuv420ToRgb565(const uint8_t* y, const uint8_t* u, const uint8_t
         const uint8_t* yRow = y + (sy * srcWidth);
         const uint8_t* uRow = u + ((sy >> 1) * (srcWidth >> 1));
         const uint8_t* vRow = v + ((sy >> 1) * (srcWidth >> 1));
-
         uint16_t* outRow = dst + ((offsetY + dy) * dstWidth) + offsetX;
 
         for (uint32_t dx = 0; dx < renderW; dx++) {
             uint32_t sx = s_xMap[dx];
-            int Y = yRow[sx];
-            int U = uRow[sx >> 1] - 128;
-            int V = vRow[sx >> 1] - 128;
+            uint8_t u_val = uRow[sx >> 1];
+            uint8_t v_val = vRow[sx >> 1];
 
-            int R = Y + ((1436 * V) >> 10);
-            int G = Y - ((352 * U + 731 * V) >> 10);
-            int B = Y + ((1815 * U) >> 10);
-
-            if ((uint32_t)R > 255) R = (R < 0) ? 0 : 255;
-            if ((uint32_t)G > 255) G = (G < 0) ? 0 : 255;
-            if ((uint32_t)B > 255) B = (B < 0) ? 0 : 255;
+            uint8_t Y = yRow[sx];
+            uint8_t R = clamp[Y + s_r_v[v_val]];
+            uint8_t G = clamp[Y - (s_g_u[u_val] + s_g_v[v_val])];
+            uint8_t B = clamp[Y + s_b_u[u_val]];
 
             outRow[dx] = (uint16_t)(((R & 0xF8) << 8) | ((G & 0xFC) << 3) | (B >> 3));
         }
@@ -497,3 +584,4 @@ void Mp4Parser::yuv420ToRgb565(const uint8_t* y, const uint8_t* u, const uint8_t
 
 } // namespace media
 } // namespace cbdos
+
