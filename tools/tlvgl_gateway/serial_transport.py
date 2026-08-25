@@ -134,11 +134,15 @@ class SerialEspNowTransport:
                         buf.append(b)
                         if len(buf) >= expected_len:
                             state = 6
-                    elif state == 6:
-                        state = 0
                         if b == crc8_calc(buf):
                             if dir_byte == DIR_DONGLE_TO_PC and self.on_packet_cb:
-                                self.on_packet_cb(bytes(buf), self)
+                                if len(buf) >= 7:
+                                    src_mac = bytes(buf[0:6])
+                                    rssi = struct.unpack("b", bytes([buf[6]]))[0]
+                                    payload = bytes(buf[7:])
+                                    self.on_packet_cb(payload, self, src_mac, rssi)
+                                else:
+                                    self.on_packet_cb(bytes(buf), self, b"", 0)
 
             except Exception as e:
                 if self.running:

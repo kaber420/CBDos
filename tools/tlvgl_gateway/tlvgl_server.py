@@ -75,7 +75,7 @@ class TLVGLServer:
                 pass
 
 
-def on_espnow_packet_received(data: bytes, transport: SerialEspNowTransport, server: TLVGLServer):
+def on_espnow_packet_received(data: bytes, transport: SerialEspNowTransport, server: TLVGLServer, src_mac: bytes = b"", rssi: int = 0):
     """Callback cuando el Dongle USB captura un paquete del aire vía ESP-NOW."""
     if len(data) < 2:
         return
@@ -87,10 +87,8 @@ def on_espnow_packet_received(data: bytes, transport: SerialEspNowTransport, ser
     total_chunks = chunk_info & 0x0F
     payload = data[2:] if (total_chunks > 0 and chunk_idx < total_chunks) else data
 
-    print(f"📻 [Dongle ESP-NOW] Trama recibida (chunk {chunk_idx+1}/{total_chunks}, {len(data)}B)")
-    resp = server.process_mesh_packet(payload)
+    resp = server.process_mesh_packet(payload, src_mac=src_mac, rssi=rssi)
     if resp:
-        print(f"📻 [Dongle ESP-NOW] Emitiendo respuesta ({len(resp)}B) por radio...")
         transport.send_packet(resp, msg_id=msg_id)
 
 
@@ -120,7 +118,12 @@ if __name__ == '__main__':
     default_port = int(cfg.get("PORT", DEFAULT_PORT))
     default_serial = cfg.get("SERIAL_PORT", "")
     default_debug = cfg.get("DEBUG", "false").lower() in ("true", "1", "yes") or os.environ.get("CBDOS_DEBUG", "0") in ("1", "true") or os.environ.get("DEBUG", "0") in ("1", "true")
-    default_content = cfg.get("CONTENT_DIR", str(CONTENT_DIR))
+    
+    raw_content = cfg.get("CONTENT_DIR", "content")
+    if Path(raw_content).is_absolute():
+        default_content = str(Path(raw_content))
+    else:
+        default_content = str((Path(__file__).parent / raw_content).resolve())
 
     parser = argparse.ArgumentParser(description="Servidor Gateway-Router TLVGL para CBDos")
     parser.add_argument("--port", type=int, default=default_port, help=f"Puerto TCP (default: {default_port})")
@@ -137,7 +140,7 @@ if __name__ == '__main__':
     if args.serial:
         serial_transport = SerialEspNowTransport(
             port=args.serial,
-            on_packet_cb=lambda data, tr: on_espnow_packet_received(data, tr, server)
+            on_packet_cb=lambda data, tr, mac, rssi: on_espnow_packet_received(data, tr, server, src_mac=mac, rssi=rssi)
         )
         serial_transport.start()
 

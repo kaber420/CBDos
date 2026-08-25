@@ -10,10 +10,9 @@
 #define DIR_PC_TO_DONGLE   0x01 // La PC envía al Dongle para emitir por radio
 #define DIR_DONGLE_TO_PC   0x02 // El Dongle recibió por radio y envía a la PC
 
-#define MAX_FRAME_PAYLOAD  250
+#define MAX_FRAME_PAYLOAD  260
 
-static inline uint8_t crc8_calc(const uint8_t* data, size_t len) {
-    uint8_t crc = 0x00;
+static inline uint8_t crc8_update(uint8_t crc, const uint8_t* data, size_t len) {
     while (len--) {
         uint8_t extract = *data++;
         for (uint8_t tempI = 8; tempI; tempI--) {
@@ -26,6 +25,10 @@ static inline uint8_t crc8_calc(const uint8_t* data, size_t len) {
         }
     }
     return crc;
+}
+
+static inline uint8_t crc8_calc(const uint8_t* data, size_t len) {
+    return crc8_update(0x00, data, len);
 }
 
 /**

@@ -137,17 +137,23 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
         s_stat_tx_pkts++;
     }
 
-    // Enmarcar paquete hacia la PC: [0xAA][0x55][DIR=0x02][LEN_H][LEN_L][PAYLOAD][CRC8]
+    // Enmarcar paquete hacia la PC: [0xAA][0x55][DIR=0x02][LEN_H][LEN_L][SRC_MAC 6B][RSSI 1B][PAYLOAD][CRC8]
+    size_t total_payload_len = (size_t)len + 7;
     uint8_t header[5];
     header[0] = FRAME_MAGIC_0;
     header[1] = FRAME_MAGIC_1;
     header[2] = DIR_DONGLE_TO_PC;
-    header[3] = (len >> 8) & 0xFF;
-    header[4] = len & 0xFF;
+    header[3] = (total_payload_len >> 8) & 0xFF;
+    header[4] = total_payload_len & 0xFF;
 
-    uint8_t crc = crc8_calc(data, (size_t)len);
+    uint8_t crc = 0x00;
+    crc = crc8_update(crc, info->src_addr, 6);
+    crc = crc8_update(crc, (const uint8_t*)&rssi, 1);
+    crc = crc8_update(crc, data, (size_t)len);
 
     Serial.write(header, sizeof(header));
+    Serial.write(info->src_addr, 6);
+    Serial.write((const uint8_t*)&rssi, 1);
     Serial.write(data, len);
     Serial.write(&crc, 1);
     Serial.flush();
