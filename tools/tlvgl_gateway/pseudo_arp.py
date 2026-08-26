@@ -12,8 +12,13 @@ from typing import Optional, Dict, Any
 
 
 class PseudoArpTable:
-    def __init__(self, db_path: str = "clients.db"):
-        self.db_path = Path(__file__).parent / Path(db_path).name if not Path(db_path).is_absolute() else Path(db_path)
+    def __init__(self, db_path: str = "data/router.db"):
+        if Path(db_path).is_absolute():
+            self.db_path = Path(db_path)
+        else:
+            self.db_path = (Path(__file__).parent / db_path).resolve()
+        
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Rango del pool dinámico para resolución de colisiones DAD
         self.POOL_START = 0x0002

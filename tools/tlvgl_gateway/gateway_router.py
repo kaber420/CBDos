@@ -1,32 +1,54 @@
 #!/usr/bin/env python3
 """
-Motor Gateway-Router Frontal para CBDos.
-Integra Enrutamiento por Service ID, Tabla Pseudo-ARP (10.x.y.z IPv4 Mesh + DAD)
-y Control de Acceso Proxy para clientes ESP32 sobre ESP-NOW y TCP.
+Motor Gateway-Router Frontal y Service Hub para CBDos.
+Orquesta el enrutamiento por Capa 3 (Pseudo-ARP SQLite3 con DAD) y despacha
+peticiones a los servicios modulares independientes (Routing, Hosting, Proxy).
 """
 
 import sys
-import struct
-import time
-import urllib.request
-import json
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Dict, Any, Tuple
 
 import mesh_proto as MESH
 from pseudo_arp import PseudoArpTable
-from tlvgl_compiler import TLVGLCompiler, MAX_W, MAX_H
+from services.base_service import MeshContext
+from services.routing_service import RoutingService
+from services.hosting_service import HostingService
+from services.proxy_service import ProxyService
 
 
 class GatewayRouter:
-    def __init__(self, content_dir: Path, arp_storage: str = "clients.db", max_w: int = MAX_W, max_h: int = MAX_H, debug: bool = False):
+    def __init__(self, content_dir: Path, db_path: str = "data/router.db", debug: bool = False, services_list: Optional[list] = None):
         self.content_dir = Path(content_dir)
-        self.max_w = max_w
-        self.max_h = max_h
         self.debug = debug
-        self.compiler = TLVGLCompiler()
-        self.arp_table = PseudoArpTable(db_path=arp_storage)
-        self.cache = {}
+        self.arp_table = PseudoArpTable(db_path=db_path)
+        self.ctx = MeshContext(arp_table=self.arp_table, debug=self.debug)
+
+        # 1. Instanciar Servicios Modulares Desacoplados
+        self.routing_svc = RoutingService(tower_id=0x0001, tower_name="Gateway CBDos Mesh", channel=1)
+        self.hosting_svc = HostingService(content_dir=self.content_dir)
+        self.proxy_svc = ProxyService()
+
+        self.services = {
+            0x0F: self.routing_svc,
+            MESH.MESH_SVC_TLVGL_REQUEST: self.hosting_svc,
+            MESH.MESH_SVC_PROXY: self.proxy_svc
+        }
+
+        # 2. Configurar servicios activos según el perfil
+        if services_list is not None:
+            self.configure_services(services_list)
+
+    def configure_services(self, active_services: list):
+        """Habilita o deshabilita servicios por nombre ('routing', 'hosting', 'proxy')."""
+        active_set = set(s.strip().lower() for s in active_services)
+        
+        self.routing_svc.enabled = "routing" in active_set or "all" in active_set
+        self.hosting_svc.enabled = "hosting" in active_set or "all" in active_set
+        self.proxy_svc.enabled = "proxy" in active_set or "all" in active_set
+
+        if self.debug:
+            print(f"🧩 [GatewayRouter] Servicios activos: Routing={self.routing_svc.enabled}, Hosting={self.hosting_svc.enabled}, Proxy={self.proxy_svc.enabled}")
 
     def log_telemetry(self, client_entry: Optional[dict], short_id: int, req_url: str, resp_len: int, service_name: str = "TLVGL"):
         """Muestra una tarjeta ASCII formateada de telemetría si el modo debug está activo."""
@@ -49,82 +71,13 @@ class GatewayRouter:
         print(f"│ 📤 Bytecode TLV:  {resp_len} Bytes emitidos")
         print(f"└───────────────────────────────────────────────────────────────\r\n")
 
-    def _resolve_mesh_url(self, url: str) -> str:
-        url = url.strip()
-        for suffix in ('.mesh', '.tlvgl', '.html'):
-            if url.endswith(suffix):
-                url = url[: -len(suffix)]
-                break
-        url = url.split('#')[0].split('?')[0].rstrip('/')
-        if not url or url in ('home', 'index'):
-            return 'index.html'
-        return url + '.html'
-
-    def _compile_or_cache(self, filename: str) -> Optional[bytes]:
-        target_path = (self.content_dir / filename).resolve()
-        if not target_path.is_file():
-            return None
-
-        mtime = target_path.stat().st_mtime
-        cache_key = (filename, self.max_w, self.max_h, mtime)
-        if cache_key in self.cache:
-            return self.cache[cache_key]
-
-        try:
-            with open(target_path, 'r', encoding='utf-8') as f:
-                html = f.read()
-            tlv = self.compiler.compile(html, self.max_w, self.max_h)
-            self.cache[cache_key] = tlv
-            return tlv
-        except Exception as e:
-            print(f"❌ Error compilando {filename}: {e}")
-            return None
-
-    def _generate_proxy_page(self, title: str, message: str, is_error: bool = False) -> bytes:
-        """Genera una página TLVGL sintética para respuestas de Proxy o Errores ACL."""
-        bg_color = "#181c26" if not is_error else "#2A1515"
-        txt_color = "#E2E8F0" if not is_error else "#FF6B6B"
-        html = f"""<!DOCTYPE html>
-<html>
-<head><title>{title}</title></head>
-<body>
-  <panel style="left: 12px; top: 15px; width: 456px; height: 100px; background-color: {bg_color};">
-    <h1>{title}</h1>
-    <p style="color: {txt_color};">{message}</p>
-  </panel>
-  <a href="/index.html" style="left: 12px; top: 130px; width: 456px;">⬅️ Volver al Inicio</a>
-</body>
-</html>"""
-        return self.compiler.compile(html, self.max_w, self.max_h)
-
-    def _fetch_proxy_url(self, url: str) -> bytes:
-        """Descarga una URL externa vía Proxy y la transcodifica a TLVGL."""
-        if not url.startswith("http://") and not url.startswith("https://"):
-            url = "http://" + url
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'CBDos-Mesh-Gateway/1.0'})
-            with urllib.request.urlopen(req, timeout=5.0) as resp:
-                content_type = resp.headers.get_content_type()
-                raw_data = resp.read()
-                if "html" in content_type:
-                    html_text = raw_data.decode('utf-8', errors='ignore')
-                    return self.compiler.compile(html_text, self.max_w, self.max_h)
-                elif "json" in content_type:
-                    data = json.loads(raw_data.decode('utf-8', errors='ignore'))
-                    pretty_json = json.dumps(data, indent=2)[:300]
-                    return self._generate_proxy_page("Respuesta JSON API", pretty_json)
-                else:
-                    return self._generate_proxy_page("Contenido Externo", f"Recibidos {len(raw_data)} bytes ({content_type})")
-        except Exception as e:
-            return self._generate_proxy_page("Error Proxy Web", f"No se pudo cargar {url}: {e}", is_error=True)
-
     def route_and_process(self, data: bytes, src_mac: bytes = b"", rssi: int = 0) -> Optional[bytes]:
         """
-        Punto de entrada principal del Gateway-Router:
+        Punto de entrada maestro del Gateway-Router:
         1. Desempaqueta MeshHeader.
-        2. Registra o actualiza en Tabla Pseudo-ARP (IPv4 Mesh + DAD).
-        3. Enruta por Service ID (Local .mesh, Proxy Web o Control de Red).
-        4. Retorna la trama empaquetada lista para emisión en radio o TCP.
+        2. Registra o actualiza en Tabla Pseudo-ARP (SQLite3).
+        3. Enruta la petición al servicio modular correspondiente.
+        4. Retorna la trama empaquetada lista para emisión.
         """
         if len(data) < 3:
             return None
@@ -135,7 +88,7 @@ class GatewayRouter:
             return None
 
         ctrl = hdr['control']
-        service_id = ctrl & 0x07 # Bits 0..2 son el Service ID (0x07 = TLVGL REQ, 0x05 = Proxy, 0x01 = Chat)
+        service_id = ctrl & 0x07 # Bits 0..2 (0x07=TLVGL, 0x05=Proxy, 0x01=Chat)
         is_signal = bool(ctrl & MESH.MESH_CTRL_SIGNAL_BIT)
         src_id = hdr.get('src_id', 0)
         dst_id = hdr.get('dst_id', 0x0001)
@@ -148,102 +101,64 @@ class GatewayRouter:
                 candidate_short_id=src_id if src_id != 0 and src_id != 0xFFFF else None,
                 rssi=rssi
             )
-            # El destino de respuesta es el Short ID asignado en la tabla
             reply_short_id = client_entry["short_id"]
         else:
-            # Fallback al Short ID que vino en la cabecera
             reply_short_id = src_id if (src_id != 0 and src_id != 0xFFFF) else (dst_id if dst_id != 0xFFFF else 0x0001)
             client_entry = self.arp_table.get_by_short_id(reply_short_id)
 
         tlv_payload = data[hdr_len:]
 
-        # 3. Despacho por Servicio:
-        # A) SERVICIO: Ruteo y Señalización de Red (Handshake / Asociación)
-        if is_signal and len(tlv_payload) >= 4 and tlv_payload[0] == 0x01: # Tag Probe Request con Payload de sondeo
-            assigned_ip = client_entry["ipv4"] if client_entry else "10.0.0.2"
-            resp_payload = bytearray([0x02]) # Tag Probe Response
-            resp_payload += struct.pack(">H", 0x0001) # Tower ID (0x0001)
-            resp_payload += bytes([1, 0x02]) # Canal 1, LR mode
-            tower_name = "Gateway CBDos Mesh"
-            resp_payload += bytes([len(tower_name)]) + tower_name.encode('utf-8')
-            
-            resp_hdr = MESH.build_response_header(0x4F, reply_short_id)
-            return resp_hdr + bytes(resp_payload)
+        # 3. Despacho a Servicios:
+        # A) Control de Ruteo y Señalización de Red (0x0F / Signal)
+        if is_signal:
+            res = self.routing_svc.handle_request(tlv_payload, client_entry, reply_short_id, self.ctx)
+            if res:
+                resp_svc, resp_data = res
+                resp_hdr = MESH.build_response_header(0x4F, reply_short_id)
+                return resp_hdr + resp_data
 
-        # B) SERVICIO: Petición Navegador TLVGL (0x07)
-        if service_id == MESH.MESH_SVC_TLVGL_REQUEST or service_id == 0x07:
+        # B) Petición TLVGL (0x07)
+        if service_id in (MESH.MESH_SVC_TLVGL_REQUEST, 0x07):
             tag, value = MESH.parse_uplink_tlv(tlv_payload)
-            req_url = "index.mesh"
+            req_url = value.decode('utf-8', errors='ignore') if (tag == MESH.TYPE_REQ_URL and value) else "index.mesh"
 
-            if tag == MESH.TYPE_REQ_URL:
-                req_url = value.decode('utf-8', errors='ignore')
-                print(f"🌐 [Router -> TLVGL] Nodo [{client_entry['ipv4'] if client_entry else f'0x{reply_short_id:04X}'}] pide: '{req_url}'")
-            elif tag == MESH.TYPE_REQ_LINK_CLICK:
-                link_id = value[0] if len(value) > 0 else 0
-                req_url = self.compiler.last_link_map.get(link_id, f"link_{link_id}.mesh")
-                print(f"🖱️ [Router -> TLVGL] LINK_CLICK #{link_id} → '{req_url}'")
-            elif tag == MESH.TYPE_REQ_INPUT_SUBMIT:
-                elem_id = value[0] if len(value) > 0 else 0
-                txt = value[1:].decode('utf-8', errors='ignore')
-                print(f"⌨️ [Router -> TLVGL] INPUT_SUBMIT #{elem_id}: '{txt}'")
-            elif tag == MESH.TYPE_REQ_CONTROL_EVT:
-                elem_id = value[0] if len(value) > 0 else 0
-                val = struct.unpack(">h", value[1:3])[0] if len(value) >= 3 else 0
-                print(f"🎛️ [Router -> TLVGL] CONTROL_EVT #{elem_id}: {val}")
-
-            # ¿Es una URL externa que requiere Proxy Web?
+            # ¿Es una URL externa que requiere el Proxy?
             is_external = req_url.startswith("http://") or req_url.startswith("https://") or ('.' in req_url and not req_url.endswith('.mesh'))
 
             if is_external:
-                # Validar permiso en la Tabla Pseudo-ARP (ACL)
-                if client_entry and not client_entry.get("proxy_acl", False):
-                    print(f"⛔ [Proxy ACL] Bloqueado acceso a Internet para IP={client_entry['ipv4']} (Sin Permiso)")
-                    tlv_bytes = self._generate_proxy_page("Acceso Denegado", "Tu nodo no tiene permiso de salida a Internet en esta Torre.", is_error=True)
-                else:
-                    print(f"🌍 [Proxy Web] Descargando y transcodificando: {req_url}")
-                    tlv_bytes = self._fetch_proxy_url(req_url)
+                res = self.proxy_svc.handle_request(req_url.encode('utf-8'), client_entry, reply_short_id, self.ctx)
             else:
-                # Servicio local desde el directorio de contenido .mesh
-                clean_file = self._resolve_mesh_url(req_url)
-                tlv_bytes = self._compile_or_cache(clean_file)
-                if tlv_bytes is None:
-                    tlv_bytes = self._compile_or_cache("index.html")
+                res = self.hosting_svc.handle_request(tlv_payload, client_entry, reply_short_id, self.ctx)
 
-            if tlv_bytes is None:
-                tlv_bytes = b"\x10\x00\x00\xfe" # Fallback página vacía
+            if res:
+                resp_svc, resp_data = res
+                resp_hdr = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | resp_svc, reply_short_id)
 
-            resp_payload = b"PH" + tlv_bytes
-            resp_hdr = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | MESH.MESH_SVC_TLVGL_RESPONSE, reply_short_id)
+                self.log_telemetry(
+                    client_entry=client_entry,
+                    short_id=reply_short_id,
+                    req_url=req_url,
+                    resp_len=len(resp_data),
+                    service_name="TLVGL Proxy" if is_external else "TLVGL Local"
+                )
 
-            self.log_telemetry(
-                client_entry=client_entry,
-                short_id=reply_short_id,
-                req_url=req_url,
-                resp_len=len(resp_payload),
-                service_name="TLVGL Proxy" if is_external else "TLVGL Local"
-            )
+                return resp_hdr + resp_data
 
-            return resp_hdr + resp_payload
-
-        # C) SERVICIO: Proxy Directo (0x05)
+        # C) Petición Proxy Directo (0x05)
         if service_id == MESH.MESH_SVC_PROXY:
-            url = tlv_payload.decode('utf-8', errors='ignore')
-            if client_entry and not client_entry.get("proxy_acl", False):
-                tlv_bytes = self._generate_proxy_page("Acceso Denegado", "Proxy deshabilitado por ACL", is_error=True)
-            else:
-                tlv_bytes = self._fetch_proxy_url(url)
-            
-            resp_payload = b"PH" + tlv_bytes
-            resp_hdr = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | MESH.MESH_SVC_TLVGL_RESPONSE, reply_short_id)
+            res = self.proxy_svc.handle_request(tlv_payload, client_entry, reply_short_id, self.ctx)
+            if res:
+                resp_svc, resp_data = res
+                resp_hdr = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | resp_svc, reply_short_id)
 
-            self.log_telemetry(
-                client_entry=client_entry,
-                short_id=reply_short_id,
-                req_url=url,
-                resp_len=len(resp_payload),
-                service_name="Direct Proxy"
-            )
+                self.log_telemetry(
+                    client_entry=client_entry,
+                    short_id=reply_short_id,
+                    req_url=tlv_payload.decode('utf-8', errors='ignore'),
+                    resp_len=len(resp_data),
+                    service_name="Direct Proxy"
+                )
 
-            return resp_hdr + resp_payload
+                return resp_hdr + resp_data
 
         return None

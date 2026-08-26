@@ -89,5 +89,9 @@ bsp/esp32_s3_jc3248/lib/peanut_gb/
 *credentials*
 wifi_credentials.h
 
-tools/tlvgl_gateway/clients.db-shm
-tools/tlvgl_gateway/clients.db-wal
+# --- Bases de Datos SQLite Locales ---
+*.db
+*.db-shm
+*.db-wal
+tools/tlvgl_gateway/data/
+tools/tlvgl_gateway/clients.json

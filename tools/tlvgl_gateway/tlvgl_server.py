@@ -125,15 +125,21 @@ if __name__ == '__main__':
     else:
         default_content = str((Path(__file__).parent / raw_content).resolve())
 
+    raw_services = cfg.get("SERVICES", "routing,hosting,proxy")
+    services_list = [s.strip() for s in raw_services.split(",") if s.strip()]
+
     parser = argparse.ArgumentParser(description="Servidor Gateway-Router TLVGL para CBDos")
     parser.add_argument("--port", type=int, default=default_port, help=f"Puerto TCP (default: {default_port})")
     parser.add_argument("--serial", type=str, default=default_serial, help="Puerto Serial del Dongle USB ESP-NOW (ej: /dev/ttyACM0)")
     parser.add_argument("--content-dir", type=str, default=default_content, help="Directorio de contenido HTML")
+    parser.add_argument("--services", type=str, default=",".join(services_list), help="Servicios activos separados por coma (routing, hosting, proxy)")
     parser.add_argument("-d", "--debug", action="store_true", default=default_debug, help="Habilita modo desarrollo/debug con telemetría detallada")
     args = parser.parse_args()
 
+    active_services = [s.strip() for s in args.services.split(",") if s.strip()]
     server = TLVGLServer(content_dir=Path(args.content_dir))
     server.router.debug = args.debug
+    server.router.configure_services(active_services)
 
     serial_transport = None
 
@@ -148,6 +154,7 @@ if __name__ == '__main__':
         srv = await asyncio.start_server(server.handle_client, '0.0.0.0', args.port)
         mode_str = "🟢 MODO DESARROLLO (Telemetría Detallada)" if args.debug else "⚪ MODO PRODUCCIÓN (Logs Compactos)"
         print(f"🚀 Gateway-Router TLVGL activo en TCP puerto {args.port} | {mode_str}")
+        print(f"🧩 Servicios cargados: {', '.join(active_services)}")
         if args.serial:
             print(f"📻 Puente Dongle USB ESP-NOW activo en {args.serial}")
         print(f"📁 Directorio de contenido: {args.content_dir}")
