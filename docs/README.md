@@ -51,6 +51,7 @@ docs/
 * **[Análisis Exhaustivo de Modelos de Identidad Mesh](network/analisis_exhaustivo_modelos_identidad_y_direccionamiento_mesh.md):** Estudio matemático de colisiones y escalabilidad de direccionamiento.
 * **[Arquitectura de Pool Dinámico y Traducción UUID](network/arquitectura_pool_dinamico_short_id_y_traduccion_uuid.md):** Modelo de Pseudo-NAT asimétrico (Aire 3B $\leftrightarrow$ WAN 4B).
 * **[Pruebas de Fragmentación y MicroChunking Mesh](network/pruebas_fragmentacion_microchunking_mesh.md):** Protocolo de micro-chunks de 2B para fragmentación L2 en ESP-NOW.
+* **[Suite de Gestión y SaaS para Torres y Gateways](network/especificacion_suite_gestion_saas_torres_y_gateways.md):** Arquitectura del panel web de administración, ACL del Proxy, cuotas y editor visual.
 * **[Guía de Coprocesador C6 Hosted](network/esp32_p4_c6_hosted_wifi.md):** Arquitectura de red WiFi 6 / Bluetooth con ESP32-C6 vía SDIO.
 * **[Investigación de Firmware SDIO](network/investigacion_firmware_c6_sdio.md):** Análisis del firmware esclavo embebido.
 
