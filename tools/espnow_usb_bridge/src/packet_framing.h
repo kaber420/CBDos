@@ -9,6 +9,19 @@
 
 #define DIR_PC_TO_DONGLE   0x01 // La PC envía al Dongle para emitir por radio
 #define DIR_DONGLE_TO_PC   0x02 // El Dongle recibió por radio y envía a la PC
+#define DIR_CTRL_CMD       0x03 // Comando de control de radio desde la PC hacia el Dongle
+#define DIR_CTRL_RESP      0x04 // Respuesta de control y ACK desde el Dongle hacia la PC
+
+// Códigos de comandos de control de radio
+#define RADIO_CMD_GET_STATUS  0x01
+#define RADIO_CMD_SET_MODE    0x02 // Payload: 0x01 = Normal, 0x02 = Long Range (LR)
+#define RADIO_CMD_SET_CHAN    0x03 // Payload: Canal 1..13
+#define RADIO_CMD_SET_POWER   0x04 // Payload: Potencia 1..84
+#define RADIO_CMD_SCAN_PEERS  0x05
+
+// Códigos de estado / resultado
+#define RADIO_STATUS_OK       0x00
+#define RADIO_STATUS_ERR      0xFF
 
 #define MAX_FRAME_PAYLOAD  260
 

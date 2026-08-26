@@ -14,6 +14,15 @@ FRAME_MAGIC_0    = 0xAA
 FRAME_MAGIC_1    = 0x55
 DIR_PC_TO_DONGLE = 0x01
 DIR_DONGLE_TO_PC = 0x02
+DIR_CTRL_CMD     = 0x03
+DIR_CTRL_RESP    = 0x04
+
+RADIO_CMD_GET_STATUS  = 0x01
+RADIO_CMD_SET_MODE    = 0x02
+RADIO_CMD_SET_CHAN    = 0x03
+RADIO_CMD_SET_POWER   = 0x04
+RADIO_CMD_SCAN_PEERS  = 0x05
+
 MAX_PAYLOAD      = 250
 
 
@@ -38,6 +47,8 @@ class SerialEspNowTransport:
         self.ser = None
         self.running = False
         self.thread = None
+        self._ctrl_response_event = threading.Event()
+        self._last_ctrl_response = None
 
     def start(self):
         try:
@@ -50,6 +61,61 @@ class SerialEspNowTransport:
         except Exception as e:
             print(f"⚠️ [Dongle ESP-NOW] No se pudo abrir el puerto {self.port}: {e}")
             return False
+
+    def send_ctrl_cmd(self, cmd: int, data: bytes = b"", timeout: float = 1.0):
+        """Envía un comando de control binario con garantía de ACK."""
+        if not self.ser or not self.ser.is_open:
+            return None
+        self._ctrl_response_event.clear()
+        self._last_ctrl_response = None
+
+        payload = bytes([cmd]) + data
+        header = bytes([
+            FRAME_MAGIC_0,
+            FRAME_MAGIC_1,
+            DIR_CTRL_CMD,
+            (len(payload) >> 8) & 0xFF,
+            len(payload) & 0xFF
+        ])
+        crc = bytes([crc8_calc(payload)])
+        frame = header + payload + crc
+
+        try:
+            self.ser.write(frame)
+            self.ser.flush()
+            if self._ctrl_response_event.wait(timeout=timeout):
+                return self._last_ctrl_response
+        except Exception as e:
+            print(f"❌ Error enviando comando de control al Dongle: {e}")
+        return None
+
+    def set_radio_mode(self, mode: str = "lr") -> bool:
+        """Configura el modo de radio (normal / lr) de forma garantizada mediante trama de control binaria."""
+        mode_val = 0x02 if mode.strip().lower() in ("lr", "long_range") else 0x01
+        resp = self.send_ctrl_cmd(RADIO_CMD_SET_MODE, bytes([mode_val]))
+        if resp and len(resp) >= 2 and resp[1] == 0x00:
+            cur_mode = "LR 🚀" if (len(resp) >= 3 and resp[2] == 0x02) else "NORMAL ⚡"
+            print(f"📡 [Control Radio] Confirmado por Dongle: Modo {cur_mode}")
+            return True
+        else:
+            print(f"⚠️ [Control Radio] No se recibió ACK del cambio de modo en el Dongle")
+            return False
+
+    def get_radio_status(self):
+        """Consulta el estado del hardware de radio (MAC, modo, canal, potencia)."""
+        resp = self.send_ctrl_cmd(RADIO_CMD_GET_STATUS)
+        if resp and len(resp) >= 8 and resp[1] == 0x00:
+            mac_str = ":".join(f"{b:02X}" for b in resp[2:8])
+            mode_str = "LR" if (len(resp) >= 9 and resp[8] == 0x02) else "Normal"
+            chan = resp[9] if len(resp) >= 10 else 1
+            pwr = resp[10] if len(resp) >= 11 else 84
+            return {
+                "mac": mac_str,
+                "mode": mode_str,
+                "channel": chan,
+                "power_dbm": pwr * 0.25
+            }
+        return None
 
     def stop(self):
         self.running = False
@@ -145,6 +211,9 @@ class SerialEspNowTransport:
                                     self.on_packet_cb(payload, self, src_mac, rssi)
                                 else:
                                     self.on_packet_cb(bytes(buf), self, b"", 0)
+                            elif dir_byte == DIR_CTRL_RESP:
+                                self._last_ctrl_response = bytes(buf)
+                                self._ctrl_response_event.set()
 
             except Exception as e:
                 if self.running:

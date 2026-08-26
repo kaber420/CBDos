@@ -73,11 +73,12 @@ void MeshConfigView::scan_btn_cb(lv_event_t* e) {
 
 void MeshConfigView::connect_tower_cb(lv_event_t* e) {
     uint32_t tower_idx = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
-    const auto& towers = cbdos::mesh::MeshEngine::getInstance().getDiscoveredTowers();
+    auto& mesh = cbdos::mesh::MeshEngine::getInstance();
+    const auto& towers = mesh.getDiscoveredTowers();
     if (tower_idx < towers.size()) {
         const auto& t = towers[tower_idx];
-        cbdos::mesh::MeshEngine::getInstance().setChannel(t.channel);
-        cbdos::mesh::MeshEngine::getInstance().setLocalIdentity(0x0001, 0x12345678, t.short_id, 1, 1);
+        mesh.setChannel(t.channel);
+        mesh.setLocalIdentity(mesh.getLocalShortId(), mesh.getLocalUuid(), t.short_id, 1, 1);
         
         char toast[64];
         snprintf(toast, sizeof(toast), "Conectado a: %s (Ch %u)", t.name, t.channel);

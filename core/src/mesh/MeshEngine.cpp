@@ -185,6 +185,7 @@ bool MeshEngine::sendPacket(ServiceId svc, uint32_t dst_id, const uint8_t* paylo
         offset += chunk_len;
     }
 
+    m_txPackets++;
     return true;
 }
 
@@ -205,6 +206,9 @@ bool MeshEngine::sendTlvRequest(const char* url, uint32_t dst_id) {
 
 void MeshEngine::onRawDataReceived(const uint8_t* src_mac, const uint8_t* data, size_t len, int8_t rssi) {
     if (!src_mac || !data || len < sizeof(MicroChunkHeader)) return;
+
+    m_lastRssi = rssi;
+    m_rxPackets++;
 
     const MicroChunkHeader* mchunk = reinterpret_cast<const MicroChunkHeader*>(data);
     uint8_t chunk_idx = mchunk->getChunkIndex();

@@ -4,6 +4,8 @@
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
 #include "cbdos/network.hpp"
+#include "cbdos/radio.hpp"
+#include "cbdos/mesh/mesh_engine.hpp"
 #include "cbdos/system.hpp"
 #include "cbdos/storage.hpp"
 #include <cstdio>
@@ -236,18 +238,71 @@ void DiagnosticsModal::show(lv_obj_t* parent) {
     addStorageBar(card, "[SD Card] Tarjeta MicroSD", sdStats.usedBytes, sdStats.totalBytes, 
                   sdStats.isMounted, lv_color_hex(0x10B981));
 
-    // --- SECCIÓN 4: CONECTIVIDAD & HORA ---
+    // --- SECCIÓN 4: CONECTIVIDAD & RED ---
     addSectionHeader(card, "--- Conectividad y Red ---");
-    bool wifiConn = cbdos::network::isConnected();
-    addInfoRow(card, "WiFi Estado:", wifiConn ? "Conectado" : "Desconectado", wifiConn);
-    
-    std::string ip = cbdos::network::getIpAddress();
-    addInfoRow(card, "Direccion IP:", wifiConn ? ip.c_str() : "--", wifiConn);
+    auto radioMode = cbdos::radio::getMode();
+    bool isPowered = cbdos::radio::isRadioPowered();
 
-    int8_t rssi = cbdos::network::getRssi();
-    char rssiBuf[16];
-    snprintf(rssiBuf, sizeof(rssiBuf), "%d dBm", rssi);
-    addInfoRow(card, "Nivel Señal:", wifiConn ? rssiBuf : "--", wifiConn);
+    if (!isPowered || radioMode == cbdos::radio::RadioMode::Off) {
+        addInfoRow(card, "Modo Radio:", "Apagada (OFF)", false);
+        addInfoRow(card, "Estado:", "Ahorro de Energia", false);
+    } else if (radioMode == cbdos::radio::RadioMode::WifiSta) {
+        bool wifiConn = cbdos::network::isConnected();
+        addInfoRow(card, "Modo Radio:", "Wi-Fi Estacion (TCP/IP)", true);
+        addInfoRow(card, "WiFi Estado:", wifiConn ? "Conectado" : "Desconectado", wifiConn);
+        
+        std::string ip = cbdos::network::getIpAddress();
+        addInfoRow(card, "Direccion IP:", wifiConn ? ip.c_str() : "--", wifiConn);
+
+        int8_t rssi = cbdos::network::getRssi();
+        char rssiBuf[16];
+        snprintf(rssiBuf, sizeof(rssiBuf), "%d dBm", rssi);
+        addInfoRow(card, "Nivel Senal:", wifiConn ? rssiBuf : "--", wifiConn);
+    } else {
+        // Modos ESP-NOW / Mesh (Normal, LR o Híbrido)
+        auto& mesh = cbdos::mesh::MeshEngine::getInstance();
+        const char* modeName = (radioMode == cbdos::radio::RadioMode::EspNowLR) ? "ESP-NOW Long Range (LR)" :
+                               ((radioMode == cbdos::radio::RadioMode::EspNow) ? "ESP-NOW Normal" : "Hibrido (Mesh+WiFi)");
+        addInfoRow(card, "Modo Radio:", modeName, true);
+
+        char chanBuf[32];
+        snprintf(chanBuf, sizeof(chanBuf), "Canal %u (%d dBm)", cbdos::radio::getChannel(), cbdos::radio::getTxPower());
+        addInfoRow(card, "Canal / TX:", chanBuf, true);
+
+        // IPv4 Mesh (UUID)
+        uint32_t uuid = mesh.getLocalUuid();
+        char ipBuf[32];
+        snprintf(ipBuf, sizeof(ipBuf), "%u.%u.%u.%u", 
+                 (unsigned int)((uuid >> 24) & 0xFF), 
+                 (unsigned int)((uuid >> 16) & 0xFF), 
+                 (unsigned int)((uuid >> 8) & 0xFF), 
+                 (unsigned int)(uuid & 0xFF));
+        addInfoRow(card, "IP Mesh Global:", ipBuf, true);
+
+        // Short ID & MAC
+        uint8_t mac[6] = {0};
+        mesh.getMacAddress(mac);
+        char idBuf[48];
+        snprintf(idBuf, sizeof(idBuf), "0x%04X | %02X:%02X:%02X:%02X:%02X:%02X",
+                 mesh.getLocalShortId(), mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        addInfoRow(card, "Short ID / MAC:", idBuf, true);
+
+        // Señal RSSI del último paquete recibido de la Torre
+        int8_t meshRssi = mesh.getLastRssi();
+        if (meshRssi > -120 && meshRssi < 0) {
+            char meshRssiBuf[32];
+            const char* quality = (meshRssi > -60) ? "Excelente" : ((meshRssi > -80) ? "Buena" : "Debil");
+            snprintf(meshRssiBuf, sizeof(meshRssiBuf), "%d dBm (%s)", meshRssi, quality);
+            addInfoRow(card, "Senal Torre (RSSI):", meshRssiBuf, meshRssi > -85);
+        } else {
+            addInfoRow(card, "Senal Torre (RSSI):", "Esperando trama...", false);
+        }
+
+        // Tráfico TX / RX
+        char pktsBuf[48];
+        snprintf(pktsBuf, sizeof(pktsBuf), "TX: %u | RX: %u", (unsigned int)mesh.getTxPackets(), (unsigned int)mesh.getRxPackets());
+        addInfoRow(card, "Trafico Malla:", pktsBuf, true);
+    }
 
     time_t rawtime;
     time(&rawtime);

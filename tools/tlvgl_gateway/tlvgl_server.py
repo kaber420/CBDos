@@ -9,6 +9,8 @@ import asyncio
 import argparse
 import struct
 import re
+import time
+import os
 from pathlib import Path
 
 from gateway_router import GatewayRouter
@@ -128,9 +130,12 @@ if __name__ == '__main__':
     raw_services = cfg.get("SERVICES", "routing,hosting,proxy")
     services_list = [s.strip() for s in raw_services.split(",") if s.strip()]
 
+    default_radio_mode = cfg.get("RADIO_MODE", "normal")
+
     parser = argparse.ArgumentParser(description="Servidor Gateway-Router TLVGL para CBDos")
     parser.add_argument("--port", type=int, default=default_port, help=f"Puerto TCP (default: {default_port})")
     parser.add_argument("--serial", type=str, default=default_serial, help="Puerto Serial del Dongle USB ESP-NOW (ej: /dev/ttyACM0)")
+    parser.add_argument("--radio-mode", type=str, default=default_radio_mode, choices=["normal", "lr"], help="Modo de radio del Dongle (normal / lr)")
     parser.add_argument("--content-dir", type=str, default=default_content, help="Directorio de contenido HTML")
     parser.add_argument("--services", type=str, default=",".join(services_list), help="Servicios activos separados por coma (routing, hosting, proxy)")
     parser.add_argument("-d", "--debug", action="store_true", default=default_debug, help="Habilita modo desarrollo/debug con telemetría detallada")
@@ -148,7 +153,10 @@ if __name__ == '__main__':
             port=args.serial,
             on_packet_cb=lambda data, tr, mac, rssi: on_espnow_packet_received(data, tr, server, src_mac=mac, rssi=rssi)
         )
-        serial_transport.start()
+        if serial_transport.start():
+            # Configurar modo de radio (normal / lr)
+            time.sleep(0.1)
+            serial_transport.set_radio_mode(args.radio_mode)
 
     async def main():
         srv = await asyncio.start_server(server.handle_client, '0.0.0.0', args.port)

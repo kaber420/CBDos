@@ -100,6 +100,10 @@ public:
     bool setChannel(uint8_t ch);
     bool getMacAddress(uint8_t mac[6]);
 
+    int8_t getLastRssi() const { return m_lastRssi; }
+    uint32_t getRxPackets() const { return m_rxPackets; }
+    uint32_t getTxPackets() const { return m_txPackets; }
+
     /**
      * @brief Tarea periódica de mantenimiento (limpieza de fragmentos huérfanos y expiración ARP)
      */
@@ -126,8 +130,8 @@ private:
     bool m_running = false;
     uint8_t m_currentMsgId = 1;
 
-    uint16_t m_localShortId = 0x0001;
-    uint32_t m_localUuid = 0x12345678;
+    uint16_t m_localShortId = 0;
+    uint32_t m_localUuid = 0;
     uint16_t m_localTower = 0x0001;
     uint16_t m_localZone = 0x0001;
     uint16_t m_localAsn = 0x0001;
@@ -137,6 +141,10 @@ private:
     std::vector<ChunkReassembly> m_reassemblies;
     std::vector<DiscoveredTower> m_discoveredTowers;
     std::function<void()> m_towersCb = nullptr;
+
+    int8_t m_lastRssi = -127;
+    uint32_t m_rxPackets = 0;
+    uint32_t m_txPackets = 0;
 };
 
 } // namespace mesh

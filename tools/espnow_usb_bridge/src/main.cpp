@@ -282,6 +282,87 @@ static void process_cli_command(const char* line) {
     }
 }
 
+static void send_ctrl_response(uint8_t cmd, uint8_t status, const uint8_t* data, size_t data_len) {
+    size_t payload_len = 2 + data_len;
+    uint8_t header[5] = {
+        FRAME_MAGIC_0,
+        FRAME_MAGIC_1,
+        DIR_CTRL_RESP,
+        (uint8_t)((payload_len >> 8) & 0xFF),
+        (uint8_t)(payload_len & 0xFF)
+    };
+
+    uint8_t payload[64];
+    payload[0] = cmd;
+    payload[1] = status;
+    if (data && data_len > 0) {
+        memcpy(payload + 2, data, data_len);
+    }
+
+    uint8_t crc = crc8_calc(payload, payload_len);
+
+    Serial.write(header, sizeof(header));
+    Serial.write(payload, payload_len);
+    Serial.write(&crc, 1);
+    Serial.flush();
+}
+
+static void process_ctrl_command(const uint8_t* payload, size_t len) {
+    if (!payload || len < 1) return;
+
+    uint8_t cmd = payload[0];
+
+    switch (cmd) {
+        case RADIO_CMD_GET_STATUS: {
+            uint8_t mac[6];
+            esp_wifi_get_mac(WIFI_IF_STA, mac);
+            uint8_t resp_data[10];
+            memcpy(resp_data, mac, 6);
+            resp_data[6] = s_is_lr_mode ? 0x02 : 0x01; // Modo
+            resp_data[7] = s_channel;                   // Canal
+            resp_data[8] = s_tx_power;                  // Potencia
+            resp_data[9] = (uint8_t)(s_peer_count & 0xFF);
+            send_ctrl_response(cmd, RADIO_STATUS_OK, resp_data, sizeof(resp_data));
+            break;
+        }
+        case RADIO_CMD_SET_MODE: {
+            if (len >= 2) {
+                uint8_t mode = payload[1];
+                s_is_lr_mode = (mode == 0x02);
+                apply_radio_config();
+                uint8_t cur_mode = s_is_lr_mode ? 0x02 : 0x01;
+                send_ctrl_response(cmd, RADIO_STATUS_OK, &cur_mode, 1);
+            } else {
+                send_ctrl_response(cmd, RADIO_STATUS_ERR, nullptr, 0);
+            }
+            break;
+        }
+        case RADIO_CMD_SET_CHAN: {
+            if (len >= 2 && payload[1] >= 1 && payload[1] <= 13) {
+                s_channel = payload[1];
+                apply_radio_config();
+                send_ctrl_response(cmd, RADIO_STATUS_OK, &s_channel, 1);
+            } else {
+                send_ctrl_response(cmd, RADIO_STATUS_ERR, nullptr, 0);
+            }
+            break;
+        }
+        case RADIO_CMD_SET_POWER: {
+            if (len >= 2 && payload[1] >= 1 && payload[1] <= 84) {
+                s_tx_power = payload[1];
+                apply_radio_config();
+                send_ctrl_response(cmd, RADIO_STATUS_OK, &s_tx_power, 1);
+            } else {
+                send_ctrl_response(cmd, RADIO_STATUS_ERR, nullptr, 0);
+            }
+            break;
+        }
+        default:
+            send_ctrl_response(cmd, RADIO_STATUS_ERR, nullptr, 0);
+            break;
+    }
+}
+
 void setup() {
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH); // Apagado
@@ -331,6 +412,8 @@ void loop() {
                 esp_now_send(s_broadcast_mac, payload, len);
                 s_stat_tx_pkts++;
                 digitalWrite(LED_PIN, HIGH);
+            } else if (dir == DIR_CTRL_CMD && payload && len > 0) {
+                process_ctrl_command(payload, len);
             }
             s_cli_len = 0; // Si fue binario, resetear CLI
             continue;
