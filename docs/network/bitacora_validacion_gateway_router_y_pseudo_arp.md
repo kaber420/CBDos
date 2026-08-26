@@ -33,7 +33,7 @@ Se ha demostrado con éxito la pila completa de navegación y enrutamiento por m
  ┌──────────────────────────────────────────────────────────────────┐
  │             GATEWAY-ROUTER FRONTAL (gateway_router.py)           │
  │                                                                  │
- │  1. Tabla Pseudo-ARP / Pseudo-NAT (clients.json):                │
+ │  1. Tabla Pseudo-ARP / Pseudo-NAT (SQLite3 - clients.db):        │
  │     Mapeo: IPv4 (4B) <---> Short ID (2B) <---> MAC (6B) <---> ACL│
  │  2. Enrutamiento por Service ID:                                 │
  │     • ServiceId::TlvglRequest (0x07)                             │
@@ -56,7 +56,7 @@ Se ha demostrado con éxito la pila completa de navegación y enrutamiento por m
 
 ---
 
-## 🔬 2. Registro de Tráfico Real en Consola (Captura de Producción)
+## 🔬 2. Registro de Tráfico Real en Consola (Captura de Producción con Telemetría)
 
 ```text
 📻 [Dongle ESP-NOW] Conectado exitosamente en /dev/ttyACM0 @ 115200 bps
@@ -64,17 +64,23 @@ Se ha demostrado con éxito la pila completa de navegación y enrutamiento por m
 📻 Puente Dongle USB ESP-NOW activo en /dev/ttyACM0
 📁 Directorio de contenido: /home/kaber420/Documentos/proyectos/cbdos/tools/tlvgl_gateway/content
 
-📻 [Dongle ESP-NOW] Trama recibida (chunk 1/1, 18B)
-🌐 [Router -> TLVGL] Nodo [0x0001] pide: 'bento.mesh'
-📻 [Dongle ESP-NOW] Emitiendo respuesta (370B) por radio...
+┌── 📡 [Mesh Telemetría] Servicio: TLVGL Local ──────────────────────────
+│ 🪪 Cliente IP:    10.77.127.216 (UUID)
+│ 🏷️ Short ID:     0x7FD8 | MAC: 14:C1:9F:4D:7F:D8 | Señal: -29 dBm
+│ 🌐 Recurso:       'bento.mesh'
+│ 🛡️ Estado ACL:    🟢 AUTORIZADO
+│ 📤 Bytecode TLV:  367 Bytes emitidos
+└───────────────────────────────────────────────────────────────
 
-📻 [Dongle ESP-NOW] Trama recibida (chunk 1/1, 18B)
-🌐 [Router -> TLVGL] Nodo [0x0001] pide: 'clima.mesh'
-📻 [Dongle ESP-NOW] Emitiendo respuesta (326B) por radio...
+🌐 [Router -> TLVGL] Nodo [10.77.127.216] pide: 'bento.mesh'
 
-📻 [Dongle ESP-NOW] Trama recibida (chunk 1/1, 18B)
-🌐 [Router -> TLVGL] Nodo [0x0001] pide: 'bento.mesh'
-📻 [Dongle ESP-NOW] Emitiendo respuesta (370B) por radio...
+┌── 📡 [Mesh Telemetría] Servicio: TLVGL Local ──────────────────────────
+│ 🪪 Cliente IP:    10.77.127.216 (UUID)
+│ 🏷️ Short ID:     0x7FD8 | MAC: 14:C1:9F:4D:7F:D8 | Señal: -28 dBm
+│ 🌐 Recurso:       'clima.mesh'
+│ 🛡️ Estado ACL:    🟢 AUTORIZADO
+│ 📤 Bytecode TLV:  326 Bytes emitidos
+└───────────────────────────────────────────────────────────────
 ```
 
 ---
@@ -83,16 +89,18 @@ Se ha demostrado con éxito la pila completa de navegación y enrutamiento por m
 
 | Módulo | Ruta | Propósito |
 | :--- | :--- | :--- |
-| **Tabla Pseudo-ARP** | [`tools/tlvgl_gateway/pseudo_arp.py`](file:///home/kaber420/Documentos/proyectos/cbdos/tools/tlvgl_gateway/pseudo_arp.py) | Deriva `10.MAC[3].MAC[4].MAC[5]`, asigna Short ID con DAD, persiste en `clients.json` y controla ACL. |
-| **Gateway-Router** | [`tools/tlvgl_gateway/gateway_router.py`](file:///home/kaber420/Documentos/proyectos/cbdos/tools/tlvgl_gateway/gateway_router.py) | Enrutador frontal por `ServiceId`, transcodificador Proxy Web y generador de telemetría. |
+| **Tabla Pseudo-ARP (SQLite3)** | [`tools/tlvgl_gateway/pseudo_arp.py`](file:///home/kaber420/Documentos/proyectos/cbdos/tools/tlvgl_gateway/pseudo_arp.py) | Deriva `10.MAC[3].MAC[4].MAC[5]`, asigna Short ID con DAD, persiste en `clients.db` (modo WAL) y controla ACL. |
+| **Gateway-Router** | [`tools/tlvgl_gateway/gateway_router.py`](file:///home/kaber420/Documentos/proyectos/cbdos/tools/tlvgl_gateway/gateway_router.py) | Enrutador frontal por `ServiceId`, transcodificador Proxy Web y generador de telemetría ASCII. |
 | **Servidor Dual** | [`tools/tlvgl_gateway/tlvgl_server.py`](file:///home/kaber420/Documentos/proyectos/cbdos/tools/tlvgl_gateway/tlvgl_server.py) | Servidor concurrente TCP (Wi-Fi) + Serial (Dongle ESP-NOW) con soporte de `gateway.conf` y `--debug`. |
 | **Configuración** | [`tools/tlvgl_gateway/gateway.conf`](file:///home/kaber420/Documentos/proyectos/cbdos/tools/tlvgl_gateway/gateway.conf) | Parámetros del gateway (`PORT`, `SERIAL_PORT`, `DEBUG=true`, `CONTENT_DIR`). |
 | **Firmware S3** | [`core/src/mesh/MeshEngine.cpp`](file:///home/kaber420/Documentos/proyectos/cbdos/core/src/mesh/MeshEngine.cpp) | Auto-cálculo de IP `10.x.y.z` y Short ID desde eFuses al iniciar la radio. |
+| **Puente USB C3** | [`tools/espnow_usb_bridge/src/main.cpp`](file:///home/kaber420/Documentos/proyectos/cbdos/tools/espnow_usb_bridge/src/main.cpp) | Captura MAC (6B) y RSSI (1B) de capa 2 y las enmarca hacia la PC por USB CDC. |
 
 ---
 
 ## 🎯 4. Conclusiones y Próximos Hitos
 
-1. **Rendimiento Comprobado:** Las páginas completas de UI (`clima.mesh` y `bento.mesh`) pesan entre 326 y 370 Bytes gracias a la compresión semántica TLVGL y se transmiten por el aire en milisegundos.
+1. **Rendimiento Comprobado:** Las páginas completas de UI (`clima.mesh` y `bento.mesh`) pesan entre 326 y 367 Bytes gracias a la compresión semántica TLVGL y se transmiten por el aire en milisegundos.
 2. **Identidad Sólida:** El esquema `10.MAC[3].MAC[4].MAC[5]` elimina la necesidad de DHCP y permite interoperabilidad directa con OSPF y BGP en routers Linux/FreeBSD.
-3. **Siguiente Paso:** Implementación de la persistencia de Wallpapers en partición Flash SPIFFS interna del S3/P4 sin depender de MicroSD.
+3. **Persistencia Robusta:** SQLite3 (`clients.db`) con modo WAL previene cualquier corrupción y permite inspección concurrente.
+4. **Siguiente Paso:** Implementación de la persistencia de Wallpapers en partición Flash SPIFFS interna del S3/P4 sin depender de MicroSD.

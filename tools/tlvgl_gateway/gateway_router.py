@@ -19,13 +19,13 @@ from tlvgl_compiler import TLVGLCompiler, MAX_W, MAX_H
 
 
 class GatewayRouter:
-    def __init__(self, content_dir: Path, arp_storage: str = "clients.json", max_w: int = MAX_W, max_h: int = MAX_H, debug: bool = False):
+    def __init__(self, content_dir: Path, arp_storage: str = "clients.db", max_w: int = MAX_W, max_h: int = MAX_H, debug: bool = False):
         self.content_dir = Path(content_dir)
         self.max_w = max_w
         self.max_h = max_h
         self.debug = debug
         self.compiler = TLVGLCompiler()
-        self.arp_table = PseudoArpTable(storage_path=arp_storage)
+        self.arp_table = PseudoArpTable(db_path=arp_storage)
         self.cache = {}
 
     def log_telemetry(self, client_entry: Optional[dict], short_id: int, req_url: str, resp_len: int, service_name: str = "TLVGL"):

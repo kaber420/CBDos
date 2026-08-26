@@ -81,24 +81,25 @@ Cada Torre o Gateway de radio física administra un bloque de subred **/24** (25
 
 ## 🗃️ 4. La Tabla Pseudo-ARP en la Torre / Gateway
 
-El Gateway mantiene en memoria una tabla dinámica de traducción entre la dirección lógica IPv4, la dirección física de radio y el token de sesión rápida:
+El Gateway mantiene en memoria una tabla dinámica de traducción entre la dirección lógica IPv4, la dirección física de radio y el token de sesión rápida, persistida en una base de datos **SQLite3 (`clients.db`)** con modo WAL (*Write-Ahead Logging*):
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                             TABLA PSEUDO-ARP (Router RAM & clients.json)                         │
+│                             TABLA PSEUDO-ARP (SQLite3 - clients.db)                              │
 ├─────────────┬───────────┬───────────────────┬──────────────┬──────────────┬─────────┬────────────┤
 │ IPv4 (UUID) │ Short ID  │     MAC Física    │ Permiso Proxy│ Enlace Radio │  RSSI   │ Last Seen  │
 ├─────────────┼───────────┼───────────────────┼──────────────┼──────────────┼─────────┼────────────┤
 │ 10.1.3.1    │  0x0001   │ Gateway Local     │ N/A (Root)   │ UART/Local   │  0 dBm  │ Activo     │
-│ 10.1.3.42   │  0x002A   │ 9C:CC:01:7C:0C:94 │ AUTORIZADO   │ ESP-NOW LR   │ -48 dBm │ Hace 2s    │
-│ 10.1.3.88   │  0x0058   │ 14:C1:9F:4D:7F:D8 │ SOLO LOCAL   │ ESP-NOW Norm │ -62 dBm │ Hace 15s   │
+│ 10.77.127.216│ 0x7FD8   │ 14:C1:9F:4D:7F:D8 │ AUTORIZADO   │ ESP-NOW Norm │ -29 dBm │ Hace 1s    │
+│ 10.124.12.148│ 0x0C94   │ 9C:CC:01:7C:0C:94 │ AUTORIZADO   │ ESP-NOW LR   │ -48 dBm │ Hace 5s    │
 └─────────────┴───────────┴───────────────────┴──────────────┴──────────────┴─────────┴────────────┘
 ```
 
 ### Funciones de la Tabla Pseudo-ARP:
-1. **Resolución Inversa Inmediata:** Convierte tramas entrantes de 3 Bytes (`Short ID 0x002A`) a su identidad completa `10.1.3.42` para logs, auditoría y enrutamiento hacia la red exterior.
-2. **Control de Acceso (ACL):** Determina si el cliente puede hacer consultas web a internet o únicamente acceder a recursos locales de la malla.
-3. **Mapeo a la Capa 2:** Al responder, asocia el `Short ID` con la dirección MAC física de hardware para la API de transmisión del driver de radio.
+1. **Resolución Inversa Inmediata:** Convierte tramas entrantes de 3 Bytes (`Short ID 0x7FD8`) a su identidad completa `10.77.127.216` para logs, auditoría y enrutamiento hacia la red exterior.
+2. **Control de Acceso (ACL):** Determina si el cliente puede hacer consultas web a internet (`proxy_acl = 1`) o únicamente acceder a recursos locales de la malla.
+3. **Persistencia ACID & Concurrencia:** Utiliza transacciones SQLite3 en modo WAL para evitar cualquier corrupción en caso de apagón del Gateway y permitir consultas concurrentes desde dashboards web o bots de telemetría.
+4. **Mapeo a la Capa 2:** Al responder, asocia el `Short ID` con la dirección MAC física de hardware para la API de transmisión del driver de radio.
 
 ---
 
@@ -172,7 +173,7 @@ El Gateway-Router aplica dos reglas estrictas de reenvío:
 ## 🚀 7. Roadmap de Implementación
 
 1. **Fase 1: Gateway-Router (`gateway_router.py`):**
-   - Integrar la clase `PseudoArpTable` con almacenamiento en memoria y exportación periódica a `clients.json`.
+   - Integrar la clase `PseudoArpTable` con almacenamiento transaccional en **SQLite3 (`clients.db`)**.
    - Implementar el despachador de asociación `handle_assoc_request()`.
 2. **Fase 2: Firmware CBDos (`MeshEngine.cpp`):**
    - Añadir la máquina de estados de asociación para registrar el UUID/IPv4 y persistir el `Short ID` en NVS.

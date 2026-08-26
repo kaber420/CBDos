@@ -387,6 +387,7 @@ sequenceDiagram
 
 | Subsistema / Módulo | Interfaz Core (`core/include/cbdos/`) | Implementación P4 (`bsp/esp32_p4_jc4880/hal/`) | Implementación S3 (`bsp/esp32_s3_jc3248/hal/`) |
 | :--- | :--- | :--- | :--- |
+| **Radio & Malla** | `radio.hpp`, `mesh/mesh_engine.hpp` | `hal_radio_p4.cpp` | `hal_radio_s3.cpp` |
 | **Flasheador Serial** | `flasher.hpp` | `hal_flasher_p4.cpp` | `hal_flasher_s3.cpp` |
 | **Terminal UART** | `uart.hpp` | `hal_uart_p4.cpp` | `hal_uart_s3.cpp` |
 | **Almacenamiento** | `storage.hpp` | `hal_storage_p4.cpp` | `hal_storage_s3.cpp` |

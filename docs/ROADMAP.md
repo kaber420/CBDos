@@ -33,7 +33,9 @@ El sistema utiliza una arquitectura **Dual-Target desacoplada**:
 | **Text Editor View** | Editor de código y notas con guardado en Flash/SD | ✅ 100% | ✅ | ✅ |
 | **Terminal Serial UART**| Consola interactiva para routers, sensores y debug con guardado a SD | ✅ 100% | ✅ | ✅ |
 | **Flasheador Universal**| Grabador de firmware para microcontroladores ESP externos y C6 | ✅ 100% | ✅ | ✅ |
-| **Navegador TLV (TLVGL)**| Cliente genérico super denso con diccionarios híbridos y widgets LVGL 9.5 | ✅ 100% | ✅ | ✅ |
+| **Mesh Routing Engine** | Direccionamiento IPv4 Mesh (`10.x.y.z`), Short IDs (DAD), Pseudo-ARP SQLite | ✅ 100% | ✅ | ✅ |
+| **Navegador TLV (TLVGL)**| Cliente genérico super denso sobre ESP-NOW/WiFi con widgets LVGL 9.5 | ✅ 100% | ✅ | ✅ |
+| **Gateway-Router & Proxy**| Servidor dual (TCP/Serial), transcodificador Proxy Web y persistencia SQLite | ✅ 100% | ✅ | ✅ |
 | **Lua Script Engine** | Intérprete Lua embebido para scripts y micro-apps | ✅ 80% | ✅ | ✅ |
 | **Cartridge Engine** | Ejecutor de juegos/cartuchos retro | ✅ 80% | ✅ | ✅ |
 | **Synth Sound Engine** | Motor de síntesis y generador de ondas sonoras | 🔄 En Plan | ⏳ | ⏳ |

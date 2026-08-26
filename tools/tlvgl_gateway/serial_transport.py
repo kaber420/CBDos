@@ -134,6 +134,8 @@ class SerialEspNowTransport:
                         buf.append(b)
                         if len(buf) >= expected_len:
                             state = 6
+                    elif state == 6:
+                        state = 0
                         if b == crc8_calc(buf):
                             if dir_byte == DIR_DONGLE_TO_PC and self.on_packet_cb:
                                 if len(buf) >= 7:

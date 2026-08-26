@@ -89,3 +89,5 @@ bsp/esp32_s3_jc3248/lib/peanut_gb/
 *credentials*
 wifi_credentials.h
 
+tools/tlvgl_gateway/clients.db-shm
+tools/tlvgl_gateway/clients.db-wal
