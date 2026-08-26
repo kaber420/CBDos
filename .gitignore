@@ -95,3 +95,4 @@ wifi_credentials.h
 *.db-wal
 tools/tlvgl_gateway/data/
 tools/tlvgl_gateway/clients.json
+tools/tlvgl_gateway/clients.db
