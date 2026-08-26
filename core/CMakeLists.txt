@@ -65,7 +65,7 @@ idf_component_register(
 
         "src/ui/views/LuappView.cpp"
         "src/network/ConfigManager.cpp"
-        "src/network/TimeService.cpp"
+        "src/time/TimeManager.cpp"
         "src/lua/LuaEngine.cpp"
         "src/lua/LuaBridge.cpp"
         "src/lua/LuaRunner.cpp"
@@ -89,6 +89,7 @@ idf_component_register(
         "src/audio/libhelix/src/libhelix-mp3"
         "src/audio/libhelix/src/libhelix-aac"
         "src/network"
+        "src/time"
         "src/lua"
         "src/lua/liblua"
     REQUIRES 

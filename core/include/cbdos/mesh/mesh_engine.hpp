@@ -92,6 +92,7 @@ public:
      * @brief Sondeo y Escaneo de Torres en el Aire
      */
     void sendTowerProbe();
+    void setEpochReceivedCallback(std::function<void(time_t)> cb); // Inyectado por el BSP al arranque
     const std::vector<DiscoveredTower>& getDiscoveredTowers() const { return m_discoveredTowers; }
     void clearDiscoveredTowers() { m_discoveredTowers.clear(); }
     void setDiscoveredTowersCallback(std::function<void()> cb) { m_towersCb = cb; }
@@ -141,6 +142,7 @@ private:
     std::vector<ChunkReassembly> m_reassemblies;
     std::vector<DiscoveredTower> m_discoveredTowers;
     std::function<void()> m_towersCb = nullptr;
+    std::function<void(time_t)> m_epochReceivedCb = nullptr;
 
     int8_t m_lastRssi = -127;
     uint32_t m_rxPackets = 0;

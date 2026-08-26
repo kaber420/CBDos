@@ -7,9 +7,10 @@
 #include "cbdos/flasher.hpp"
 #include "cbdos/uart.hpp"
 #include "cbdos/ui.hpp"
+#include "cbdos/mesh/mesh_engine.hpp"
 #include "LVGL_Port.h"
 #include "../../core/src/network/ConfigManager.h"
-#include "../../core/src/network/TimeService.h"
+#include "cbdos/time.hpp"
 #include <esp_log.h>
 #include <nvs_flash.h>
 #include <freertos/FreeRTOS.h>
@@ -19,6 +20,7 @@ namespace cbdos {
 namespace bsp {
     void initPersistenceBackend();
     void initMeshTransportP4();
+    cbdos::time::ITimeProvider* getEspIdfTimeProvider();
 }
 }
 
@@ -78,6 +80,14 @@ extern "C" void app_main(void) {
     cbdos::bsp::initPersistenceBackend();
     cbdos::bsp::initMeshTransportP4();
 
+    // Conectar time <--> mesh mediante callbacks (sin acoplamiento directo entre módulos)
+    cbdos::time::setTowerSyncRequestCallback([]() {
+        cbdos::mesh::MeshEngine::getInstance().sendTowerProbe();
+    });
+    cbdos::mesh::MeshEngine::getInstance().setEpochReceivedCallback([](time_t epoch) {
+        cbdos::time::setEpoch(epoch, cbdos::time::TimeSource::Tower);
+    });
+
     // Cargar configuraciones del sistema desde NVS
     SystemConfig sysCfg;
     ConfigManager::getInstance().loadSystem(sysCfg);
@@ -87,7 +97,10 @@ extern "C" void app_main(void) {
     // Inicializar Servicio de Hora NTP con zona horaria persistida
     TimeConfig timeCfg;
     ConfigManager::getInstance().loadTime(timeCfg);
-    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str(), timeCfg.enabled);
+    cbdos::time::init(cbdos::bsp::getEspIdfTimeProvider());
+    cbdos::time::setNtpServer(timeCfg.ntpServer.c_str());
+    cbdos::time::setTimezone(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds);
+    cbdos::time::setNtpEnabled(timeCfg.enabled);
 
     // 1. Inicializar Subsistema de Almacenamiento (MicroSD / Flash)
     if (!cbdos::storage::init()) {

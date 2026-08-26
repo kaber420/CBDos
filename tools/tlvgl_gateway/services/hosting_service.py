@@ -23,6 +23,26 @@ class HostingService(BaseService):
         self.compiler = TLVGLCompiler()
         self.cache: Dict[Tuple[str, int, int, float], bytes] = {}
 
+    def _calc_crc16(self, data: bytes) -> int:
+        crc = 0xFFFF
+        for b in data:
+            crc ^= (b << 8)
+            for _ in range(8):
+                if (crc & 0x8000):
+                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF
+                else:
+                    crc = (crc << 1) & 0xFFFF
+        return crc & 0xFFFF
+
+    def init_service(self, ctx: MeshContext):
+        """Compilar y calcular el hash de la portada al iniciar."""
+        index_tlv = self.compile_or_cache("index.html")
+        if index_tlv:
+            cover_hash = self._calc_crc16(index_tlv)
+            ctx.event_bus.publish("cover_updated", {"hash": cover_hash})
+            if ctx.debug:
+                print(f"📄 [HostingService] Portada index.html hash CRC16=0x{cover_hash:04X}")
+
     def resolve_mesh_url(self, url: str) -> str:
         url = url.strip()
         for suffix in ('.mesh', '.tlvgl', '.html'):
@@ -34,7 +54,7 @@ class HostingService(BaseService):
             return 'index.html'
         return url + '.html'
 
-    def compile_or_cache(self, filename: str) -> Optional[bytes]:
+    def compile_or_cache(self, filename: str, ctx: Optional[MeshContext] = None) -> Optional[bytes]:
         target_path = (self.content_dir / filename).resolve()
         if not target_path.is_file():
             return None
@@ -49,6 +69,11 @@ class HostingService(BaseService):
                 html = f.read()
             tlv = self.compiler.compile(html, self.max_w, self.max_h)
             self.cache[cache_key] = tlv
+
+            if filename == "index.html" and ctx is not None:
+                cover_hash = self._calc_crc16(tlv)
+                ctx.event_bus.publish("cover_updated", {"hash": cover_hash})
+
             return tlv
         except Exception as e:
             print(f"❌ Error compilando {filename}: {e}")

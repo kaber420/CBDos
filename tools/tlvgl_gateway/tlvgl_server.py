@@ -158,6 +158,19 @@ if __name__ == '__main__':
             time.sleep(0.1)
             serial_transport.set_radio_mode(args.radio_mode)
 
+    async def broadcast_worker(router: GatewayRouter, transport: Optional[SerialEspNowTransport]):
+        """Emite periódicamente el Micro-Broadcast PoP (Hora Epoch + Hash Portada + Status) cada 60s."""
+        while True:
+            try:
+                if transport and transport.running:
+                    pkt = router.get_pop_broadcast_packet()
+                    transport.send_packet(pkt, msg_id=0xAA)
+                    if router.debug:
+                        print(f"📡 [PoP Broadcast] Emitido micro-frame (7B) por ESP-NOW: Epoch={int(time.time())} Hash=0x{router.routing_svc.cover_hash:04X} Status=0x{router.routing_svc.status_code:02X}")
+            except Exception as e:
+                print(f"⚠️ Error en broadcast_worker: {e}")
+            await asyncio.sleep(60)
+
     async def main():
         srv = await asyncio.start_server(server.handle_client, '0.0.0.0', args.port)
         mode_str = "🟢 MODO DESARROLLO (Telemetría Detallada)" if args.debug else "⚪ MODO PRODUCCIÓN (Logs Compactos)"
@@ -166,6 +179,10 @@ if __name__ == '__main__':
         if args.serial:
             print(f"📻 Puente Dongle USB ESP-NOW activo en {args.serial}")
         print(f"📁 Directorio de contenido: {args.content_dir}")
+
+        # Iniciar emisor periódico de 60 segundos
+        asyncio.create_task(broadcast_worker(server.router, serial_transport))
+
         async with srv:
             await srv.serve_forever()
 

@@ -5,6 +5,7 @@
 #include <cstring>
 #include <vector>
 #include <functional>
+#include <ctime>
 
 namespace cbdos {
 namespace mesh {
@@ -92,6 +93,28 @@ struct MeshPacket {
     int8_t rssi = 0;
 };
 
+// Banderas de servicios de Torre (Legacy y Broadcast)
+static constexpr uint8_t TOWER_SVC_INTERNET = (1 << 0);
+static constexpr uint8_t TOWER_SVC_TIME     = (1 << 1);
+
+// Banderas de Estado del PoP (Byte 6 del Micro-Broadcast de 7 Bytes)
+static constexpr uint8_t POP_STATUS_INTERNET_UP  = (1 << 0); // 1 = Salida a Internet activa, 0 = Offline/Solo local
+static constexpr uint8_t POP_STATUS_PROXY_OPEN   = (1 << 1); // 1 = Salida libre por proxy, 0 = Requiere portal cautivo/login
+static constexpr uint8_t POP_STATUS_BAAS_BUSY    = (1 << 2); // 1 = Servidor digestor web ocupado, 0 = Disponible
+static constexpr uint8_t POP_STATUS_ALERT_ACTIVE = (1 << 3); // 1 = Alerta activa en el tablón del PoP, 0 = Normal
+
+/**
+ * @brief Micro-Broadcast de Metadatos del PoP (Exactamente 7 Bytes Little-Endian)
+ * Emitido periódicamente (cada 60s) por el Gateway/Torre sin requerir respuesta (0 TX del cliente)
+ */
+#pragma pack(push, 1)
+struct PoPBroadcastFrame {
+    uint32_t epoch;       // Bytes 0..3: Unix Epoch (Segundos Unix actuales)
+    uint16_t cover_hash;  // Bytes 4..5: Hash CRC16 de la página de inicio (index.bcml)
+    uint8_t  status_code; // Byte 6: Bitmask de estado del PoP (POP_STATUS_*)
+};
+#pragma pack(pop)
+
 // Estructura de Torre descubierta en el aire
 struct DiscoveredTower {
     uint8_t mac[6] = {0};
@@ -99,6 +122,10 @@ struct DiscoveredTower {
     char name[32] = {0};
     uint8_t channel = 1;
     uint8_t supported_modes = 0x03; // 0x01 = Normal, 0x02 = LR, 0x04 = FLRC
+    uint8_t active_services = 0;
+    time_t last_advertised_epoch = 0;
+    uint16_t cover_hash = 0;
+    uint8_t status_code = 0;
     int8_t rssi = -100;
     uint32_t last_seen_ms = 0;
 };

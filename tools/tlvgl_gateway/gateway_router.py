@@ -35,9 +35,20 @@ class GatewayRouter:
             MESH.MESH_SVC_PROXY: self.proxy_svc
         }
 
-        # 2. Configurar servicios activos según el perfil
+        # 2. Inicializar y enlazar servicios al Bus de Eventos
+        for svc in self.services.values():
+            svc.init_service(self.ctx)
+
+        # 3. Configurar servicios activos según el perfil
         if services_list is not None:
             self.configure_services(services_list)
+
+    def get_pop_broadcast_packet(self) -> bytes:
+        """Genera la trama completa de Micro-Broadcast (Header 3B + Payload 7B) para emisión."""
+        payload_7b = self.routing_svc.generate_pop_broadcast()
+        # Header ultra-corto (3B): Control = 0x4F (DST_ONLY | RoutingControl), DstID = 0xFFFF (Broadcast)
+        header = MESH.build_response_header(MESH.MESH_CTRL_DST_ONLY | 0x0F, 0xFFFF)
+        return header + payload_7b
 
     def configure_services(self, active_services: list):
         """Habilita o deshabilita servicios por nombre ('routing', 'hosting', 'proxy')."""

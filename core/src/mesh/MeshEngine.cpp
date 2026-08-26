@@ -313,9 +313,52 @@ void MeshEngine::processCompletedPacket(const uint8_t* src_mac, const uint8_t* f
         packet.payload.assign(full_data + hdr_consumed, full_data + full_len);
     }
 
-    // Si es mensaje de Control de Ruteo (Probe Response = 0x02)
+    // Si es mensaje de Control de Ruteo / Broadcast de Sistema
     if (packet.header.service == static_cast<uint8_t>(ServiceId::RoutingControl)) {
-        if (packet.payload.size() >= 6 && packet.payload[0] == 0x02) {
+        // 1. Micro-Broadcast PoP (Exactamente 7 Bytes: Epoch 4B + Hash 2B + Status 1B)
+        if (packet.payload.size() == sizeof(PoPBroadcastFrame)) {
+            const PoPBroadcastFrame* pop = reinterpret_cast<const PoPBroadcastFrame*>(packet.payload.data());
+            
+            uint16_t tower_id = (static_cast<uint16_t>(src_mac[4]) << 8) | static_cast<uint16_t>(src_mac[5]);
+            
+            DiscoveredTower* dt = nullptr;
+            for (auto& t : m_discoveredTowers) {
+                if (memcmp(t.mac, src_mac, 6) == 0) {
+                    dt = &t;
+                    break;
+                }
+            }
+            if (!dt) {
+                DiscoveredTower new_t;
+                memcpy(new_t.mac, src_mac, 6);
+                m_discoveredTowers.push_back(new_t);
+                dt = &m_discoveredTowers.back();
+                snprintf(dt->name, sizeof(dt->name), "PoP 0x%04X", tower_id);
+            }
+            
+            dt->short_id = tower_id;
+            dt->channel = getChannel();
+            dt->rssi = rssi;
+            dt->last_seen_ms = 0;
+            dt->cover_hash = pop->cover_hash;
+            dt->status_code = pop->status_code;
+            dt->last_advertised_epoch = static_cast<time_t>(pop->epoch);
+            dt->active_services = TOWER_SVC_TIME;
+            if ((pop->status_code & POP_STATUS_INTERNET_UP) != 0) {
+                dt->active_services |= TOWER_SVC_INTERNET;
+            }
+
+            // Inyectar la hora recibida inmediatamente (0 TX del cliente)
+            if (m_epochReceivedCb && pop->epoch > 1700000000) {
+                m_epochReceivedCb(static_cast<time_t>(pop->epoch));
+            }
+
+            if (m_towersCb) {
+                m_towersCb();
+            }
+        }
+        // 2. Probe Response tradicional / extendido (Tag = 0x02)
+        else if (packet.payload.size() >= 6 && packet.payload[0] == 0x02) {
             uint16_t tower_id = (packet.payload[1] << 8) | packet.payload[2];
             uint8_t ch = packet.payload[3];
             uint8_t modes = packet.payload[4];
@@ -348,6 +391,21 @@ void MeshEngine::processCompletedPacket(const uint8_t* src_mac, const uint8_t* f
                 snprintf(dt->name, sizeof(dt->name), "Torre 0x%04X", tower_id);
             }
 
+            size_t offset = 6 + name_len;
+            if (packet.payload.size() >= offset + 9) {
+                dt->active_services = packet.payload[offset];
+                
+                uint64_t epoch_u64 = 0;
+                for (int i = 0; i < 8; ++i) {
+                    epoch_u64 |= (static_cast<uint64_t>(packet.payload[offset + 1 + i]) << (8 * i));
+                }
+                dt->last_advertised_epoch = static_cast<time_t>(epoch_u64);
+                
+                if ((dt->active_services & TOWER_SVC_TIME) != 0 && m_epochReceivedCb) {
+                    m_epochReceivedCb(dt->last_advertised_epoch);
+                }
+            }
+
             if (m_towersCb) {
                 m_towersCb();
             }
@@ -377,6 +435,11 @@ void MeshEngine::sendTowerProbe() {
 
     sendPacket(ServiceId::RoutingControl, 0xFFFF, probe.data(), probe.size(), true, nullptr);
 }
+
+void MeshEngine::setEpochReceivedCallback(std::function<void(time_t)> cb) {
+    m_epochReceivedCb = cb;
+}
+
 
 uint8_t MeshEngine::getChannel() const {
     if (m_transport) return m_transport->getChannel();

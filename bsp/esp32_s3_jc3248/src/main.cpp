@@ -6,8 +6,9 @@
 #include "cbdos/network.hpp"
 #include "cbdos/radio.hpp"
 #include "cbdos/ui.hpp"
+#include "cbdos/mesh/mesh_engine.hpp"
 #include "../../core/src/network/ConfigManager.h"
-#include "../../core/src/network/TimeService.h"
+#include "cbdos/time.hpp"
 #include "../../core/src/lua/LuaBridge.hpp"
 #include <Arduino.h>
 #include <WiFi.h>
@@ -21,6 +22,7 @@ namespace cbdos {
 namespace bsp {
     void initPersistenceBackend();
     void initMeshTransportS3();
+    cbdos::time::ITimeProvider* getArduinoTimeProvider();
 }
 }
 
@@ -73,6 +75,14 @@ void setup() {
     cbdos::bsp::initPersistenceBackend();
     cbdos::bsp::initMeshTransportS3();
 
+    // Conectar time <--> mesh mediante callbacks (sin acoplamiento directo entre módulos)
+    cbdos::time::setTowerSyncRequestCallback([]() {
+        cbdos::mesh::MeshEngine::getInstance().sendTowerProbe();
+    });
+    cbdos::mesh::MeshEngine::getInstance().setEpochReceivedCallback([](time_t epoch) {
+        cbdos::time::setEpoch(epoch, cbdos::time::TimeSource::Tower);
+    });
+
     // Cargar configuraciones del sistema desde NVS
     SystemConfig sysCfg;
     ConfigManager::getInstance().loadSystem(sysCfg);
@@ -98,7 +108,10 @@ void setup() {
     cbdos::radio::init();
     TimeConfig timeCfg;
     ConfigManager::getInstance().loadTime(timeCfg);
-    TimeService::getInstance().init(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds, timeCfg.ntpServer.c_str(), timeCfg.enabled);
+    cbdos::time::init(cbdos::bsp::getArduinoTimeProvider());
+    cbdos::time::setNtpServer(timeCfg.ntpServer.c_str());
+    cbdos::time::setTimezone(timeCfg.gmtOffsetSeconds, timeCfg.daylightOffsetSeconds);
+    cbdos::time::setNtpEnabled(timeCfg.enabled);
 
     cbdos::radio::RadioConfig radioCfg;
     ConfigManager::getInstance().loadRadio(radioCfg);

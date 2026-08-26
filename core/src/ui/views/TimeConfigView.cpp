@@ -2,7 +2,7 @@
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "../../network/ConfigManager.h"
-#include "../../network/TimeService.h"
+#include "cbdos/time.hpp"
 #include "cbdos/network.hpp"
 #include <cstdio>
 #include <cstring>
@@ -69,8 +69,8 @@ void TimeConfigView::updateClockDisplay() {
 
     char timeBuf[32];
     char dateBuf[32];
-    TimeService::getInstance().getFormattedTime(timeBuf, sizeof(timeBuf), "%H:%M:%S");
-    TimeService::getInstance().getFormattedDate(dateBuf, sizeof(dateBuf), "%d/%m/%Y");
+    cbdos::time::getFormattedTime(timeBuf, sizeof(timeBuf), "%H:%M:%S");
+    cbdos::time::getFormattedDate(dateBuf, sizeof(dateBuf), "%d/%m/%Y");
 
     lv_label_set_text(m_timeLabel, timeBuf);
     if (m_dateLabel && lv_obj_is_valid(m_dateLabel)) {
@@ -78,8 +78,15 @@ void TimeConfigView::updateClockDisplay() {
     }
 
     if (m_statusLabel && lv_obj_is_valid(m_statusLabel)) {
-        if (TimeService::getInstance().isSynced()) {
-            lv_label_set_text(m_statusLabel, LV_SYMBOL_OK " Sincronizado por NTP");
+        if (cbdos::time::isSynced()) {
+            cbdos::time::TimeSource src = cbdos::time::getSource();
+            if (src == cbdos::time::TimeSource::SNTP) {
+                lv_label_set_text(m_statusLabel, LV_SYMBOL_OK " Sincronizado (Wi-Fi SNTP)");
+            } else if (src == cbdos::time::TimeSource::Tower) {
+                lv_label_set_text(m_statusLabel, LV_SYMBOL_OK " Sincronizado (Torre/Gateway)");
+            } else {
+                lv_label_set_text(m_statusLabel, LV_SYMBOL_OK " Sincronizado (Local)");
+            }
             lv_obj_set_style_text_color(m_statusLabel, lv_color_hex(0x10B981), 0); // Verde
         } else {
             lv_label_set_text(m_statusLabel, LV_SYMBOL_WARNING " Sin sincronizar / Reloj local");
@@ -104,8 +111,8 @@ void TimeConfigView::sync_btn_cb(lv_event_t* e) {
         TimeConfigView* view = static_cast<TimeConfigView*>(lv_event_get_user_data(e));
         if (view) {
             view->saveAndApply();
-            TimeService::getInstance().sync();
-            UIManager::showToast("Sincronizando con NTP...");
+            cbdos::time::syncNtp();
+            UIManager::showToast("Forzando ciclo de sincronización...");
             view->updateClockDisplay();
         }
     }
@@ -144,10 +151,10 @@ void TimeConfigView::saveAndApply() {
 
     // Guardar en NVS y aplicar
     ConfigManager::getInstance().saveTime(cfg);
-    TimeService::getInstance().setEnabled(cfg.enabled);
-    TimeService::getInstance().setTimezone(cfg.gmtOffsetSeconds, cfg.daylightOffsetSeconds);
+    cbdos::time::setAutoSyncEnabled(cfg.enabled);
+    cbdos::time::setTimezone(cfg.gmtOffsetSeconds, cfg.daylightOffsetSeconds);
     if (cfg.enabled && cbdos::network::isConnected()) {
-        TimeService::getInstance().sync();
+        cbdos::time::syncNtp();
     }
     updateClockDisplay();
     UIManager::showToast("Zona horaria y NTP guardados");
@@ -284,12 +291,12 @@ bool TimeConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_remove_flag(ntpTextCont, LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_t* ntpTitle = lv_label_create(ntpTextCont);
-    lv_label_set_text(ntpTitle, "Sincronización Automática (NTP)");
+    lv_label_set_text(ntpTitle, "Sincronización Automática Unificada");
     lv_obj_set_style_text_color(ntpTitle, DefaultTheme::getTextColor(), 0);
     lv_obj_set_style_text_font(ntpTitle, &lv_font_montserrat_14, 0);
 
     lv_obj_t* ntpSub = lv_label_create(ntpTextCont);
-    lv_label_set_text(ntpSub, "Actualizar hora vía Wi-Fi en segundo plano");
+    lv_label_set_text(ntpSub, "Wi-Fi (Internet) o Balizas de Torre Federadas");
     lv_obj_set_style_text_color(ntpSub, DefaultTheme::getMutedTextColor(), 0);
     lv_obj_set_style_text_font(ntpSub, &lv_font_montserrat_12, 0);
 
@@ -351,7 +358,7 @@ bool TimeConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_add_event_cb(syncBtn, sync_btn_cb, LV_EVENT_CLICKED, this);
 
     lv_obj_t* syncLbl = lv_label_create(syncBtn);
-    lv_label_set_text(syncLbl, LV_SYMBOL_REFRESH "  Sincronizar NTP Ahora");
+    lv_label_set_text(syncLbl, LV_SYMBOL_REFRESH "  Sincronizar Ahora");
     lv_obj_set_style_text_color(syncLbl, DefaultTheme::getTextColor(), 0);
     lv_obj_set_style_text_font(syncLbl, &lv_font_montserrat_14, 0);
     lv_obj_center(syncLbl);

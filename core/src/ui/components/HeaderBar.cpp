@@ -3,10 +3,10 @@
 #include "../themes/DefaultTheme.h"
 #include "cbdos/system.hpp"
 #include "cbdos/network.hpp"
-#include "../../network/TimeService.h"
+#include "cbdos/time.hpp"
 #include <cstdio>
 #include <cstring>
-#include <time.h>
+#include <ctime>
 
 namespace cbdos {
 namespace ui {
@@ -219,12 +219,11 @@ void HeaderBar::update() {
     if (!m_container || !lv_obj_is_valid(m_container)) return;
 
     // Actualización y sincronización automática de tiempo (si NTP está activado)
-    TimeService::getInstance().update();
+    cbdos::time::update();
 
     // 1. Reloj NTP Real (HH:MM) - Actualizado cada 15 segundos
-    time_t rawtime;
-    time(&rawtime);
-    struct tm* timeinfo = localtime(&rawtime);
+    std::time_t rawtime = cbdos::time::getEpoch();
+    std::tm* timeinfo = std::localtime(&rawtime);
 
     char clockBuf[16];
     if (timeinfo && timeinfo->tm_year > (2020 - 1900)) {
