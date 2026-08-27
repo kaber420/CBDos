@@ -27,8 +27,8 @@ static std::vector<FlasherPreset> s_s3Presets = {
         "+---------------------------------------------+\n"
         "| Preset exclusivo de la placa ESP32-P4.      |\n"
         "+---------------------------------------------+",
-        {32, 28, 34, 54, 115200, 0x0, "", "ESP32-C6 Coprocesador"},
-        true
+        {32, 28, 34, 54, 115200, 0x0, "/sdcard/c6_slave.bin", "ESP32-C6 Coprocesador"},
+        false
     },
     {
         "custom",

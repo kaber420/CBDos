@@ -16,10 +16,6 @@
 
 static const char* TAG_FLASHER = "HAL_FLASHER_P4";
 
-// Símbolos del binario SDIO C6 embebido
-extern const uint8_t c6_slave_bin_start[] asm("_binary_c6_slave_bin_start");
-extern const uint8_t c6_slave_bin_end[]   asm("_binary_c6_slave_bin_end");
-
 #define UART_PORT_NUM       UART_NUM_1
 
 namespace cbdos {
@@ -46,9 +42,9 @@ FlasherServiceP4::FlasherServiceP4() {
     p1.config.rstPin = 54;
     p1.config.baudRate = 115200;
     p1.config.flashOffset = 0x0;
-    p1.config.binPath = ""; // Embebido o /sdcard/network_adapter.bin
+    p1.config.binPath = "/sdcard/c6_slave.bin";
     p1.config.presetName = p1.name;
-    p1.useEmbeddedBin = true;
+    p1.useEmbeddedBin = false;
     m_presets.push_back(p1);
 
     // 2. Preset ESP Externo vía Header JP1 (ESP32-P4)
@@ -194,7 +190,7 @@ void FlasherServiceP4::runFlashTask() {
             fseek(fSd, 0, SEEK_END);
             binSize = ftell(fSd);
             fseek(fSd, 0, SEEK_SET);
-            ESP_LOGI(TAG_FLASHER, "Firmware cargado desde MicroSD (%s): %u bytes", m_activeConfig.binPath.c_str(), binSize);
+            ESP_LOGI(TAG_FLASHER, "Firmware cargado desde almacenamiento (%s): %u bytes", m_activeConfig.binPath.c_str(), binSize);
             sdBuf = (uint8_t*)malloc(binSize);
             if (sdBuf) {
                 fread(sdBuf, 1, binSize, fSd);
@@ -202,20 +198,15 @@ void FlasherServiceP4::runFlashTask() {
             }
             fclose(fSd);
         } else {
-            ESP_LOGW(TAG_FLASHER, "No se encontro archivo en MicroSD: %s", m_activeConfig.binPath.c_str());
+            ESP_LOGW(TAG_FLASHER, "No se encontro archivo: %s", m_activeConfig.binPath.c_str());
         }
-    }
-
-    // Fallback para Coprocesador C6 si no hay archivo en SD: usar binario SDIO oficial embebido
-    if (!binData && (m_activeConfig.binPath.empty() || m_activeConfig.binPath == "/sdcard/network_adapter.bin")) {
-        binData = c6_slave_bin_start;
-        binSize = c6_slave_bin_end - c6_slave_bin_start;
-        ESP_LOGI(TAG_FLASHER, "Usando firmware SDIO oficial embebido en Flash: %u bytes", binSize);
     }
 
     if (!binData || binSize == 0) {
         m_status = cbdos::flasher::FlasherStatus::Failed;
-        m_message = "Error: Binario de firmware vacío o no encontrado en SD";
+        char errBuf[128];
+        snprintf(errBuf, sizeof(errBuf), "Error: No se encontro el archivo %s en MicroSD", m_activeConfig.binPath.c_str());
+        m_message = errBuf;
         if (m_cb) m_cb(m_status, 0, m_message.c_str());
         m_busy = false;
         return;

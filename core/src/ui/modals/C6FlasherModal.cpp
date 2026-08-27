@@ -166,7 +166,7 @@ void C6FlasherModal::show(lv_obj_t* parent) {
 
     // Texto de Estado
     s_lblStatus = lv_label_create(card);
-    lv_label_set_text(s_lblStatus, "Listo para iniciar. Firmware SDIO Slave embebido listo.");
+    lv_label_set_text(s_lblStatus, "Listo. Firmware: /sdcard/c6_slave.bin");
     lv_obj_set_style_text_font(s_lblStatus, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(s_lblStatus, DefaultTheme::getMutedTextColor(), 0);
 

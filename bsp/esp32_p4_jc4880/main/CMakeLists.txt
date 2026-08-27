@@ -53,8 +53,6 @@ idf_component_register(
         "spi_flash"
         "esp_mm"
         "freertos"
-    EMBED_FILES
-        "assets/c6_slave.bin"
     WHOLE_ARCHIVE
 )
 

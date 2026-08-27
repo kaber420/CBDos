@@ -5,9 +5,11 @@
 #include "cbdos/flasher.hpp"
 #include "cbdos/display.hpp"
 #include "cbdos/system.hpp"
+#include "cbdos/storage.hpp"
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 namespace cbdos {
 namespace ui {
@@ -255,7 +257,7 @@ bool FlasherView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_text_font(m_ddRstPin, &lv_font_montserrat_12, 0);
     lv_obj_add_event_cb(m_ddRstPin, pinDropdownChangedCb, LV_EVENT_VALUE_CHANGED, (void*)(intptr_t)4);
 
-    // Fila 3: Baudrate y Firmware
+    // Fila 3: Baudrate y Botón Elegir Firmware
     lv_obj_t* row3 = lv_obj_create(m_cardPinConfig);
     lv_obj_set_size(row3, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row3, LV_FLEX_FLOW_ROW);
@@ -266,14 +268,29 @@ bool FlasherView::onCreate(lv_obj_t* parent) {
 
     m_ddBaud = lv_dropdown_create(row3);
     lv_dropdown_set_options(m_ddBaud, "115200\n230400\n460800\n921600");
-    lv_obj_set_width(m_ddBaud, lv_pct(40));
+    lv_obj_set_width(m_ddBaud, lv_pct(48));
     lv_obj_set_style_bg_color(m_ddBaud, lv_color_hex(0x1E293B), 0);
     lv_obj_set_style_text_color(m_ddBaud, lv_color_hex(0xF8FAFC), 0);
     lv_obj_set_style_text_font(m_ddBaud, &lv_font_montserrat_12, 0);
     lv_obj_add_event_cb(m_ddBaud, baudChangedCb, LV_EVENT_VALUE_CHANGED, this);
 
-    m_lblFirmwareSource = lv_label_create(row3);
-    lv_obj_set_width(m_lblFirmwareSource, lv_pct(56));
+    m_btnPickFile = lv_button_create(row3);
+    lv_obj_set_width(m_btnPickFile, lv_pct(48));
+    lv_obj_set_height(m_btnPickFile, 36);
+    DefaultTheme::applyButton(m_btnPickFile, 8);
+    lv_obj_set_style_bg_color(m_btnPickFile, lv_color_hex(0x334155), 0);
+    lv_obj_add_event_cb(m_btnPickFile, pickFileBtnCb, LV_EVENT_CLICKED, this);
+
+    lv_obj_t* lblPick = lv_label_create(m_btnPickFile);
+    lv_label_set_text(lblPick, LV_SYMBOL_FILE " Elegir FW (.bin)");
+    lv_obj_set_style_text_font(lblPick, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(lblPick, lv_color_hex(0x38BDF8), 0);
+    lv_obj_center(lblPick);
+
+    // Fila 4: Ruta de Firmware Seleccionado
+    m_lblFirmwareSource = lv_label_create(m_cardPinConfig);
+    lv_obj_set_width(m_lblFirmwareSource, lv_pct(100));
+    lv_label_set_long_mode(m_lblFirmwareSource, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(m_lblFirmwareSource, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(m_lblFirmwareSource, lv_color_hex(0x38BDF8), 0);
 
@@ -352,7 +369,7 @@ void FlasherView::updateUIFromConfig() {
 
     if (m_lblFirmwareSource) {
         if (m_currentConfig.binPath.empty()) {
-            lv_label_set_text(m_lblFirmwareSource, "FW: Embebido (SDIO)");
+            lv_label_set_text(m_lblFirmwareSource, "FW: (No seleccionado)");
         } else {
             lv_label_set_text(m_lblFirmwareSource, ("FW: " + m_currentConfig.binPath).c_str());
         }
@@ -460,6 +477,277 @@ void FlasherView::startFlashCb(lv_event_t* e) {
             cbdos::display::unlock();
         }
     });
+}
+
+void FlasherView::openFilePickerModal(const std::string& startPath) {
+    if (m_filePickerMask) closeFilePickerModal();
+
+    m_pickerPath = startPath.empty() ? "/sdcard" : startPath;
+
+    // Fondo modal oscurecido
+    m_filePickerMask = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(m_filePickerMask, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_pos(m_filePickerMask, 0, 0);
+    lv_obj_set_style_bg_color(m_filePickerMask, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(m_filePickerMask, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(m_filePickerMask, 0, 0);
+    lv_obj_set_style_pad_all(m_filePickerMask, 12, 0);
+    lv_obj_set_flex_flow(m_filePickerMask, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(m_filePickerMask, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    // Tarjeta modal
+    lv_obj_t* card = lv_obj_create(m_filePickerMask);
+    lv_obj_set_width(card, LV_PCT(95));
+    lv_obj_set_height(card, LV_PCT(85));
+    DefaultTheme::applyRaisedCard(card, 14);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(card, 12, 0);
+    lv_obj_set_style_pad_row(card, 8, 0);
+
+    // Cabecera: Título y Botón Cerrar
+    lv_obj_t* header = lv_obj_create(card);
+    lv_obj_set_width(header, LV_PCT(100));
+    lv_obj_set_height(header, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(header, 0, 0);
+    lv_obj_set_style_border_width(header, 0, 0);
+    lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(header, 0, 0);
+    DefaultTheme::disableScroll(header);
+
+    lv_obj_t* lblTitle = lv_label_create(header);
+    lv_label_set_text(lblTitle, LV_SYMBOL_FILE " Seleccionar Firmware");
+    lv_obj_set_style_text_font(lblTitle, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(lblTitle, DefaultTheme::getPrimaryAccent(), 0);
+
+    lv_obj_t* btnClose = lv_button_create(header);
+    lv_obj_set_size(btnClose, 30, 30);
+    DefaultTheme::applyButton(btnClose, 6);
+    lv_obj_set_style_bg_color(btnClose, lv_color_hex(0x334155), 0);
+    lv_obj_add_event_cb(btnClose, pickerCloseBtnCb, LV_EVENT_CLICKED, this);
+
+    lv_obj_t* lblClose = lv_label_create(btnClose);
+    lv_label_set_text(lblClose, LV_SYMBOL_CLOSE);
+    lv_obj_set_style_text_color(lblClose, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(lblClose);
+
+    // Barra de ruta y botón subir directorio
+    lv_obj_t* pathBar = lv_obj_create(card);
+    lv_obj_set_width(pathBar, LV_PCT(100));
+    lv_obj_set_height(pathBar, 34);
+    DefaultTheme::applySunkenCard(pathBar, 6);
+    DefaultTheme::disableScroll(pathBar);
+    lv_obj_set_flex_flow(pathBar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(pathBar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(pathBar, 2, 0);
+    lv_obj_set_style_pad_column(pathBar, 6, 0);
+
+    lv_obj_t* btnUp = lv_button_create(pathBar);
+    lv_obj_set_size(btnUp, 28, 28);
+    DefaultTheme::applyButton(btnUp, 4);
+    lv_obj_add_event_cb(btnUp, pickerUpBtnCb, LV_EVENT_CLICKED, this);
+
+    lv_obj_t* lblUp = lv_label_create(btnUp);
+    lv_label_set_text(lblUp, LV_SYMBOL_UP);
+    lv_obj_set_style_text_font(lblUp, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblUp);
+
+    m_pickerPathLabel = lv_label_create(pathBar);
+    lv_obj_set_flex_grow(m_pickerPathLabel, 1);
+    lv_label_set_long_mode(m_pickerPathLabel, LV_LABEL_LONG_DOT);
+    lv_label_set_text(m_pickerPathLabel, m_pickerPath.c_str());
+    lv_obj_set_style_text_color(m_pickerPathLabel, lv_color_hex(0x94A3B8), 0);
+    lv_obj_set_style_text_font(m_pickerPathLabel, &lv_font_montserrat_12, 0);
+
+    // Contenedor scrollable de lista de archivos
+    m_pickerListCont = lv_obj_create(card);
+    lv_obj_set_width(m_pickerListCont, LV_PCT(100));
+    lv_obj_set_flex_grow(m_pickerListCont, 1);
+    DefaultTheme::applySunkenCard(m_pickerListCont, 8);
+    lv_obj_set_flex_flow(m_pickerListCont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(m_pickerListCont, 6, 0);
+    lv_obj_set_style_pad_row(m_pickerListCont, 6, 0);
+    lv_obj_set_scrollbar_mode(m_pickerListCont, LV_SCROLLBAR_MODE_AUTO);
+
+    renderPickerFileList();
+}
+
+void FlasherView::closeFilePickerModal() {
+    if (m_filePickerMask && lv_obj_is_valid(m_filePickerMask)) {
+        lv_obj_delete_async(m_filePickerMask);
+        m_filePickerMask = nullptr;
+        m_pickerListCont = nullptr;
+        m_pickerPathLabel = nullptr;
+    }
+}
+
+void FlasherView::renderPickerFileList() {
+    if (!m_pickerListCont || !lv_obj_is_valid(m_pickerListCont)) return;
+
+    lv_obj_clean(m_pickerListCont);
+
+    if (m_pickerPathLabel && lv_obj_is_valid(m_pickerPathLabel)) {
+        lv_label_set_text(m_pickerPathLabel, m_pickerPath.c_str());
+    }
+
+    std::vector<cbdos::storage::FileEntry> files = cbdos::storage::listDir(m_pickerPath.c_str());
+
+    // Ordenar: primero carpetas, luego archivos
+    std::sort(files.begin(), files.end(), [](const cbdos::storage::FileEntry& a, const cbdos::storage::FileEntry& b) {
+        if (a.isDirectory != b.isDirectory) {
+            return a.isDirectory > b.isDirectory;
+        }
+        return a.name < b.name;
+    });
+
+    if (files.empty()) {
+        lv_obj_t* lblEmpty = lv_label_create(m_pickerListCont);
+        lv_label_set_text(lblEmpty, "(No hay archivos o tarjeta inaccesible)");
+        lv_obj_set_style_text_color(lblEmpty, DefaultTheme::getMutedTextColor(), 0);
+        lv_obj_set_style_text_font(lblEmpty, &lv_font_montserrat_12, 0);
+        lv_obj_center(lblEmpty);
+        return;
+    }
+
+    for (const auto& item : files) {
+        bool isBin = false;
+        if (!item.isDirectory) {
+            std::string n = item.name;
+            std::transform(n.begin(), n.end(), n.begin(), ::tolower);
+            if (n.size() >= 4 && (n.rfind(".bin") == n.size() - 4 || n.rfind(".hex") == n.size() - 4)) {
+                isBin = true;
+            }
+        }
+
+        lv_obj_t* btnItem = lv_button_create(m_pickerListCont);
+        lv_obj_set_width(btnItem, LV_PCT(100));
+        lv_obj_set_height(btnItem, 40);
+        DefaultTheme::applyButton(btnItem, 6);
+
+        if (item.isDirectory) {
+            lv_obj_set_style_bg_color(btnItem, lv_color_hex(0x1E293B), 0);
+        } else if (isBin) {
+            lv_obj_set_style_bg_color(btnItem, lv_color_hex(0x064E3B), 0); // Verde sutil para binarios
+        } else {
+            lv_obj_set_style_bg_color(btnItem, lv_color_hex(0x0F172A), 0);
+        }
+
+        lv_obj_set_flex_flow(btnItem, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(btnItem, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_all(btnItem, 6, 0);
+        lv_obj_set_style_pad_column(btnItem, 8, 0);
+
+        // Icono
+        lv_obj_t* lblIcon = lv_label_create(btnItem);
+        if (item.isDirectory) {
+            lv_label_set_text(lblIcon, LV_SYMBOL_DIRECTORY);
+            lv_obj_set_style_text_color(lblIcon, lv_color_hex(0xF59E0B), 0);
+        } else if (isBin) {
+            lv_label_set_text(lblIcon, LV_SYMBOL_FILE);
+            lv_obj_set_style_text_color(lblIcon, lv_color_hex(0x10B981), 0);
+        } else {
+            lv_label_set_text(lblIcon, LV_SYMBOL_FILE);
+            lv_obj_set_style_text_color(lblIcon, DefaultTheme::getMutedTextColor(), 0);
+        }
+        lv_obj_set_style_text_font(lblIcon, &lv_font_montserrat_14, 0);
+
+        // Nombre y tamaño
+        lv_obj_t* lblName = lv_label_create(btnItem);
+        lv_obj_set_flex_grow(lblName, 1);
+        lv_label_set_long_mode(lblName, LV_LABEL_LONG_DOT);
+        lv_label_set_text(lblName, item.name.c_str());
+        lv_obj_set_style_text_color(lblName, lv_color_hex(0xF8FAFC), 0);
+        lv_obj_set_style_text_font(lblName, &lv_font_montserrat_12, 0);
+
+        if (!item.isDirectory) {
+            lv_obj_t* lblSize = lv_label_create(btnItem);
+            char szBuf[32];
+            if (item.size >= 1024 * 1024) {
+                snprintf(szBuf, sizeof(szBuf), "%.1f MB", (double)item.size / (1024.0 * 1024.0));
+            } else {
+                snprintf(szBuf, sizeof(szBuf), "%u KB", (unsigned int)(item.size / 1024));
+            }
+            lv_label_set_text(lblSize, szBuf);
+            lv_obj_set_style_text_color(lblSize, DefaultTheme::getMutedTextColor(), 0);
+            lv_obj_set_style_text_font(lblSize, &lv_font_montserrat_12, 0);
+        }
+
+        // Contexto para callback
+        struct PickerCtx {
+            FlasherView* view;
+            cbdos::storage::FileEntry entry;
+        };
+        auto* ctx = new PickerCtx{this, item};
+        lv_obj_set_user_data(btnItem, ctx);
+        lv_obj_add_event_cb(btnItem, pickerItemClickCb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(btnItem, [](lv_event_t* e) {
+            auto* p = (PickerCtx*)lv_event_get_user_data(e);
+            delete p;
+        }, LV_EVENT_DELETE, ctx);
+    }
+}
+
+void FlasherView::pickFileBtnCb(lv_event_t* e) {
+    auto* view = s_activeFlasherView;
+    if (!view) return;
+    std::string start = view->m_currentConfig.binPath;
+    if (start.empty()) start = "/sdcard";
+    // Extraer carpeta padre si es archivo
+    size_t lastSlash = start.rfind('/');
+    if (lastSlash != std::string::npos && lastSlash > 0) {
+        start = start.substr(0, lastSlash);
+    }
+    view->openFilePickerModal(start);
+}
+
+void FlasherView::pickerCloseBtnCb(lv_event_t* e) {
+    auto* view = s_activeFlasherView;
+    if (view) view->closeFilePickerModal();
+}
+
+void FlasherView::pickerUpBtnCb(lv_event_t* e) {
+    auto* view = s_activeFlasherView;
+    if (!view) return;
+    if (view->m_pickerPath == "/sdcard" || view->m_pickerPath == "/" || view->m_pickerPath.empty()) {
+        return;
+    }
+    size_t lastSlash = view->m_pickerPath.rfind('/');
+    if (lastSlash != std::string::npos && lastSlash > 0) {
+        view->m_pickerPath = view->m_pickerPath.substr(0, lastSlash);
+    } else {
+        view->m_pickerPath = "/sdcard";
+    }
+    view->renderPickerFileList();
+}
+
+void FlasherView::pickerItemClickCb(lv_event_t* e) {
+    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+    if (!btn) return;
+    struct PickerCtx {
+        FlasherView* view;
+        cbdos::storage::FileEntry entry;
+    };
+    auto* ctx = (PickerCtx*)lv_obj_get_user_data(btn);
+    if (!ctx || !ctx->view) return;
+
+    FlasherView* view = ctx->view;
+    if (ctx->entry.isDirectory) {
+        if (view->m_pickerPath == "/" || view->m_pickerPath.empty()) {
+            view->m_pickerPath = "/" + ctx->entry.name;
+        } else {
+            view->m_pickerPath = view->m_pickerPath + "/" + ctx->entry.name;
+        }
+        view->renderPickerFileList();
+    } else {
+        // Seleccionar archivo
+        std::string fullPath = view->m_pickerPath;
+        if (fullPath.back() != '/') fullPath += "/";
+        fullPath += ctx->entry.name;
+
+        view->m_currentConfig.binPath = fullPath;
+        view->updateUIFromConfig();
+        view->closeFilePickerModal();
+    }
 }
 
 } // namespace ui

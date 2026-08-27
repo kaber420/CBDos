@@ -33,6 +33,7 @@ private:
     lv_obj_t* m_ddRstPin = nullptr;
     lv_obj_t* m_ddBaud = nullptr;
     lv_obj_t* m_lblFirmwareSource = nullptr;
+    lv_obj_t* m_btnPickFile = nullptr;
 
     lv_obj_t* m_barProgress = nullptr;
     lv_obj_t* m_lblStatus = nullptr;
@@ -40,10 +41,24 @@ private:
     lv_obj_t* m_lblBtn = nullptr;
     lv_obj_t* m_lblLog = nullptr;
 
+    // Selector modal de archivos
+    lv_obj_t* m_filePickerMask = nullptr;
+    lv_obj_t* m_pickerListCont = nullptr;
+    lv_obj_t* m_pickerPathLabel = nullptr;
+    std::string m_pickerPath = "/sdcard";
+
     void updateUIFromConfig();
+    void openFilePickerModal(const std::string& startPath = "/sdcard");
+    void closeFilePickerModal();
+    void renderPickerFileList();
+
     static void presetChangedCb(lv_event_t* e);
     static void baudChangedCb(lv_event_t* e);
     static void pinDropdownChangedCb(lv_event_t* e);
+    static void pickFileBtnCb(lv_event_t* e);
+    static void pickerCloseBtnCb(lv_event_t* e);
+    static void pickerUpBtnCb(lv_event_t* e);
+    static void pickerItemClickCb(lv_event_t* e);
     static void startFlashCb(lv_event_t* e);
 };
 
