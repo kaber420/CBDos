@@ -35,12 +35,11 @@ FlasherServiceP4::FlasherServiceP4() {
         "+---------------------------------------------+\n"
         "|  CONEXIONES EN CONECTOR JP1 (2x13)          |\n"
         "+---------------------------------------------+\n"
-        "| [Cable 1]  Pin 01 (3V3)  --> Pin 18 (ESP_3V3)|\n"
-        "| [Cable 2]  Pin 17 (IO34) --> Pin 24 (C6_IO9)|\n"
         "| [Jumper 1] Pin 19 (IO32) --> Pin 20 (C6_RX) |\n"
         "| [Jumper 2] Pin 21 (IO28) --> Pin 22 (C6_TX) |\n"
+        "| [Cable 1]  Pin 17 (IO34) --> Pin 24 (C6_IO9)|\n"
         "+---------------------------------------------+\n"
-        "| Control: Auto-Boot (IO34) + Auto-RST (IO54) |";
+        "| Energia (IO36) y Reset (IO54) son INTERNOS  |";
     p1.config.txPin = 32;
     p1.config.rxPin = 28;
     p1.config.bootPin = 34;
@@ -221,6 +220,16 @@ void FlasherServiceP4::runFlashTask() {
         m_busy = false;
         return;
     }
+
+    // Asegurar que el carril ESP_3V3 (GPIO 36) este energizado
+    gpio_config_t pwr_conf = {};
+    pwr_conf.intr_type = GPIO_INTR_DISABLE;
+    pwr_conf.mode = GPIO_MODE_OUTPUT;
+    pwr_conf.pin_bit_mask = (1ULL << GPIO_NUM_36);
+    pwr_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    pwr_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    gpio_config(&pwr_conf);
+    gpio_set_level(GPIO_NUM_36, 1);
 
     // 2. Configurar puertos y GPIOs para esp-serial-flasher
     loader_esp32_config_t config = {};

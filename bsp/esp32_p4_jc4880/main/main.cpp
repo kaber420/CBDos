@@ -26,40 +26,6 @@ namespace bsp {
 
 static const char* TAG = "CBDos_Main";
 
-static void consoleCommandTask(void* pvParameters) {
-    char buf[128];
-    while (true) {
-        if (fgets(buf, sizeof(buf), stdin) != nullptr) {
-            // Eliminar salto de linea
-            size_t len = strlen(buf);
-            while (len > 0 && (buf[len - 1] == '\r' || buf[len - 1] == '\n')) {
-                buf[len - 1] = '\0';
-                len--;
-            }
-            if (len > 0) {
-                ESP_LOGI("CLI", "Comando recibido: '%s'", buf);
-                if (strcmp(buf, "wifi") == 0 || strcmp(buf, "WIFI") == 0) {
-                    ESP_LOGI("CLI", "Disparando conexion Wi-Fi bajo demanda (romero24)...");
-                    cbdos::network::connectWifi("romero24", "guzman420");
-                } else if (strcmp(buf, "flashc6") == 0 || strcmp(buf, "FLASHC6") == 0) {
-                    ESP_LOGI("CLI", "Disparando flasheo autonomo de C6...");
-                    cbdos::flasher::startFlash([](cbdos::flasher::FlasherStatus st, int pct, const char* msg) {
-                        ESP_LOGI("CLI_FLASH", "[%d%%] %s", pct, msg ? msg : "");
-                    });
-                } else if (strcmp(buf, "status") == 0) {
-                    ESP_LOGI("CLI", "Status: %d, IP: %s, RSSI: %d", 
-                             (int)cbdos::network::getStatus(), 
-                             cbdos::network::getIpAddress().c_str(), 
-                             cbdos::network::getRssi());
-                } else if (strcmp(buf, "help") == 0) {
-                    ESP_LOGI("CLI", "Comandos disponibles: wifi, flashc6, status, help");
-                }
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-}
-
 extern "C" void app_main(void) {
 
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) ===");
@@ -166,9 +132,6 @@ extern "C" void app_main(void) {
             vTaskDelete(nullptr);
         }, "auto_wifi_task", 4096, nullptr, 1, nullptr, 0);
     }
-
-    // 8. Tarea de consola interactiva bajo demanda
-    xTaskCreatePinnedToCore(consoleCommandTask, "cli_task", 4096, nullptr, 1, nullptr, 0);
 
     auto caps = cbdos::display::getCapabilities();
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "CyBerDeck OS v0.2.0 iniciado y operando a %d FPS en %dx%d!", 

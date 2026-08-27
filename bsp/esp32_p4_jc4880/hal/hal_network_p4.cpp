@@ -82,29 +82,15 @@ bool init() {
     }
 
     if (!s_sta_netif) {
-        s_sta_netif = esp_netif_create_default_wifi_sta();
+        s_sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        if (!s_sta_netif) {
+            s_sta_netif = esp_netif_create_default_wifi_sta();
+        }
     }
-
-    // Energizar carril C6 (GPIO 36 -> R44 -> ESP_3V3) y Reset (GPIO 54)
-    gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pin_bit_mask = (1ULL << GPIO_NUM_36) | (1ULL << GPIO_NUM_54);
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    gpio_config(&io_conf);
-
-    // Secuencia de encendido y reset del C6
-    gpio_set_level(GPIO_NUM_36, 1); // Energizar ESP_3V3
-    gpio_set_level(GPIO_NUM_54, 0); // Pulso de Reset
-    vTaskDelay(pdMS_TO_TICKS(100));
-    gpio_set_level(GPIO_NUM_54, 1); // Liberar Reset
-    vTaskDelay(pdMS_TO_TICKS(500)); // Esperar que el C6 arranque su firmware esclavo
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     err = esp_wifi_init(&cfg);
-
-    if (err != ESP_OK) {
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "Fallo esp_wifi_init: %s", esp_err_to_name(err));
         s_status = NetStatus::Error;
         return false;
@@ -117,8 +103,6 @@ bool init() {
 
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_start();
-
-    s_sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
 
     s_initialized = true;
     s_status = NetStatus::Disconnected;
@@ -148,13 +132,17 @@ bool connectWifi(const char* ssid, const char* password) {
     std::strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
     if (password && strlen(password) > 0) {
         std::strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+        wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    } else {
+        wifi_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
     }
+    wifi_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wifi_config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
 
     s_status = NetStatus::Connecting;
     s_ip = "0.0.0.0";
 
     ESP_LOGI(TAG, "Iniciando esp_wifi_connect()...");
-    esp_wifi_disconnect();
     esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     esp_err_t err = esp_wifi_connect();
     if (err != ESP_OK) {

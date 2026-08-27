@@ -1,6 +1,7 @@
 #include "cbdos/mesh/mesh_transport.hpp"
 #include "cbdos/mesh/mesh_engine.hpp"
 #include "cbdos/network.hpp"
+#include <esp_wifi.h>
 #include <esp_log.h>
 #include <cstring>
 
@@ -17,9 +18,19 @@ public:
 
     bool init(uint8_t channel = 1) override {
         m_channel = channel;
+
+        // Asegurar que el subsistema de red (ESP-Hosted SDIO) esté encendido e inicializado
+        if (!cbdos::network::init()) {
+            ESP_LOGE(TAG, "Error inicializando red base en P4");
+            return false;
+        }
+
+        // Configurar canal en el coprocesador C6
+        esp_wifi_set_channel(m_channel, WIFI_SECOND_CHAN_NONE);
+
         s_activeInstance = this;
         m_ready = true;
-        ESP_LOGI(TAG, "Transporte Mesh P4 inicializado en Canal %u", m_channel);
+        ESP_LOGI(TAG, "Transporte Mesh P4 (SDIO C6 Enlace Activo) en Canal %u", m_channel);
         return true;
     }
 
@@ -48,13 +59,7 @@ public:
 
     bool getMacAddress(uint8_t out_mac[6]) override {
         if (!out_mac) return false;
-        out_mac[0] = 0xAA;
-        out_mac[1] = 0xBB;
-        out_mac[2] = 0xCC;
-        out_mac[3] = 0xDD;
-        out_mac[4] = 0xEE;
-        out_mac[5] = 0x01;
-        return true;
+        return (esp_wifi_get_mac(WIFI_IF_STA, out_mac) == ESP_OK);
     }
 
     uint8_t getChannel() override {
@@ -63,7 +68,20 @@ public:
 
     bool setChannel(uint8_t channel) override {
         m_channel = channel;
+        if (m_ready) {
+            esp_err_t err = esp_wifi_set_channel(m_channel, WIFI_SECOND_CHAN_NONE);
+            return (err == ESP_OK);
+        }
         return true;
+    }
+
+    bool setRadioMode(cbdos::mesh::RadioMode mode) override {
+        m_mode = mode;
+        return true;
+    }
+
+    cbdos::mesh::RadioMode getRadioMode() const override {
+        return m_mode;
     }
 
     void injectRxData(const uint8_t* src_mac, const uint8_t* data, size_t len, int8_t rssi) {
@@ -75,6 +93,7 @@ public:
 private:
     static EspNowP4Transport* s_activeInstance;
     cbdos::mesh::MeshRawRecvCallback m_recvCb = nullptr;
+    cbdos::mesh::RadioMode m_mode = cbdos::mesh::RadioMode::Auto;
     uint8_t m_channel = 1;
     bool m_ready = false;
 };
