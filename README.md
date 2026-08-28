@@ -73,25 +73,31 @@
 | **Audio Core (Helix)** | Decodificador MP3 Helix en PSRAM + buffer I2S | ✅ 95% | ✅ | 🟡 ES8311 |
 | **Music Player View** | UI de reproductor: lista, scrubber, volumen, carátulas | ✅ 95% | ✅ | ✅ |
 | **Radio View** | Radio por internet, lista de emisoras, streaming | 🔄 Portando | 🟡 | 🟡 |
-| **Flasher View** | Interfaz gráfica para flashear coprocesadores vía UART | 🔄 Portando | ➖ | 🟡 |
+| **Flasher View** | Programador de campo autónomo (Flasheo por USB-C y UART a ESP32-C3, S3, C6) | ✅ | ➖ | ✅ |
 | **Synth Sound Engine** | Motor de síntesis y generador de ondas | 📋 Planificado | ⏳ | ⏳ |
 | **File Manager View** | Explorador de archivos universal MicroSD/Flash | ⏳ | ⏳ | ⏳ |
 | **System Info Monitor** | Monitor de RAM, Heap, FPS y temperatura en tiempo real | ⏳ | ⏳ | ⏳ |
-| **Lua Script Engine** | Intérprete Lua embebido para micro-apps desde SD | ⏳ | ⏳ | ⏳ |
+| **Lua Script Engine** | Intérprete Lua embebido para micro-apps y Direct 2D GFX | ✅ 90% | ⏳ | ✅ |
 
 *Leyenda: ✅ Operativo · 🟡 Integración de driver en curso · 🔄 Portando desde espOS32 · 📋 Planificado · ⏳ Pendiente · ➖ No aplica*
 
 ---
 
-## 🔧 Herramienta: C6 Flasher Bridge
+## 🔌 Programador de Campo Autónomo (Universal Flasher en CBDos)
 
-El ESP32-P4 incluye soporte para flashear el coprocesador inalámbrico **ESP32-C6-MINI** sin necesidad de un adaptador USB-Serie externo, tanto mediante la app integrada **Flasher** en CBDos como a través del puente UART en `tools/c6_flasher_bridge/`.
+El **ESP32-P4** con CBDos opera como un **Programador de Campo Totalmente Autónomo (Standalone Field Programmer)**, permitiendo flashear microcontroladores en cualquier lugar sin necesidad de una computadora portátil o laptop:
 
-La placa Guition JC4880P443C expone la cabecera **JP1 (2×13 pines)** que da acceso a las líneas de alimentación, UART y BOOT del C6.
+### 1. ⚡ Flasheo Directo por Cable USB-C a USB-C (USB-Serial/JTAG Nativo)
+- **Dispositivos Compatibles:** ESP32-C3, ESP32-S3, ESP32-C6 y otros chips Espressif con USB nativo.
+- **Conexión:** Cable directo **USB Tipo-C a USB Tipo-C** desde el puerto USB OTG High-Speed del P4 al dispositivo destino.
+- **Autonomía:** El P4 suministra la alimentación (5V VBUS), detecta el chip automáticamente por CDC-ACM (VID `0x303A`, PID `0x1001`), borra sectores, programa el binario desde la tarjeta MicroSD (`/sdcard/cartridges/*.bin`) y verifica la integridad por MD5.
+
+### 2. 🪛 Flasheo por UART / Cabecera JP1 (Coprocesadores y Pines GPIO)
+- **Coprocesador Integrado ESP32-C6-MINI:** Permite flashear el firmware inalámbrico de red mediante la cabecera **JP1 (2×13 pines)** sin adaptadores externos.
 
 ![Diagrama de Conexiones de Flasheo ESP32-C6 en JP1](docs/images/esp32_c6_flasher_diagram.png)
 
-### 🔌 Conexiones Requeridas en la Cabecera JP1
+#### 🔌 Conexiones Requeridas en la Cabecera JP1 para ESP32-C6
 
 | Cable / Jumper | Origen (Lado P4 / Izq) | Destino (Lado C6 / Der) | Función |
 | :--- | :--- | :--- | :--- |
@@ -102,28 +108,7 @@ La placa Guition JC4880P443C expone la cabecera **JP1 (2×13 pines)** que da acc
 
 > ℹ️ **Nota de Hardware sobre Reset:** La línea **`C6_CHIP_PU` (Pin 26 / Reset del C6)** está unida de **manera interna en la PCB al GPIO 54 del ESP32-P4**. Por lo tanto, el sistema gestiona el reset hardware del coprocesador de forma automática y **no es necesario puentear el pin 26 externamente**.
 
-### Procedimiento Rápido
-
-```bash
-# 1. Grabar el firmware puente en el P4 (o usar la app Flasher desde CBDos)
-cd tools/c6_flasher_bridge
-idf.py -p /dev/ttyACM0 flash
-
-# 2. Conectar los jumpers y cables en JP1 según el diagrama
-
-# 3. Flashear el firmware SDIO al C6
-python -m esptool --chip esp32c6 -p /dev/ttyACM0 -b 115200 \
-  --connect-attempts 30 --before no_reset \
-  write_flash 0x0 bsp/esp32_c6_slave/build/network_adapter.bin
-
-# 4. Retirar los jumpers TX/RX y el cable de Boot (GPIO34 -> IO9);
-#    DEJAR SIEMPRE CONECTADO el cable naranja 3V3 -> ESP_3V3 para mantener alimentado el C6.
-#    Volver a flashear CBDos en el P4:
-cd bsp/esp32_p4_jc4880
-idf.py -p /dev/ttyACM0 flash
-```
-
-> 📖 Guía completa y mapa de registros: [`docs/hardware_pinouts_reference.md`](docs/hardware_pinouts_reference.md) y [`tools/c6_flasher_bridge/README.md`](tools/c6_flasher_bridge/README.md)
+> 📖 Hito técnico documentado: [`docs/hardware/usb_c_field_flasher_milestone.md`](docs/hardware/usb_c_field_flasher_milestone.md) y [`docs/hardware_pinouts_reference.md`](docs/hardware_pinouts_reference.md)
 
 ---
 

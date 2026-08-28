@@ -1,4 +1,5 @@
 #include "hal_flasher_p4.hpp"
+#include "usb_cdc_loader_port.hpp"
 #include "cbdos/flasher.hpp"
 #include <esp_loader.h>
 #include <esp_loader_io.h>
@@ -277,41 +278,57 @@ void FlasherServiceP4::runFlashTask() {
     gpio_config(&pwr_conf);
     gpio_set_level(GPIO_NUM_36, 1);
 
-    // 2. Configurar puertos y GPIOs para esp-serial-flasher
-    loader_esp32_config_t config = {};
-    config.baud_rate = m_activeConfig.baudRate > 0 ? m_activeConfig.baudRate : 115200;
-    config.uart_port = UART_PORT_NUM;
-    config.uart_rx_pin = static_cast<gpio_num_t>(m_activeConfig.rxPin);
-    config.uart_tx_pin = static_cast<gpio_num_t>(m_activeConfig.txPin);
-    config.reset_trigger_pin = m_activeConfig.rstPin >= 0 ? static_cast<gpio_num_t>(m_activeConfig.rstPin) : GPIO_NUM_NC;
-    config.gpio0_trigger_pin = m_activeConfig.bootPin >= 0 ? static_cast<gpio_num_t>(m_activeConfig.bootPin) : GPIO_NUM_NC;
+    // 2. Configurar transporte según el tipo seleccionado (USB Host CDC o UART Pins)
+    bool isUsbNative = (m_activeConfig.transport == cbdos::flasher::FlasherTransport::USB_CDC_NATIVE);
 
     m_status = cbdos::flasher::FlasherStatus::Connecting;
     m_progress = 5;
-    m_message = "Sincronizando con ROM del microcontrolador objetivo...";
+    m_message = isUsbNative ? "Buscando ESP32 conectado por cable USB-C..." 
+                            : "Sincronizando con ROM del microcontrolador objetivo...";
     if (m_cb) m_cb(m_status, m_progress, m_message.c_str());
 
-    if (loader_port_esp32_init(&config) != ESP_LOADER_SUCCESS) {
-        m_status = cbdos::flasher::FlasherStatus::Failed;
-        m_message = "Fallo al inicializar puerto UART para flasheo";
-        if (m_cb) m_cb(m_status, 0, m_message.c_str());
-        if (sdBuf) free(sdBuf);
-        m_busy = false;
-        return;
+    if (isUsbNative) {
+        if (loader_port_usb_cdc_init(5000) != ESP_LOADER_SUCCESS) {
+            m_status = cbdos::flasher::FlasherStatus::Failed;
+            m_message = "No se detectó ningún ESP32 en el puerto USB-C (Verifica cable OTG)";
+            if (m_cb) m_cb(m_status, 0, m_message.c_str());
+            if (sdBuf) free(sdBuf);
+            m_busy = false;
+            return;
+        }
+    } else {
+        loader_esp32_config_t config = {};
+        config.baud_rate = m_activeConfig.baudRate > 0 ? m_activeConfig.baudRate : 115200;
+        config.uart_port = UART_PORT_NUM;
+        config.uart_rx_pin = static_cast<gpio_num_t>(m_activeConfig.rxPin);
+        config.uart_tx_pin = static_cast<gpio_num_t>(m_activeConfig.txPin);
+        config.reset_trigger_pin = m_activeConfig.rstPin >= 0 ? static_cast<gpio_num_t>(m_activeConfig.rstPin) : GPIO_NUM_NC;
+        config.gpio0_trigger_pin = m_activeConfig.bootPin >= 0 ? static_cast<gpio_num_t>(m_activeConfig.bootPin) : GPIO_NUM_NC;
+
+        if (loader_port_esp32_init(&config) != ESP_LOADER_SUCCESS) {
+            m_status = cbdos::flasher::FlasherStatus::Failed;
+            m_message = "Fallo al inicializar puerto UART para flasheo";
+            if (m_cb) m_cb(m_status, 0, m_message.c_str());
+            if (sdBuf) free(sdBuf);
+            m_busy = false;
+            return;
+        }
     }
 
     // 3. Conectar e identificar chip
     esp_loader_connect_args_t connect_args = ESP_LOADER_CONNECT_DEFAULT();
-    connect_args.trials = 15;
-    connect_args.sync_timeout = 200;
+    connect_args.trials = isUsbNative ? 20 : 15;
+    connect_args.sync_timeout = isUsbNative ? 300 : 200;
 
     esp_loader_error_t err = esp_loader_connect(&connect_args);
     if (err != ESP_LOADER_SUCCESS) {
         ESP_LOGE(TAG_FLASHER, "Fallo esp_loader_connect (err=%d)", err);
         m_status = cbdos::flasher::FlasherStatus::Failed;
-        m_message = "No responde el chip (Verifica conexiones TX/RX/BOOT/VCC)";
+        m_message = isUsbNative ? "ESP32 no respondió al bootloader por USB"
+                                : "No responde el chip (Verifica conexiones TX/RX/BOOT/VCC)";
         if (m_cb) m_cb(m_status, 0, m_message.c_str());
-        loader_port_esp32_deinit();
+        if (isUsbNative) loader_port_usb_cdc_deinit();
+        else loader_port_esp32_deinit();
         if (sdBuf) free(sdBuf);
         m_busy = false;
         return;
@@ -323,60 +340,50 @@ void FlasherServiceP4::runFlashTask() {
     // 4. Preparar memoria Flash
     m_status = cbdos::flasher::FlasherStatus::Erasing;
     m_progress = 15;
-    m_message = "Borrando Flash del microcontrolador objetivo...";
+    m_message = "Preparando memoria Flash...";
     if (m_cb) m_cb(m_status, m_progress, m_message.c_str());
 
     err = esp_loader_flash_start(m_activeConfig.flashOffset, binSize, 4096);
     if (err != ESP_LOADER_SUCCESS) {
         ESP_LOGE(TAG_FLASHER, "Fallo esp_loader_flash_start (err=%d)", err);
         m_status = cbdos::flasher::FlasherStatus::Failed;
-        m_message = "Fallo al inicializar borrado de memoria Flash";
+        m_message = "Fallo al preparar sector de Flash";
         if (m_cb) m_cb(m_status, 0, m_message.c_str());
-        loader_port_esp32_deinit();
+        if (isUsbNative) loader_port_usb_cdc_deinit();
+        else loader_port_esp32_deinit();
         if (sdBuf) free(sdBuf);
         m_busy = false;
         return;
     }
 
-    // 5. Escritura de bloques (4096 bytes por paquete)
+    // 5. Grabar payload
     m_status = cbdos::flasher::FlasherStatus::Writing;
-    size_t offset = 0;
-    const size_t chunkSize = 4096;
-    int lastNotifiedPct = -1;
-    uint8_t chunkBuffer[4096];
+    uint32_t written = 0;
+    const uint32_t blockSize = 4096;
 
-    while (offset < binSize) {
-        size_t toWrite = binSize - offset;
-        if (toWrite > chunkSize) toWrite = chunkSize;
+    while (written < binSize) {
+        uint32_t toWrite = binSize - written;
+        if (toWrite > blockSize) toWrite = blockSize;
 
-        memcpy(chunkBuffer, binData + offset, toWrite);
-
-        err = esp_loader_flash_write(chunkBuffer, toWrite);
+        err = esp_loader_flash_write((void*)(binData + written), toWrite);
         if (err != ESP_LOADER_SUCCESS) {
-            ESP_LOGE(TAG_FLASHER, "Fallo al escribir en offset 0x%x (err=%d)", offset, err);
+            ESP_LOGE(TAG_FLASHER, "Fallo esp_loader_flash_write en offset %u (err=%d)", written, err);
             m_status = cbdos::flasher::FlasherStatus::Failed;
-            m_message = "Error de escritura durante transmisión UART";
+            m_message = "Error durante escritura de Flash";
             if (m_cb) m_cb(m_status, 0, m_message.c_str());
-            loader_port_esp32_deinit();
+            if (isUsbNative) loader_port_usb_cdc_deinit();
+            else loader_port_esp32_deinit();
             if (sdBuf) free(sdBuf);
             m_busy = false;
             return;
         }
 
-        offset += toWrite;
-        int pct = 15 + (int)((offset * 80) / binSize);
-        m_progress = pct;
-
-        // Notificar a la UI solo si avanza el porcentaje o es el último bloque
-        if (pct != lastNotifiedPct || offset >= binSize) {
-            lastNotifiedPct = pct;
-            char msgBuf[64];
-            snprintf(msgBuf, sizeof(msgBuf), "Escribiendo Flash... %d KB / %d KB", (int)(offset / 1024), (int)(binSize / 1024));
-            m_message = msgBuf;
-            if (m_cb) m_cb(m_status, m_progress, m_message.c_str());
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(2));
+        written += toWrite;
+        m_progress = 15 + (written * 80 / binSize);
+        char progMsg[64];
+        snprintf(progMsg, sizeof(progMsg), "Escribiendo Flash (%u / %u bytes)...", written, binSize);
+        m_message = progMsg;
+        if (m_cb) m_cb(m_status, m_progress, m_message.c_str());
     }
 
     // 6. Finalizar y verificar
@@ -390,19 +397,24 @@ void FlasherServiceP4::runFlashTask() {
         ESP_LOGW(TAG_FLASHER, "Aviso esp_loader_flash_finish: %d", err);
     }
 
-    // 7. Liberar UART y reiniciar el target en modo normal
-    loader_port_esp32_deinit();
+    // 7. Liberar puerto y reiniciar el target en modo normal
+    if (isUsbNative) {
+        loader_port_usb_cdc_reset_target();
+        loader_port_usb_cdc_deinit();
+    } else {
+        loader_port_esp32_deinit();
 
-    if (m_activeConfig.bootPin >= 0) {
-        gpio_set_direction(static_cast<gpio_num_t>(m_activeConfig.bootPin), GPIO_MODE_OUTPUT);
-        gpio_set_level(static_cast<gpio_num_t>(m_activeConfig.bootPin), 1); // Salir de bootloader
-    }
+        if (m_activeConfig.bootPin >= 0) {
+            gpio_set_direction(static_cast<gpio_num_t>(m_activeConfig.bootPin), GPIO_MODE_OUTPUT);
+            gpio_set_level(static_cast<gpio_num_t>(m_activeConfig.bootPin), 1);
+        }
 
-    if (m_activeConfig.rstPin >= 0) {
-        gpio_set_direction(static_cast<gpio_num_t>(m_activeConfig.rstPin), GPIO_MODE_OUTPUT);
-        gpio_set_level(static_cast<gpio_num_t>(m_activeConfig.rstPin), 0); // Pulso de Reset
-        vTaskDelay(pdMS_TO_TICKS(100));
-        gpio_set_level(static_cast<gpio_num_t>(m_activeConfig.rstPin), 1); // Liberar Reset
+        if (m_activeConfig.rstPin >= 0) {
+            gpio_set_direction(static_cast<gpio_num_t>(m_activeConfig.rstPin), GPIO_MODE_OUTPUT);
+            gpio_set_level(static_cast<gpio_num_t>(m_activeConfig.rstPin), 0);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            gpio_set_level(static_cast<gpio_num_t>(m_activeConfig.rstPin), 1);
+        }
     }
 
     if (sdBuf) free(sdBuf);

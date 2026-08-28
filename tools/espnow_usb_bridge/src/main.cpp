@@ -369,6 +369,12 @@ void setup() {
 
     Serial.begin(115200);
 
+    // Esperar hasta 2.5 segundos para que la conexión USB Virtual COM esté lista
+    uint32_t tStart = millis();
+    while (!Serial && (millis() - tStart < 2500)) {
+        delay(10);
+    }
+
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
 
@@ -390,9 +396,17 @@ void setup() {
     frame_parser_init(&s_parser);
     s_cli_len = 0;
 
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+
     Serial.println("\r\n======================================================");
-    Serial.println("       🛰️ CBDos ESP-NOW Gateway & Auditor LISTO");
+    Serial.println("       🛰️ CBDos ESP-NOW Gateway Modem v0.1.2");
     Serial.println("======================================================");
+    Serial.printf("Target:       ESP32-C3 (USB-Serial/JTAG)\r\n");
+    Serial.printf("MAC Propia:   %02X:%02X:%02X:%02X:%02X:%02X\r\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    Serial.printf("Radio:        Canal %u | Potencia: %.1fdBm | Modo: %s\r\n", 
+                  s_channel, s_tx_power * 0.25f, s_is_lr_mode ? "LONG RANGE (LR)" : "NORMAL");
+    Serial.println("------------------------------------------------------");
     Serial.println("Escribe 'help' en la terminal para administrar la radio.");
     Serial.println("======================================================\r\n");
 }
