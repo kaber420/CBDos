@@ -1377,6 +1377,7 @@ static int lua_gfx_clear(lua_State* L) {
         for (size_t i = 0; i < totalPixels; i++) fb1[i] = col565;
     }
     cbdos::display::flush();
+    cbdos::display::flush();
     return 0;
 }
 
