@@ -86,6 +86,10 @@ void LVGL_Port::lvglTask(void* arg) {
     ESP_LOGI(TAG, "Tarea LVGL 9 iniciada en Core %d", xPortGetCoreID());
 
     while (self->running) {
+        if (LuaBridge::isUIPaused()) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
         uint32_t task_delay_ms = 5;
         if (self->lock(10)) {
             task_delay_ms = lv_timer_handler();

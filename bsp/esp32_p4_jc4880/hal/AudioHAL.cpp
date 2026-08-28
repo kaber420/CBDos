@@ -162,12 +162,18 @@ esp_err_t AudioHAL::setSampleRate(uint32_t sampleRate) {
     fs.sample_rate = sampleRate;
     fs.mclk_multiple = 256;
 
-    // Cerrar primero para forzar la reconfiguración del reloj PLL en el hardware I2S y en el códec
+    // Reconfigurar sample rate
     esp_codec_dev_close(playDevHandle);
     esp_err_t ret = esp_codec_dev_open(playDevHandle, &fs);
     if (ret == ESP_OK) {
         currentSampleRate = sampleRate;
         ESP_LOGI(TAG, "I2S Hardware Sample Rate actualizado a %lu Hz", sampleRate);
+        if (BOARD_AUDIO_PA_GPIO >= 0) {
+            gpio_set_level((gpio_num_t)BOARD_AUDIO_PA_GPIO, 1);
+        }
+        setVolume(currentVolume);
+    } else {
+        ESP_LOGE(TAG, "Fallo al reabrir códec con nuevo sample rate %lu: %s", sampleRate, esp_err_to_name(ret));
     }
     return ret;
 }
