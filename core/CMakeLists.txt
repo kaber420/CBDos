@@ -9,10 +9,6 @@ file(GLOB_RECURSE LUA_SRCS
     "src/lua/liblua/*.c"
 )
 
-file(GLOB_RECURSE H264_SRCS
-    "src/media/libh264/*.c"
-)
-
 idf_component_register(
     SRCS 
         "src/cbdos_core.cpp"
@@ -31,7 +27,6 @@ idf_component_register(
         "src/ui/views/StorageConfigView.cpp"
         "src/ui/views/TimeConfigView.cpp"
         "src/ui/views/MusicPlayerView.cpp"
-        "src/ui/views/VideoPlayerView.cpp"
         "src/ui/views/GalleryListView.cpp"
         "src/ui/views/GalleryView.cpp"
         "src/ui/views/RadioView.cpp"
@@ -55,8 +50,6 @@ idf_component_register(
         "src/ui/modals/C6FlasherModal.cpp"
         "src/audio/AudioPlayer.cpp"
         "src/audio/RadioManager.cpp"
-        "src/media/AviParser.cpp"
-        "src/media/Mp4Parser.cpp"
 
         "src/tlv/mesh_header.cpp"
         "src/tlv/tlv_dictionary.cpp"
@@ -72,7 +65,6 @@ idf_component_register(
         "src/lua/LuappManager.cpp"
         ${HELIX_SRCS}
         ${LUA_SRCS}
-        ${H264_SRCS}
     INCLUDE_DIRS 
         "include"
         "src/ui"
@@ -81,8 +73,6 @@ idf_component_register(
         "src/tlv"
         "src/mesh"
         "src/cartridge"
-        "src/media"
-        "src/media/libh264"
         "src/audio"
         "src/audio/libhelix/src"
         "src/audio/libhelix/src/utils"
@@ -105,11 +95,6 @@ idf_component_register(
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-maybe-uninitialized -Wno-unused-but-set-variable -Wno-unused-variable)
-
-# Optimizaciones de máximo rendimiento para decodificadores de medios (H.264 y Helix)
-set_source_files_properties(${H264_SRCS} "src/media/Mp4Parser.cpp" "src/media/AviParser.cpp"
-    PROPERTIES COMPILE_FLAGS "-O3 -funroll-loops"
-)
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC -DESP32 -DUSE_DEFAULT_STDLIB -DHELIX_LOGGING_ACTIVE=0 -DLUA_32BITS)
 target_compile_options(${COMPONENT_LIB} PUBLIC -Wno-error -Wno-format -Wno-unused-variable)

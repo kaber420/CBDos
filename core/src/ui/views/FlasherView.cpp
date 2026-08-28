@@ -257,7 +257,7 @@ bool FlasherView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_text_font(m_ddRstPin, &lv_font_montserrat_12, 0);
     lv_obj_add_event_cb(m_ddRstPin, pinDropdownChangedCb, LV_EVENT_VALUE_CHANGED, (void*)(intptr_t)4);
 
-    // Fila 3: Baudrate y Botón Elegir Firmware
+    // Fila 3: Baudrate
     lv_obj_t* row3 = lv_obj_create(m_cardPinConfig);
     lv_obj_set_size(row3, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row3, LV_FLEX_FLOW_ROW);
@@ -266,36 +266,74 @@ bool FlasherView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_border_width(row3, 0, 0);
     lv_obj_set_style_pad_all(row3, 0, 0);
 
+    lv_obj_t* lblBaudTitle = lv_label_create(row3);
+    lv_label_set_text(lblBaudTitle, "Velocidad UART:");
+    lv_obj_set_style_text_font(lblBaudTitle, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(lblBaudTitle, DefaultTheme::getTextColor(), 0);
+
     m_ddBaud = lv_dropdown_create(row3);
     lv_dropdown_set_options(m_ddBaud, "115200\n230400\n460800\n921600");
-    lv_obj_set_width(m_ddBaud, lv_pct(48));
+    lv_obj_set_width(m_ddBaud, lv_pct(55));
     lv_obj_set_style_bg_color(m_ddBaud, lv_color_hex(0x1E293B), 0);
     lv_obj_set_style_text_color(m_ddBaud, lv_color_hex(0xF8FAFC), 0);
     lv_obj_set_style_text_font(m_ddBaud, &lv_font_montserrat_12, 0);
     lv_obj_add_event_cb(m_ddBaud, baudChangedCb, LV_EVENT_VALUE_CHANGED, this);
 
-    m_btnPickFile = lv_button_create(row3);
-    lv_obj_set_width(m_btnPickFile, lv_pct(48));
+    // ─────────────────────────────────────────────────────────────
+    // 4. Tarjeta de Selección de Archivo Firmware (.bin)
+    // ─────────────────────────────────────────────────────────────
+    lv_obj_t* cardFirmware = lv_obj_create(m_container);
+    lv_obj_set_width(cardFirmware, lv_pct(100));
+    lv_obj_set_height(cardFirmware, LV_SIZE_CONTENT);
+    DefaultTheme::applyRaisedCard(cardFirmware, 14);
+    lv_obj_set_flex_flow(cardFirmware, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(cardFirmware, 12, 0);
+    lv_obj_set_style_pad_row(cardFirmware, 8, 0);
+
+    lv_obj_t* rowFwHeader = lv_obj_create(cardFirmware);
+    lv_obj_set_size(rowFwHeader, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(rowFwHeader, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(rowFwHeader, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(rowFwHeader, 0, 0);
+    lv_obj_set_style_border_width(rowFwHeader, 0, 0);
+    lv_obj_set_style_pad_all(rowFwHeader, 0, 0);
+
+    lv_obj_t* lblFwTitle = lv_label_create(rowFwHeader);
+    lv_label_set_text(lblFwTitle, LV_SYMBOL_FILE " Firmware a Grabar:");
+    lv_obj_set_style_text_font(lblFwTitle, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(lblFwTitle, DefaultTheme::getPrimaryAccent(), 0);
+
+    m_btnPickFile = lv_button_create(rowFwHeader);
+    lv_obj_set_width(m_btnPickFile, lv_pct(45));
     lv_obj_set_height(m_btnPickFile, 36);
     DefaultTheme::applyButton(m_btnPickFile, 8);
-    lv_obj_set_style_bg_color(m_btnPickFile, lv_color_hex(0x334155), 0);
+    lv_obj_set_style_bg_color(m_btnPickFile, lv_color_hex(0x2563EB), 0);
     lv_obj_add_event_cb(m_btnPickFile, pickFileBtnCb, LV_EVENT_CLICKED, this);
 
     lv_obj_t* lblPick = lv_label_create(m_btnPickFile);
-    lv_label_set_text(lblPick, LV_SYMBOL_FILE " Elegir FW (.bin)");
+    lv_label_set_text(lblPick, LV_SYMBOL_DIRECTORY " Explorar SD");
     lv_obj_set_style_text_font(lblPick, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lblPick, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_text_color(lblPick, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(lblPick);
 
-    // Fila 4: Ruta de Firmware Seleccionado
-    m_lblFirmwareSource = lv_label_create(m_cardPinConfig);
+    // Contenedor visual para mostrar el archivo seleccionado
+    lv_obj_t* fwPathBox = lv_obj_create(cardFirmware);
+    lv_obj_set_width(fwPathBox, lv_pct(100));
+    lv_obj_set_height(fwPathBox, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(fwPathBox, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_border_color(fwPathBox, lv_color_hex(0x334155), 0);
+    lv_obj_set_style_border_width(fwPathBox, 1, 0);
+    lv_obj_set_style_radius(fwPathBox, 8, 0);
+    lv_obj_set_style_pad_all(fwPathBox, 8, 0);
+
+    m_lblFirmwareSource = lv_label_create(fwPathBox);
     lv_obj_set_width(m_lblFirmwareSource, lv_pct(100));
-    lv_label_set_long_mode(m_lblFirmwareSource, LV_LABEL_LONG_DOT);
+    lv_label_set_long_mode(m_lblFirmwareSource, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_font(m_lblFirmwareSource, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(m_lblFirmwareSource, lv_color_hex(0x38BDF8), 0);
 
     // ─────────────────────────────────────────────────────────────
-    // 4. Tarjeta de Control y Progreso
+    // 5. Tarjeta de Control y Progreso
     // ─────────────────────────────────────────────────────────────
     lv_obj_t* cardControl = lv_obj_create(m_container);
     lv_obj_set_width(cardControl, lv_pct(100));

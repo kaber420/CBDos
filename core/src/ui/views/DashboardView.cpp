@@ -1,7 +1,6 @@
 #include "DashboardView.hpp"
 #include "ConfigView.hpp"
 #include "MusicPlayerView.hpp"
-#include "VideoPlayerView.hpp"
 #include "GalleryListView.hpp"
 #include "FlasherView.hpp"
 #include "RadioView.hpp"
@@ -34,7 +33,6 @@ bool DashboardView::onCreate(lv_obj_t* parent) {
     m_apps = {
         {"browser", "Navegador", LV_SYMBOL_EYE_OPEN, 0x00B4D8, false, ""},
         {"gallery", "Galeria", LV_SYMBOL_IMAGE, 0xEC4899, false, ""},
-        {"videos", "Videos", LV_SYMBOL_VIDEO, 0x8B5CF6, false, ""},
         {"files", "Archivos", LV_SYMBOL_DIRECTORY, 0xF77F00, false, ""},
         {"utilities", "Utilidades", LV_SYMBOL_LIST, 0x00F5D4, false, ""},
         {"cartridge", "Cartuchos", LV_SYMBOL_PLAY, 0x3F68D9, false, ""},
@@ -169,8 +167,6 @@ void DashboardView::cardClickedEventCb(lv_event_t* e) {
         UIManager::getInstance().pushView(std::make_shared<TlvBrowserView>());
     } else if (app.id == "gallery") {
         UIManager::getInstance().pushView(std::make_shared<GalleryListView>());
-    } else if (app.id == "videos") {
-        UIManager::getInstance().pushView(std::make_shared<VideoPlayerView>());
     } else if (app.id == "files") {
         UIManager::getInstance().pushView(std::make_shared<FileManagerView>());
     } else if (app.id == "utilities") {
