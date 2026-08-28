@@ -362,6 +362,15 @@ void FlasherView::updateUIFromConfig() {
         if (m_lblWiring) lv_label_set_text(m_lblWiring, preset.wiringInfo.c_str());
     }
 
+    // Si el preset usa USB-Serial Nativo, ocultamos o deshabilitamos la tarjeta de pines GPIO
+    if (m_cardPinConfig) {
+        if (m_currentConfig.transport == cbdos::flasher::FlasherTransport::USB_CDC_NATIVE) {
+            lv_obj_add_flag(m_cardPinConfig, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_remove_flag(m_cardPinConfig, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     if (m_ddTxPin) lv_dropdown_set_selected(m_ddTxPin, findPinIndex(s_txPins, m_currentConfig.txPin));
     if (m_ddRxPin) lv_dropdown_set_selected(m_ddRxPin, findPinIndex(s_rxPins, m_currentConfig.rxPin));
     if (m_ddBootPin) lv_dropdown_set_selected(m_ddBootPin, findPinIndex(s_bootPins, m_currentConfig.bootPin));

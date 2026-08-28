@@ -22,6 +22,33 @@ namespace cbdos {
 namespace system {
 
 FlasherServiceP4::FlasherServiceP4() {
+    // 0. Preset USB-Serial Nativo por cable USB-C (ESP32-C3 / S3 / C6 de fábrica)
+    cbdos::flasher::FlasherPreset p0;
+    p0.id = "p4_usb_cdc_native";
+    p0.name = "🔌 USB-Serial Nativo (Puerto USB-C ESP32-C3/S3)";
+    p0.description = "Flasheo directo por cable USB-C usando USB-Serial/JTAG de fabrica.";
+    p0.wiringInfo =
+        "+---------------------------------------------+\n"
+        "|  CONEXION DIRECTA POR CABLE USB-C           |\n"
+        "+---------------------------------------------+\n"
+        "| [Cable USB] Conectar ESP32-C3/S3 al puerto  |\n"
+        "|             USB Host de la placa JC4880.    |\n"
+        "| [Auto-Boot] El reset y entrada a bootloader |\n"
+        "|             se controlan por DTR/RTS en USB |\n"
+        "+---------------------------------------------+\n"
+        "| No requiere cables sueltos ni pines GPIO.   |";
+    p0.config.transport = cbdos::flasher::FlasherTransport::USB_CDC_NATIVE;
+    p0.config.txPin = -1;
+    p0.config.rxPin = -1;
+    p0.config.bootPin = -1;
+    p0.config.rstPin = -1;
+    p0.config.baudRate = 115200;
+    p0.config.flashOffset = 0x0;
+    p0.config.binPath = "/sdcard/firmware.bin";
+    p0.config.presetName = p0.name;
+    p0.useEmbeddedBin = false;
+    m_presets.push_back(p0);
+
     // 1. Preset Coprocesador ESP32-C6 (Integrado en placa JC4880P443C)
     cbdos::flasher::FlasherPreset p1;
     p1.id = "p4_c6_internal";
@@ -36,6 +63,7 @@ FlasherServiceP4::FlasherServiceP4() {
         "| [Cable 1]  Pin 17 (IO34) --> Pin 24 (C6_IO9)|\n"
         "+---------------------------------------------+\n"
         "| Energia (IO36) y Reset (IO54) son INTERNOS  |";
+    p1.config.transport = cbdos::flasher::FlasherTransport::UART_PINS;
     p1.config.txPin = 32;
     p1.config.rxPin = 28;
     p1.config.bootPin = 34;
@@ -74,12 +102,39 @@ FlasherServiceP4::FlasherServiceP4() {
     p2.useEmbeddedBin = false;
     m_presets.push_back(p2);
 
-    // 3. Preset ESP Externo para ESP32-S3 (JC3248W535)
+    // 3. Preset ESP32-C3 Dongle Bridge (Vía JP1)
     cbdos::flasher::FlasherPreset p3;
-    p3.id = "s3_external";
-    p3.name = "ESP Externo (JC3248W535 S3)";
-    p3.description = "Flasheo desde tarjeta S3 usando pines libres.";
+    p3.id = "p4_c3_bridge";
+    p3.name = "ESP32-C3 Dongle Bridge (JP1)";
+    p3.description = "Flasheo de modulo ESP32-C3 para modem / sniffer USB.";
     p3.wiringInfo =
+        "+---------------------------------------------+\n"
+        "|  CONEXIONES JP1 HACIA ESP32-C3              |\n"
+        "+---------------------------------------------+\n"
+        "| [UART TX]  JP1 Pin 19 (GPIO 32) -> C3 RXD   |\n"
+        "| [UART RX]  JP1 Pin 21 (GPIO 28) -> C3 TXD   |\n"
+        "| [BOOT IO9] JP1 Pin 17 (GPIO 34) -> C3 IO9   |\n"
+        "| [RESET]    JP1 Pin 54           -> C3 EN/RST|\n"
+        "| [POWER]    JP1 Pin 01 (3.3V)    -> C3 3V3   |\n"
+        "| [TIERRA]   JP1 Pin 05 (GND)     -> C3 GND   |\n"
+        "+---------------------------------------------+";
+    p3.config.txPin = 32;
+    p3.config.rxPin = 28;
+    p3.config.bootPin = 34;
+    p3.config.rstPin = 54;
+    p3.config.baudRate = 115200;
+    p3.config.flashOffset = 0x0;
+    p3.config.binPath = "/sdcard/espnow_usb_bridge_c3.bin";
+    p3.config.presetName = p3.name;
+    p3.useEmbeddedBin = false;
+    m_presets.push_back(p3);
+
+    // 4. Preset ESP Externo para ESP32-S3 (JC3248W535)
+    cbdos::flasher::FlasherPreset p4;
+    p4.id = "s3_external";
+    p4.name = "ESP Externo (JC3248W535 S3)";
+    p4.description = "Flasheo desde tarjeta S3 usando pines libres.";
+    p4.wiringInfo =
         "+---------------------------------------------+\n"
         "|  CONEXIONES S3 HACIA ESP EXTERNO            |\n"
         "+---------------------------------------------+\n"
@@ -89,23 +144,23 @@ FlasherServiceP4::FlasherServiceP4() {
         "| [RESET]    Boton Manual   -> Target EN / RST|\n"
         "| [FIRMWARE] MicroSD        -> /sdcard/*.bin  |\n"
         "+---------------------------------------------+";
-    p3.config.txPin = 15;
-    p3.config.rxPin = 16;
-    p3.config.bootPin = 0;
-    p3.config.rstPin = -1;
-    p3.config.baudRate = 115200;
-    p3.config.flashOffset = 0x0;
-    p3.config.binPath = "/sdcard/firmware.bin";
-    p3.config.presetName = p3.name;
-    p3.useEmbeddedBin = false;
-    m_presets.push_back(p3);
+    p4.config.txPin = 15;
+    p4.config.rxPin = 16;
+    p4.config.bootPin = 0;
+    p4.config.rstPin = -1;
+    p4.config.baudRate = 115200;
+    p4.config.flashOffset = 0x0;
+    p4.config.binPath = "/sdcard/firmware.bin";
+    p4.config.presetName = p4.name;
+    p4.useEmbeddedBin = false;
+    m_presets.push_back(p4);
 
-    // 4. Preset Personalizado / Manual
-    cbdos::flasher::FlasherPreset p4;
-    p4.id = "custom";
-    p4.name = "Personalizado / Manual";
-    p4.description = "Configuracion libre de GPIOs, baudrate y firmware.";
-    p4.wiringInfo =
+    // 5. Preset Personalizado / Manual
+    cbdos::flasher::FlasherPreset p5;
+    p5.id = "custom";
+    p5.name = "Personalizado / Manual";
+    p5.description = "Configuracion libre de GPIOs, baudrate y firmware.";
+    p5.wiringInfo =
         "+---------------------------------------------+\n"
         "|  GUIA DE CONEXION PERSONALIZADA             |\n"
         "+---------------------------------------------+\n"
@@ -115,16 +170,16 @@ FlasherServiceP4::FlasherServiceP4() {
         "| 4. Conectar Host RST al pin Reset/EN.       |\n"
         "| 5. Conectar masa GND comun entre placas.    |\n"
         "+---------------------------------------------+";
-    p4.config.txPin = 32;
-    p4.config.rxPin = 28;
-    p4.config.bootPin = 34;
-    p4.config.rstPin = 54;
-    p4.config.baudRate = 115200;
-    p4.config.flashOffset = 0x0;
-    p4.config.binPath = "/sdcard/firmware.bin";
-    p4.config.presetName = p4.name;
-    p4.useEmbeddedBin = false;
-    m_presets.push_back(p4);
+    p5.config.txPin = 32;
+    p5.config.rxPin = 28;
+    p5.config.bootPin = 34;
+    p5.config.rstPin = 54;
+    p5.config.baudRate = 115200;
+    p5.config.flashOffset = 0x0;
+    p5.config.binPath = "/sdcard/firmware.bin";
+    p5.config.presetName = p5.name;
+    p5.useEmbeddedBin = false;
+    m_presets.push_back(p5);
 
     m_activeConfig = m_presets[0].config;
 }

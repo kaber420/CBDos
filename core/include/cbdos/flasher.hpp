@@ -18,12 +18,18 @@ enum class FlasherStatus {
     Failed
 };
 
+enum class FlasherTransport {
+    UART_PINS,      // Conexión por pines GPIO (UART hardware)
+    USB_CDC_NATIVE  // Conexión directa por cable USB-C (USB-Serial/JTAG CDC-ACM)
+};
+
 struct FlasherConfig {
-    int txPin = 32;                 // Host TX -> Target RX
-    int rxPin = 28;                 // Host RX -> Target TX
+    FlasherTransport transport = FlasherTransport::UART_PINS; // Modo de conexión
+    int txPin = 32;                 // Host TX -> Target RX (Solo UART)
+    int rxPin = 28;                 // Host RX -> Target TX (Solo UART)
     int bootPin = 34;               // Host GPIO -> Target Boot (IO9/IO0) (-1 si manual)
     int rstPin = 54;                // Host GPIO -> Target Reset/EN (-1 si manual)
-    uint32_t baudRate = 115200;     // Velocidad UART
+    uint32_t baudRate = 115200;     // Velocidad UART / USB
     uint32_t flashOffset = 0x0;     // Offset de flasheo (0x0 o 0x10000)
     std::string binPath = "";       // Ruta en MicroSD ("" = firmware embebido si existe)
     std::string presetName = "Coprocesador C6";

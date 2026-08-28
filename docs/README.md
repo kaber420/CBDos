@@ -28,6 +28,7 @@ docs/
 
 ### 2. 🏛️ [Arquitectura y HAL (`docs/architecture/`)](architecture/)
 * **[Arquitectura Agnóstica y HAL](architecture/hal_and_core_architecture.md):** Filosofía de desacoplamiento, Ley de Pureza de `core/`, contratos C++ y tabla maestra de módulos HAL.
+* **[Expansión USB Host, Flasher y JTAG](architecture/usb_host_flasher_and_jtag_subsystem.md):** Especificación técnica para flasheo USB-C directo, dongles/módems de radio y depuración JTAG/SWD.
 * **[Análisis de Modularización](architecture/modularization_analysis.md):** Historial y decisiones de desacoplamiento y modularidad.
 
 ---
