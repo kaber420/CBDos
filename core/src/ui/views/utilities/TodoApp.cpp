@@ -3,11 +3,11 @@
 #include "../../themes/DefaultTheme.h"
 #include "cbdos/storage.hpp"
 #include "cbdos/msgpack_util.hpp"
+#include "cbdos/log.hpp"
 #include <cstdio>
 #include <vector>
 #include <string>
 #include <cstring>
-#include <esp_log.h>
 
 static const char* TAG = "TodoApp";
 static const char* TASKS_STORAGE_PATH = "notes/tasks.msgpack";
@@ -125,13 +125,13 @@ void TodoApp::loadFromStorage() {
     if (cbdos::storage::fileExists(TASKS_STORAGE_PATH)) {
         std::string rawData = cbdos::storage::readFile(TASKS_STORAGE_PATH);
         if (deserializeTodoListsFromMsgPack(rawData, s_todoLists)) {
-            ESP_LOGI(TAG, "Cargadas %d listas de tareas desde %s (MessagePack)", (int)s_todoLists.size(), TASKS_STORAGE_PATH);
+            CBD_LOG_I(TAG, "Cargadas %d listas de tareas desde %s (MessagePack)", (int)s_todoLists.size(), TASKS_STORAGE_PATH);
             return;
         }
     }
 
     // 2. Si no hay datos (primer arranque), inicializar listas predeterminadas
-    ESP_LOGI(TAG, "Inicializando listas de tareas predeterminadas en Flash SPIFFS...");
+    CBD_LOG_I(TAG, "Inicializando listas de tareas predeterminadas en Flash SPIFFS...");
     TodoList compras;
     compras.name = "Compras";
     compras.items.push_back({"Leche y Cafe", false});
@@ -153,16 +153,16 @@ void TodoApp::saveToStorage() {
     if (!binData.empty()) {
         bool ok = cbdos::storage::writeFile(TASKS_STORAGE_PATH, binData);
         if (ok) {
-            ESP_LOGI(TAG, "Guardadas %d listas de tareas en %s (MessagePack, %d bytes)", (int)s_todoLists.size(), TASKS_STORAGE_PATH, (int)binData.size());
+            CBD_LOG_I(TAG, "Guardadas %d listas de tareas en %s (MessagePack, %d bytes)", (int)s_todoLists.size(), TASKS_STORAGE_PATH, (int)binData.size());
         } else {
-            ESP_LOGE(TAG, "Error al escribir tareas en %s", TASKS_STORAGE_PATH);
+            CBD_LOG_E(TAG, "Error al escribir tareas en %s", TASKS_STORAGE_PATH);
         }
     }
 }
 
 bool TodoApp::exportToSd(const std::string& sdPath) {
     if (!cbdos::storage::isSdMounted()) {
-        ESP_LOGW(TAG, "exportToSd: MicroSD no montada");
+        CBD_LOG_W(TAG, "exportToSd: MicroSD no montada");
         return false;
     }
     std::string binData = serializeTodoListsToMsgPack(s_todoLists);

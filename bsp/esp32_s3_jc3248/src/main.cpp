@@ -22,6 +22,7 @@ namespace cbdos {
 namespace bsp {
     void initPersistenceBackend();
     void initMeshTransportS3();
+    void initHttpClientS3();
     cbdos::time::ITimeProvider* getArduinoTimeProvider();
 }
 }
@@ -58,9 +59,9 @@ static void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data) {
 
     cbdos::input::TouchPoint tp;
     if (cbdos::input::getTouch(tp) && tp.isPressed) {
-        data->state = LV_INDEV_STATE_PR;
         data->point.x = tp.x;
         data->point.y = tp.y;
+        data->state = LV_INDEV_STATE_PR;
     } else {
         data->state = LV_INDEV_STATE_REL;
     }
@@ -71,9 +72,10 @@ void setup() {
     cbdos::system::sleepMs(500);
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) [Target: ESP32-S3] ===");
     
-    // Inyectar el backend de persistencia NVS y Transporte de Malla
+    // Inyectar el backend de persistencia NVS, Transporte de Malla y Cliente HTTP
     cbdos::bsp::initPersistenceBackend();
     cbdos::bsp::initMeshTransportS3();
+    cbdos::bsp::initHttpClientS3();
 
     // Conectar time <--> mesh mediante callbacks (sin acoplamiento directo entre módulos)
     cbdos::time::setTowerSyncRequestCallback([]() {

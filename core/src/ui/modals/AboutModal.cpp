@@ -3,7 +3,6 @@
 #include "../themes/DefaultTheme.h"
 #include "cbdos/display.hpp"
 #include "cbdos/system.hpp"
-#include "../views/SplashScreenView.hpp"
 #include <cstdio>
 
 namespace cbdos {
@@ -118,25 +117,6 @@ void AboutModal::show(lv_obj_t* parent) {
     } else {
         addInfoBox(card, "Hardware Target", "ESP32-S3 Xtensa Dual-Core @ 240MHz\n320x480 QSPI | 8MB Octal-PSRAM");
     }
-
-    // Botón Ver Splash Screen
-    lv_obj_t* btnSplash = lv_button_create(card);
-    lv_obj_set_size(btnSplash, lv_pct(100), 38);
-    DefaultTheme::applyButton(btnSplash, 10);
-    lv_obj_set_style_bg_color(btnSplash, lv_color_hex(0x4F46E5), 0);
-    lv_obj_set_style_margin_top(btnSplash, 4, 0);
-
-    lv_obj_t* lblS = lv_label_create(btnSplash);
-    lv_label_set_text(lblS, "Mostrar Pantalla de Inicio (Splash)");
-    lv_obj_set_style_text_color(lblS, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(lblS);
-
-    auto splash_cb = [](lv_event_t* e) {
-        (void)e;
-        AboutModal::hide();
-        UIManager::getInstance().switchView(std::make_shared<SplashScreenView>());
-    };
-    lv_obj_add_event_cb(btnSplash, splash_cb, LV_EVENT_CLICKED, nullptr);
 
     // Botón Cerrar
     lv_obj_t* btnClose = lv_button_create(card);

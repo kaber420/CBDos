@@ -20,7 +20,6 @@ idf_component_register(
         "src/ui/components/HeaderBar.cpp"
         "src/ui/components/QuickSettingsPanel.cpp"
         "src/ui/views/DashboardView.cpp"
-        "src/ui/views/SplashScreenView.cpp"
         "src/ui/views/ConfigView.cpp"
         "src/ui/views/WiFiConfigView.cpp"
         "src/ui/views/WallpaperConfigView.cpp"
@@ -58,6 +57,7 @@ idf_component_register(
 
         "src/ui/views/LuappView.cpp"
         "src/network/ConfigManager.cpp"
+        "src/network/http_client.cpp"
         "src/time/TimeManager.cpp"
         "src/lua/LuaEngine.cpp"
         "src/lua/LuaBridge.cpp"

@@ -1,5 +1,5 @@
 #include "WavPlayer.hpp"
-#include <esp_log.h>
+#include "cbdos/log.hpp"
 #include <cstring>
 
 static const char* TAG = "WavPlayer";
@@ -50,18 +50,18 @@ float WavPlayer::getProgress() const {
 
 void WavPlayer::pause() {
     m_isPaused = true;
-    ESP_LOGI(TAG, "Audio en pausa");
+    CBD_LOG_I(TAG, "Audio en pausa");
 }
 
 void WavPlayer::resume() {
     m_isPaused = false;
-    ESP_LOGI(TAG, "Audio reanudado");
+    CBD_LOG_I(TAG, "Audio reanudado");
 }
 
 void WavPlayer::seek(uint32_t targetSec) {
     if (targetSec > m_totalTimeSec) targetSec = m_totalTimeSec;
     m_seekRequestSec = (int32_t)targetSec;
-    ESP_LOGI(TAG, "Seek solicitado a %lu segundos", targetSec);
+    CBD_LOG_I(TAG, "Seek solicitado a %lu segundos", targetSec);
 }
 
 void WavPlayer::stop() {
@@ -87,7 +87,7 @@ bool WavPlayer::play(const char* filepath) {
 
     FILE* f = fopen(filepath, "rb");
     if (!f) {
-        ESP_LOGE(TAG, "No se pudo abrir el archivo de audio: %s", filepath);
+        CBD_LOG_E(TAG, "No se pudo abrir el archivo de audio: %s", filepath);
         xSemaphoreGive(m_mutex);
         return false;
     }
@@ -95,7 +95,7 @@ bool WavPlayer::play(const char* filepath) {
     // Leer encabezado inicial RIFF
     char riffHeader[12];
     if (fread(riffHeader, 1, 12, f) != 12 || memcmp(riffHeader, "RIFF", 4) != 0 || memcmp(riffHeader + 8, "WAVE", 4) != 0) {
-        ESP_LOGE(TAG, "Encabezado RIFF/WAVE no valido en: %s", filepath);
+        CBD_LOG_E(TAG, "Encabezado RIFF/WAVE no valido en: %s", filepath);
         fclose(f);
         xSemaphoreGive(m_mutex);
         return false;
@@ -141,7 +141,7 @@ bool WavPlayer::play(const char* filepath) {
     }
 
     if (!fmtFound || !dataFound) {
-        ESP_LOGE(TAG, "Formato WAV corrupto o sin chunk data: %s", filepath);
+        CBD_LOG_E(TAG, "Formato WAV corrupto o sin chunk data: %s", filepath);
         fclose(f);
         xSemaphoreGive(m_mutex);
         return false;
@@ -156,7 +156,7 @@ bool WavPlayer::play(const char* filepath) {
     m_stopRequested = false;
     m_seekRequestSec = -1;
 
-    ESP_LOGI(TAG, "Iniciando reproduccion: '%s' (%lu Hz, %d canales, %d-bit, duracion: %lu seg)",
+    CBD_LOG_I(TAG, "Iniciando reproduccion: '%s' (%lu Hz, %d canales, %d-bit, duracion: %lu seg)",
              filepath, m_header.sampleRate, m_header.numChannels, m_header.bitsPerSample, m_totalTimeSec);
 
     xTaskCreatePinnedToCore(playbackTask, "wav_player_task", 4096, this, 4, &m_taskHandle, 0);
@@ -218,7 +218,7 @@ void WavPlayer::runPlayback() {
     m_isPlaying = false;
     m_isPaused = false;
     m_taskHandle = nullptr;
-    ESP_LOGI(TAG, "Reproduccion finalizada");
+    CBD_LOG_I(TAG, "Reproduccion finalizada");
 }
 
 AudioStats WavPlayer::getStats() const {

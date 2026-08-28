@@ -1,6 +1,6 @@
 #include "LuaEngine.hpp"
 #include "LuaBridge.hpp"
-#include <esp_heap_caps.h>
+#include "cbdos/memory.hpp"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -48,7 +48,7 @@ void* LuaEngine::psramAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 
     if (nsize == 0) {
         if (ptr) {
-            free(ptr);
+            cbdos::mem::free_mem(ptr);
         }
         return nullptr;
     }
@@ -57,10 +57,10 @@ void* LuaEngine::psramAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
         void* p = nullptr;
         // Asignaciones pequeñas (<256 bytes) en SRAM interna para máxima velocidad de ejecución
         if (nsize < 256) {
-            p = heap_caps_malloc(nsize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            p = cbdos::mem::alloc_internal(nsize);
         }
         if (!p) {
-            p = heap_caps_malloc(nsize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            p = cbdos::mem::alloc_psram(nsize);
         }
         if (!p) {
             p = malloc(nsize);
@@ -69,10 +69,10 @@ void* LuaEngine::psramAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
     } else {
         void* p = nullptr;
         if (nsize < 256) {
-            p = heap_caps_realloc(ptr, nsize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            p = cbdos::mem::realloc_internal(ptr, nsize);
         }
         if (!p) {
-            p = heap_caps_realloc(ptr, nsize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            p = cbdos::mem::realloc_psram(ptr, nsize);
         }
         if (!p) {
             p = realloc(ptr, nsize);

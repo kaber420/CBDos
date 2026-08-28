@@ -4,12 +4,6 @@
 #include <lvgl.h>
 #include <vector>
 #include <string>
-#if defined(ARDUINO)
-#include <Arduino.h>
-#else
-#include <string>
-typedef std::string String;
-#endif
 
 class WallpaperManager {
 public:

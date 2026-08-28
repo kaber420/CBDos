@@ -1,21 +1,22 @@
 #include "WallpaperManager.h"
 #include "assets/default_wallpaper.h"
+#include "cbdos/memory.hpp"
+#include "cbdos/log.hpp"
+#include "cbdos/persistence.hpp"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 
-#include "cbdos/persistence.hpp"
-
 #if defined(ARDUINO)
 #include <SD.h>
 #include <LittleFS.h>
-#include <esp_heap_caps.h>
 #ifndef lv_fs_spi_lock
 #define lv_fs_spi_lock() do{}while(0)
 #define lv_fs_spi_unlock() do{}while(0)
 #endif
 #endif
 
+static const char* TAG = "Wallpaper";
 static const size_t WALLPAPER_WIDTH = 320;
 static const size_t WALLPAPER_HEIGHT = 480;
 static const size_t WALLPAPER_BUFFER_SIZE = WALLPAPER_WIDTH * WALLPAPER_HEIGHT * 2; // 307200 bytes
@@ -27,25 +28,16 @@ WallpaperManager::WallpaperManager()
 
 WallpaperManager::~WallpaperManager() {
     if (customBuffer) {
-        free(customBuffer);
+        cbdos::mem::free_mem(customBuffer);
         customBuffer = nullptr;
     }
 }
 
 bool WallpaperManager::ensureBufferAllocated() {
     if (customBuffer) return true;
-#if defined(ARDUINO)
-    customBuffer = (uint8_t*)heap_caps_malloc(WALLPAPER_BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    customBuffer = (uint8_t*)cbdos::mem::alloc_psram(WALLPAPER_BUFFER_SIZE);
     if (!customBuffer) {
-        customBuffer = (uint8_t*)malloc(WALLPAPER_BUFFER_SIZE);
-    }
-#else
-    customBuffer = (uint8_t*)malloc(WALLPAPER_BUFFER_SIZE);
-#endif
-    if (!customBuffer) {
-#if defined(ARDUINO)
-        Serial.println("[Wallpaper] ERROR: No se pudo asignar memoria para el fondo en PSRAM");
-#endif
+        CBD_LOG_E(TAG, "No se pudo asignar memoria para el fondo en PSRAM");
         return false;
     }
 

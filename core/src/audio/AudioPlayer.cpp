@@ -1,8 +1,9 @@
 #include "AudioPlayer.hpp"
 #include "cbdos/network.hpp"
+#include "cbdos/log.hpp"
+#include "cbdos/memory.hpp"
 #include "mp3dec.h"
 #include "aacdec.h"
-#include <esp_log.h>
 #include <cstring>
 #include <algorithm>
 #include <sys/socket.h>
@@ -83,18 +84,18 @@ float AudioPlayer::getProgress() const {
 
 void AudioPlayer::pause() {
     m_isPaused = true;
-    ESP_LOGI(TAG, "Audio pausado");
+    CBD_LOG_I(TAG, "Audio pausado");
 }
 
 void AudioPlayer::resume() {
     m_isPaused = false;
-    ESP_LOGI(TAG, "Audio reanudado");
+    CBD_LOG_I(TAG, "Audio reanudado");
 }
 
 void AudioPlayer::seek(uint32_t targetSec) {
     if (targetSec > m_totalTimeSec) targetSec = m_totalTimeSec;
     m_seekRequestSec = (int32_t)targetSec;
-    ESP_LOGI(TAG, "Seek solicitado a %lu segundos", targetSec);
+    CBD_LOG_I(TAG, "Seek solicitado a %lu segundos", targetSec);
 }
 
 void AudioPlayer::stop() {
@@ -120,7 +121,7 @@ static uint32_t getID3v2Size(FILE* f) {
                                ((header[8] & 0x7F) << 7)  |
                                 (header[9] & 0x7F);
             uint32_t totalOffset = id3Size + 10;
-            ESP_LOGI(TAG, "ID3v2 detectado: saltando %lu bytes de metadatos/caratula", totalOffset);
+            CBD_LOG_I(TAG, "ID3v2 detectado: saltando %lu bytes de metadatos/caratula", totalOffset);
             return totalOffset;
         }
     }
@@ -173,7 +174,7 @@ static int probeMP3SampleRate(FILE* f, uint32_t id3Offset, uint8_t* outChans, ui
             if (info.samprate > 0) sampRate = info.samprate;
             if (outChans) *outChans = (uint8_t)info.nChans;
             if (outBitrate) *outBitrate = (uint32_t)info.bitrate;
-            ESP_LOGI(TAG, "[Audio Probe] %d Hz, %d canales, %d kbps",
+            CBD_LOG_I(TAG, "[Audio Probe] %d Hz, %d canales, %d kbps",
                      info.samprate, info.nChans, info.bitrate / 1000);
         }
         free(tmpBuf);
@@ -204,7 +205,7 @@ bool AudioPlayer::play(const char* filepath) {
         }
     }
     if (!f) {
-        ESP_LOGE(TAG, "No se pudo abrir el archivo: %s", filepath);
+        CBD_LOG_E(TAG, "No se pudo abrir el archivo: %s", filepath);
         xSemaphoreGive(m_mutex);
         return false;
     }
@@ -225,7 +226,7 @@ bool AudioPlayer::play(const char* filepath) {
     m_stopRequested = false;
     m_seekRequestSec = -1;
 
-    ESP_LOGI(TAG, "Iniciando Helix Audio Player para: %s (Tamano: %lu KB, Formato: %d)",
+    CBD_LOG_I(TAG, "Iniciando Helix Audio Player para: %s (Tamano: %lu KB, Formato: %d)",
              filepath, m_fileSize / 1024, (int)m_format);
 
     // Si es MP3, ejecutar el Probe previo de espOS32 y configurar el I2S de inmediato
@@ -250,7 +251,7 @@ bool AudioPlayer::playStream(const char* url) {
     if (!url || strlen(url) == 0) return false;
 
     if (!cbdos::network::isConnected()) {
-        ESP_LOGW(TAG, "[Stream] No se puede iniciar streaming sin conexion de red");
+        CBD_LOG_W(TAG, "[Stream] No se puede iniciar streaming sin conexion de red");
         return false;
     }
 
@@ -278,7 +279,7 @@ bool AudioPlayer::playStream(const char* url) {
 
     cbdos::audio::setSampleRate(44100);
 
-    ESP_LOGI(TAG, "Iniciando Helix Stream Player para: %s", url);
+    CBD_LOG_I(TAG, "Iniciando Helix Stream Player para: %s", url);
 
     xTaskCreatePinnedToCore(streamPlaybackTask, "helix_stream_task", 12288, this, 6, &m_taskHandle, 0);
 
@@ -331,7 +332,7 @@ void AudioPlayer::runStreamPlayback() {
             host = host.substr(0, colonIdx);
         }
 
-        ESP_LOGI(TAG, "[Stream] Conectando a %s:%s%s", host.c_str(), port.c_str(), path.c_str());
+        CBD_LOG_I(TAG, "[Stream] Conectando a %s:%s%s", host.c_str(), port.c_str(), path.c_str());
 
         struct addrinfo hints;
         memset(&hints, 0, sizeof(hints));
@@ -341,13 +342,13 @@ void AudioPlayer::runStreamPlayback() {
         struct addrinfo* res = nullptr;
         int err = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
         if (err != 0 || !res) {
-            ESP_LOGE(TAG, "[Stream] getaddrinfo fallo para %s", host.c_str());
+            CBD_LOG_E(TAG, "[Stream] getaddrinfo fallo para %s", host.c_str());
             break;
         }
 
         sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (sock < 0) {
-            ESP_LOGE(TAG, "[Stream] Fallo al crear socket");
+            CBD_LOG_E(TAG, "[Stream] Fallo al crear socket");
             freeaddrinfo(res);
             break;
         }
@@ -359,7 +360,7 @@ void AudioPlayer::runStreamPlayback() {
         setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
         if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
-            ESP_LOGE(TAG, "[Stream] Fallo al conectar socket con %s:%s", host.c_str(), port.c_str());
+            CBD_LOG_E(TAG, "[Stream] Fallo al conectar socket con %s:%s", host.c_str(), port.c_str());
             close(sock);
             sock = -1;
             freeaddrinfo(res);
@@ -378,7 +379,7 @@ void AudioPlayer::runStreamPlayback() {
             path.c_str(), host.c_str());
 
         if (send(sock, req, reqLen, 0) < 0) {
-            ESP_LOGE(TAG, "[Stream] Error enviando HTTP GET");
+            CBD_LOG_E(TAG, "[Stream] Error enviando HTTP GET");
             close(sock);
             sock = -1;
             break;
@@ -403,7 +404,7 @@ void AudioPlayer::runStreamPlayback() {
             if (locPos != std::string::npos) {
                 size_t locEnd = headerBuf.find("\r\n", locPos);
                 std::string newLoc = headerBuf.substr(locPos + 10, locEnd - (locPos + 10));
-                ESP_LOGI(TAG, "[Stream] Redirigiendo a: %s", newLoc.c_str());
+                CBD_LOG_I(TAG, "[Stream] Redirigiendo a: %s", newLoc.c_str());
                 currentUrl = newLoc;
                 close(sock);
                 sock = -1;
@@ -424,7 +425,7 @@ void AudioPlayer::runStreamPlayback() {
 
     HMP3Decoder hMP3Decoder = MP3InitDecoder();
     if (!hMP3Decoder) {
-        ESP_LOGE(TAG, "[Stream] Fallo al inicializar decoder Helix MP3");
+        CBD_LOG_E(TAG, "[Stream] Fallo al inicializar decoder Helix MP3");
         close(sock);
         m_isPlaying = false;
         m_taskHandle = nullptr;
@@ -432,13 +433,13 @@ void AudioPlayer::runStreamPlayback() {
     }
 
     const size_t IN_BUF_SIZE = 32768; // 32 KB de buffer en memoria
-    uint8_t* inBuf = (uint8_t*)malloc(IN_BUF_SIZE);
-    int16_t* pcmBuf = (int16_t*)malloc(MAX_NCHAN * MAX_NGRAN * MAX_NSAMP * sizeof(int16_t) * 2);
+    uint8_t* inBuf = (uint8_t*)cbdos::mem::alloc_psram(IN_BUF_SIZE);
+    int16_t* pcmBuf = (int16_t*)cbdos::mem::alloc_psram(MAX_NCHAN * MAX_NGRAN * MAX_NSAMP * sizeof(int16_t) * 2);
 
     if (!inBuf || !pcmBuf) {
-        ESP_LOGE(TAG, "[Stream] Memoria insuficiente para buffers");
-        if (inBuf) free(inBuf);
-        if (pcmBuf) free(pcmBuf);
+        CBD_LOG_E(TAG, "[Stream] Memoria insuficiente para buffers");
+        if (inBuf) cbdos::mem::free_mem(inBuf);
+        if (pcmBuf) cbdos::mem::free_mem(pcmBuf);
         MP3FreeDecoder(hMP3Decoder);
         close(sock);
         m_isPlaying = false;
@@ -450,14 +451,7 @@ void AudioPlayer::runStreamPlayback() {
     uint8_t* readPtr = inBuf;
     uint64_t totalSamplesDecoded = 0;
 
-    // Pre-buffering de 16 KB para reproducción continua
-    while (bytesLeft < 16384 && !m_stopRequested) {
-        int n = recv(sock, inBuf + bytesLeft, 16384 - bytesLeft, 0);
-        if (n <= 0) break;
-        bytesLeft += n;
-    }
-
-    ESP_LOGI(TAG, "[Stream] Pre-buffering completado (%d bytes). Iniciando audio...", bytesLeft);
+    m_totalTimeSec = 0; // En streaming de radio la duración es infinita
 
     while (!m_stopRequested) {
         if (m_isPaused) {
@@ -472,12 +466,11 @@ void AudioPlayer::runStreamPlayback() {
             readPtr = inBuf;
             size_t toRead = IN_BUF_SIZE - bytesLeft;
             int nRead = recv(sock, inBuf + bytesLeft, toRead, 0);
-            if (nRead > 0) {
-                bytesLeft += nRead;
-            } else if (nRead <= 0 && bytesLeft == 0) {
-                ESP_LOGW(TAG, "[Stream] Conexion cerrada por el servidor");
+            if (nRead <= 0) {
+                CBD_LOG_W(TAG, "[Stream] Socket cerrado o timeout por el servidor");
                 break;
             }
+            bytesLeft += nRead;
         }
 
         int offset = MP3FindSyncWord(readPtr, bytesLeft);
@@ -524,14 +517,14 @@ void AudioPlayer::runStreamPlayback() {
     }
 
     close(sock);
-    free(inBuf);
-    free(pcmBuf);
+    cbdos::mem::free_mem(inBuf);
+    cbdos::mem::free_mem(pcmBuf);
     MP3FreeDecoder(hMP3Decoder);
 
     m_isPlaying = false;
     m_isPaused = false;
     m_taskHandle = nullptr;
-    ESP_LOGI(TAG, "[Stream] Reproduccion de radio finalizada");
+    CBD_LOG_I(TAG, "[Stream] Reproduccion de radio finalizada");
 }
 
 void AudioPlayer::runPlayback() {
@@ -551,13 +544,13 @@ void AudioPlayer::runPlayback() {
     m_isPlaying = false;
     m_isPaused = false;
     m_taskHandle = nullptr;
-    ESP_LOGI(TAG, "Reproduccion finalizada");
+    CBD_LOG_I(TAG, "Reproduccion finalizada");
 }
 
 void AudioPlayer::runMp3Playback() {
     HMP3Decoder hMP3Decoder = MP3InitDecoder();
     if (!hMP3Decoder) {
-        ESP_LOGE(TAG, "Fallo al inicializar decoder Helix MP3");
+        CBD_LOG_E(TAG, "Fallo al inicializar decoder Helix MP3");
         return;
     }
 
@@ -566,14 +559,14 @@ void AudioPlayer::runMp3Playback() {
     fseek(m_file, id3Offset, SEEK_SET);
 
     const size_t IN_BUF_SIZE = 16384;
-    uint8_t* inBuf = (uint8_t*)malloc(IN_BUF_SIZE);
+    uint8_t* inBuf = (uint8_t*)cbdos::mem::alloc_psram(IN_BUF_SIZE);
     // Buffer para muestras (suficiente para 2304 muestras estéreo de 16 bits)
-    int16_t* pcmBuf = (int16_t*)malloc(MAX_NCHAN * MAX_NGRAN * MAX_NSAMP * sizeof(int16_t) * 2);
+    int16_t* pcmBuf = (int16_t*)cbdos::mem::alloc_psram(MAX_NCHAN * MAX_NGRAN * MAX_NSAMP * sizeof(int16_t) * 2);
 
     if (!inBuf || !pcmBuf) {
-        ESP_LOGE(TAG, "Memoria insuficiente para buffers Helix");
-        if (inBuf) free(inBuf);
-        if (pcmBuf) free(pcmBuf);
+        CBD_LOG_E(TAG, "Memoria insuficiente para buffers Helix");
+        if (inBuf) cbdos::mem::free_mem(inBuf);
+        if (pcmBuf) cbdos::mem::free_mem(pcmBuf);
         MP3FreeDecoder(hMP3Decoder);
         return;
     }
@@ -678,15 +671,15 @@ void AudioPlayer::runMp3Playback() {
         }
     }
 
-    free(inBuf);
-    free(pcmBuf);
+    cbdos::mem::free_mem(inBuf);
+    cbdos::mem::free_mem(pcmBuf);
     MP3FreeDecoder(hMP3Decoder);
 }
 
 void AudioPlayer::runWavPlayback() {
     uint8_t riffHeader[12];
     if (fread(riffHeader, 1, 12, m_file) != 12 || memcmp(riffHeader, "RIFF", 4) != 0) {
-        ESP_LOGE(TAG, "Formato WAV invalido: No se encontro cabecera RIFF");
+        CBD_LOG_E(TAG, "Formato WAV invalido: No se encontro cabecera RIFF");
         return;
     }
 

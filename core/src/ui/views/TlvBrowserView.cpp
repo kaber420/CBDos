@@ -7,6 +7,7 @@
 #include "cbdos/network.hpp"
 #include "cbdos/radio.hpp"
 #include "cbdos/mesh/mesh_engine.hpp"
+#include "cbdos/log.hpp"
 #include <cstring>
 #include <cstdio>
 #include <vector>
@@ -15,7 +16,6 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
-#include <esp_log.h>
 
 static const char* TAG = "TlvBrowser";
 
@@ -278,11 +278,11 @@ void TlvBrowserView::fetchTask(void* param) {
         return;
     }
 
-    ESP_LOGI(TAG, "Conectando a Gateway en %s:%u (path: %s)...", p->host.c_str(), p->port, p->path.c_str());
+    CBD_LOG_I(TAG, "Conectando a Gateway en %s:%u (path: %s)...", p->host.c_str(), p->port, p->path.c_str());
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        ESP_LOGE(TAG, "No se pudo crear socket");
+        CBD_LOG_E(TAG, "No se pudo crear socket");
         UIManager::showToast("Error de socket");
         delete p;
         vTaskDelete(NULL);
@@ -306,7 +306,7 @@ void TlvBrowserView::fetchTask(void* param) {
         if (hp != NULL) {
             memcpy(&dest_addr.sin_addr, hp->h_addr_list[0], hp->h_length);
         } else {
-            ESP_LOGE(TAG, "DNS fallo para %s", p->host.c_str());
+            CBD_LOG_E(TAG, "DNS fallo para %s", p->host.c_str());
             close(sock);
             UIManager::showToast("Error de host/DNS");
             delete p;
@@ -316,7 +316,7 @@ void TlvBrowserView::fetchTask(void* param) {
     }
 
     if (connect(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr)) != 0) {
-        ESP_LOGE(TAG, "Fallo al conectar con %s:%u", p->host.c_str(), p->port);
+        CBD_LOG_E(TAG, "Fallo al conectar con %s:%u", p->host.c_str(), p->port);
         char errBuf[64];
         snprintf(errBuf, sizeof(errBuf), "No se pudo conectar a %s:%u", p->host.c_str(), p->port);
         UIManager::showToast(errBuf);
@@ -349,7 +349,7 @@ void TlvBrowserView::fetchTask(void* param) {
 
     // 2. Enviar petición
     send(sock, packet, total_tx, 0);
-    ESP_LOGI(TAG, "Enviados %u bytes al Gateway", (unsigned int)total_tx);
+    CBD_LOG_I(TAG, "Enviados %u bytes al Gateway", (unsigned int)total_tx);
 
     // 3. Recibir respuesta
     std::vector<uint8_t> response_buf;
@@ -361,7 +361,7 @@ void TlvBrowserView::fetchTask(void* param) {
     }
 
     close(sock);
-    ESP_LOGI(TAG, "Recibidos %u bytes desde Gateway", (unsigned int)response_buf.size());
+    CBD_LOG_I(TAG, "Recibidos %u bytes desde Gateway", (unsigned int)response_buf.size());
 
     if (!response_buf.empty()) {
         RenderAsyncPayload* async_payload = new RenderAsyncPayload();

@@ -1,19 +1,11 @@
-#if defined(ARDUINO)
-#include <Arduino.h>
-#include <HTTPClient.h>
-#include <WiFiClient.h>
-#else
-#include <esp_http_client.h>
-#include <cJSON.h>
-#endif
-
 #include "RadioManager.hpp"
 #include "cbdos/storage.hpp"
 #include "cbdos/network.hpp"
 #include "cbdos/msgpack_util.hpp"
+#include "cbdos/http.hpp"
+#include "cbdos/log.hpp"
 #include <cstdio>
 #include <cstring>
-#include <esp_log.h>
 #include <cctype>
 #include <sstream>
 
@@ -83,7 +75,7 @@ bool RadioManager::deletePlaylist(const std::string& id) {
     for (size_t i = 0; i < m_playlists.size(); i++) {
         if (m_playlists[i].id == id) {
             if (m_playlists[i].isDefault) {
-                ESP_LOGW(TAG, "No se puede eliminar la lista por defecto: %s", id.c_str());
+                CBD_LOG_W(TAG, "No se puede eliminar la lista por defecto: %s", id.c_str());
                 return false;
             }
             m_playlists.erase(m_playlists.begin() + i);
@@ -396,181 +388,70 @@ std::vector<RadioStation> RadioManager::searchStations(const std::string& query,
     std::vector<RadioStation> list;
 
     if (!cbdos::network::isConnected()) {
-        ESP_LOGW(TAG, "Sin conexion WiFi. No se puede realizar peticion HTTP.");
+        CBD_LOG_W(TAG, "Sin conexion WiFi. No se puede realizar peticion HTTP.");
         return list;
     }
 
-#if defined(ARDUINO)
-    WiFiClient client;
-    client.setTimeout(6000);
+    auto parseStationsFromPayload = [&](const std::string& payload, std::vector<RadioStation>& outList) {
+        size_t pos = 0;
+        while ((pos = payload.find("\"name\":\"", pos)) != std::string::npos) {
+            pos += 8;
+            size_t endName = payload.find("\"", pos);
+            if (endName == std::string::npos) break;
+            std::string name = payload.substr(pos, endName - pos);
 
-    HTTPClient http;
-    http.setTimeout(6000);
-    http.setUserAgent("CBDos-Radio/1.0 (ESP32-S3)");
-    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-
-    std::string encodedQuery = urlEncodeQuery(query);
-    char url[320];
-
-    snprintf(url, sizeof(url), "http://de1.api.radio-browser.info/json/stations/byname/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
-
-    if (http.begin(client, url)) {
-        int httpCode = http.GET();
-        if (httpCode == HTTP_CODE_OK) {
-            std::string payload = http.getString().c_str();
-            size_t pos = 0;
-            while ((pos = payload.find("\"name\":\"", pos)) != std::string::npos) {
-                pos += 8;
-                size_t endName = payload.find("\"", pos);
-                if (endName == std::string::npos) break;
-                std::string name = payload.substr(pos, endName - pos);
-
-                std::string stUrl = "";
-                size_t urlPos = payload.find("\"url_resolved\":\"", endName);
-                if (urlPos != std::string::npos && urlPos < endName + 300) {
-                    urlPos += 16;
-                    size_t endUrl = payload.find("\"", urlPos);
-                    if (endUrl != std::string::npos) {
-                        stUrl = payload.substr(urlPos, endUrl - urlPos);
-                    }
-                }
-
-                std::string genre = "General";
-                size_t tagPos = payload.find("\"tags\":\"", endName);
-                if (tagPos != std::string::npos && tagPos < endName + 500) {
-                    tagPos += 8;
-                    size_t endTag = payload.find("\"", tagPos);
-                    if (endTag != std::string::npos) {
-                        genre = payload.substr(tagPos, endTag - tagPos);
-                    }
-                }
-
-                if (!stUrl.empty()) {
-                    RadioStation st;
-                    st.name = sanitizeString(name.c_str());
-                    st.url = stUrl;
-                    st.country = "Global";
-                    st.genre = sanitizeString(genre.c_str());
-                    st.bitrate = 128;
-                    st.isFavorite = false;
-                    list.push_back(st);
-                }
-                pos = endName;
-            }
-        }
-        http.end();
-    }
-
-#else // ESP-IDF (ESP32-P4)
-
-    auto executeQuery = [&](const char* path) -> std::vector<RadioStation> {
-        std::vector<RadioStation> subList;
-        char fullUrl[384];
-        snprintf(fullUrl, sizeof(fullUrl), "http://de1.api.radio-browser.info%s", path);
-
-        esp_http_client_config_t config = {};
-        config.url = fullUrl;
-        config.timeout_ms = 4000;
-        config.disable_auto_redirect = false;
-        config.max_redirection_count = 3;
-        config.user_agent = "CBDos-Radio/1.0 (ESP32-P4)";
-        config.buffer_size = 2048;
-        config.buffer_size_tx = 512;
-
-        esp_http_client_handle_t client = esp_http_client_init(&config);
-        if (!client) return subList;
-
-        esp_http_client_set_header(client, "Connection", "close");
-
-        esp_err_t err = esp_http_client_open(client, 0);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Error conexion HTTP: %s", esp_err_to_name(err));
-            esp_http_client_cleanup(client);
-            return subList;
-        }
-
-        int contentLength = esp_http_client_fetch_headers(client);
-        int statusCode = esp_http_client_get_status_code(client);
-
-        if (statusCode == 200) {
-            std::string response;
-            if (contentLength > 0 && contentLength < 64 * 1024) {
-                response.resize(contentLength);
-                int totalRead = 0;
-                while (totalRead < contentLength) {
-                    int r = esp_http_client_read(client, &response[totalRead], contentLength - totalRead);
-                    if (r <= 0) break;
-                    totalRead += r;
-                }
-                response.resize(totalRead);
-            } else {
-                char buf[1024];
-                int r = 0;
-                while ((r = esp_http_client_read(client, buf, sizeof(buf) - 1)) > 0) {
-                    buf[r] = '\0';
-                    response.append(buf, r);
-                    if (esp_http_client_is_complete_data_received(client)) break;
-                    if (response.size() > 64 * 1024) break;
+            std::string stUrl = "";
+            size_t urlPos = payload.find("\"url_resolved\":\"", endName);
+            if (urlPos != std::string::npos && urlPos < endName + 300) {
+                urlPos += 16;
+                size_t endUrl = payload.find("\"", urlPos);
+                if (endUrl != std::string::npos) {
+                    stUrl = payload.substr(urlPos, endUrl - urlPos);
                 }
             }
 
-            if (!response.empty()) {
-                cJSON* jsonArr = cJSON_Parse(response.c_str());
-                if (jsonArr && cJSON_IsArray(jsonArr)) {
-                    int count = cJSON_GetArraySize(jsonArr);
-                    for (int i = 0; i < count; i++) {
-                        cJSON* item = cJSON_GetArrayItem(jsonArr, i);
-                        if (!item) continue;
-
-                        cJSON* nameItem = cJSON_GetObjectItem(item, "name");
-                        cJSON* urlResolvedItem = cJSON_GetObjectItem(item, "url_resolved");
-                        cJSON* urlItem = cJSON_GetObjectItem(item, "url");
-                        cJSON* countryItem = cJSON_GetObjectItem(item, "country");
-                        cJSON* tagsItem = cJSON_GetObjectItem(item, "tags");
-                        cJSON* bitrateItem = cJSON_GetObjectItem(item, "bitrate");
-
-                        std::string sUrl = (urlResolvedItem && urlResolvedItem->valuestring && strlen(urlResolvedItem->valuestring) > 0)
-                                           ? urlResolvedItem->valuestring
-                                           : (urlItem && urlItem->valuestring ? urlItem->valuestring : "");
-
-                        if (!sUrl.empty()) {
-                            RadioStation st;
-                            const char* rawName = (nameItem && nameItem->valuestring) ? nameItem->valuestring : "Desconocida";
-                            const char* rawCountry = (countryItem && countryItem->valuestring) ? countryItem->valuestring : "Global";
-                            const char* rawGenre = (tagsItem && tagsItem->valuestring) ? tagsItem->valuestring : "General";
-
-                            st.name = sanitizeString(rawName);
-                            if (st.name.empty()) st.name = "Desconocida";
-                            st.url = sUrl;
-                            st.country = sanitizeString(rawCountry);
-                            if (st.country.empty()) st.country = "Global";
-                            st.genre = sanitizeString(rawGenre);
-                            if (st.genre.empty()) st.genre = "General";
-                            st.bitrate = bitrateItem ? bitrateItem->valueint : 128;
-                            st.isFavorite = false;
-                            subList.push_back(st);
-                        }
-                    }
+            std::string genre = "General";
+            size_t tagPos = payload.find("\"tags\":\"", endName);
+            if (tagPos != std::string::npos && tagPos < endName + 500) {
+                tagPos += 8;
+                size_t endTag = payload.find("\"", tagPos);
+                if (endTag != std::string::npos) {
+                    genre = payload.substr(tagPos, endTag - tagPos);
                 }
-                if (jsonArr) cJSON_Delete(jsonArr);
             }
-        }
 
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return subList;
+            if (!stUrl.empty()) {
+                RadioStation st;
+                st.name = sanitizeString(name.c_str());
+                if (st.name.empty()) st.name = "Desconocida";
+                st.url = stUrl;
+                st.country = "Global";
+                st.genre = sanitizeString(genre.c_str());
+                if (st.genre.empty()) st.genre = "General";
+                st.bitrate = 128;
+                st.isFavorite = false;
+                outList.push_back(st);
+            }
+            pos = endName;
+        }
     };
 
     std::string encodedQuery = urlEncodeQuery(query);
-    char path[384];
-    snprintf(path, sizeof(path), "/json/stations/byname/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
-    list = executeQuery(path);
+    char url[384];
+    snprintf(url, sizeof(url), "http://de1.api.radio-browser.info/json/stations/byname/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
+
+    cbdos::http::HttpResponse res = cbdos::http::get(url, 5000);
+    if (res.success && !res.body.empty()) {
+        parseStationsFromPayload(res.body, list);
+    }
 
     if (list.empty() && offset == 0) {
-        snprintf(path, sizeof(path), "/json/stations/bytag/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
-        list = executeQuery(path);
+        snprintf(url, sizeof(url), "http://de1.api.radio-browser.info/json/stations/bytag/%s?order=votes&reverse=true&limit=%d&offset=%d", encodedQuery.c_str(), limit, offset);
+        res = cbdos::http::get(url, 5000);
+        if (res.success && !res.body.empty()) {
+            parseStationsFromPayload(res.body, list);
+        }
     }
-#endif
 
     // Marcar favoritas
     const auto& favs = getFavorites();
@@ -588,3 +469,4 @@ std::vector<RadioStation> RadioManager::searchStations(const std::string& query,
 
 } // namespace audio
 } // namespace cbdos
+

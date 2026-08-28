@@ -1,6 +1,5 @@
 #include "UIManager.hpp"
 #include "views/DashboardView.hpp"
-#include "views/SplashScreenView.hpp"
 #include "WallpaperManager.h"
 #include "themes/DefaultTheme.h"
 #include "cbdos/system.hpp"

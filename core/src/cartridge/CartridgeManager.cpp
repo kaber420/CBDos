@@ -15,10 +15,6 @@
 #include "esp_log.h"
 #endif
 
-#ifdef ARDUINO
-#include <Arduino.h>
-#endif
-
 static const char* TAG = "CartridgeMgr";
 
 namespace cbdos {
