@@ -56,14 +56,14 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | Pin Izq (P4 / Host) | Pin Der (C6 / Power) | Función / Conexión de Flasheo |
 | :--- | :--- | :--- |
 | **3V3** (Pin 1) | **5V** (Pin 2) | Alimentación principal |
-| **3V3** (Pin 3) | **5V** (Pin 4) | **Cable Naranja** ➔ conectado a **ESP_3V3** (Alimenta el C6) |
+| **3V3** (Pin 3) | **5V** (Pin 4) | Líneas de potencia (No se requiere cable para C6) |
 | **GND** (Pin 5) | **GND** (Pin 6) | Masa de referencia |
 | **GPIO 52** (Pin 7) | **GPIO 33** (Pin 8) | GPIOs de propósito general |
 | **GPIO 51** (Pin 9) | **GPIO 31** (Pin 10) | GPIOs de propósito general |
 | **GPIO 50** (Pin 11) | **GPIO 30** (Pin 12) | GPIOs de propósito general |
 | **GPIO 49** (Pin 13) | **GPIO 29** (Pin 14) | GPIOs de propósito general |
 | **GPIO 35** (Pin 15) | **GND** (Pin 16) | Masa de referencia |
-| **GPIO 34** (Pin 17) | **ESP_3V3** (Pin 18) | **GPIO 34 (Cable Celeste)** ➔ a **C6_IO9** (Auto-Bootloader) \| **ESP_3V3 (Cable Naranja)** ➔ a **3V3** |
+| **GPIO 34** (Pin 17) | **ESP_3V3** (Pin 18) | **GPIO 34 (Cable Celeste)** ➔ a **C6_IO9** (Auto-Bootloader) \| `ESP_3V3` alimentado internamente |
 | **GPIO 32** (Pin 19) | **C6_U0RXD** (Pin 20) | **Jumper 1 Horizontal Verde** (P4 TX ➔ C6 RX) |
 | **GPIO 28** (Pin 21) | **C6_U0TXD** (Pin 22) | **Jumper 2 Horizontal Magenta** (P4 RX 🠄 C6 TX) |
 | **I2C_SDA** (Pin 23) | **C6_IO9** (Pin 24) | **C6_IO9 (Cable Celeste)** ➔ conectado a **GPIO 34** |

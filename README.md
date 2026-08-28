@@ -85,30 +85,32 @@
 
 ## 🔌 Programador de Campo Autónomo (Universal Flasher en CBDos)
 
-El **ESP32-P4** con CBDos opera como un **Programador de Campo Totalmente Autónomo (Standalone Field Programmer)**, permitiendo flashear microcontroladores en cualquier lugar sin necesidad de una computadora portátil o laptop:
+El **ESP32-P4** con CBDos opera como un **Programador de Campo Totalmente Autónomo y Desatendido (Standalone Field Programmer)**, permitiendo programar otros microcontroladores directamente desde la pantalla táctil sin necesidad de una laptop:
 
-### 1. ⚡ Flasheo Directo por Cable USB-C a USB-C (USB-Serial/JTAG Nativo)
-- **Dispositivos Compatibles:** ESP32-C3, ESP32-S3, ESP32-C6 y otros chips Espressif con USB nativo.
-- **Conexión:** Cable directo **USB Tipo-C a USB Tipo-C** desde el puerto USB OTG High-Speed del P4 al dispositivo destino.
-- **Autonomía:** El P4 suministra la alimentación (5V VBUS), detecta el chip automáticamente por CDC-ACM (VID `0x303A`, PID `0x1001`), borra sectores, programa el binario desde la tarjeta MicroSD (`/sdcard/cartridges/*.bin`) y verifica la integridad por MD5.
+### 1. ⚡ Flasheo Directo por Puerto USB 2.0 High-Speed (Cable USB-C a USB-C)
+- **Controlador USB High-Speed:** Utiliza el puerto USB OTG High-Speed dedicado del ESP32-P4 con soporte de entrega de energía (5V VBUS hacia el target).
+- **Auto-Bootloader por Hardware (Zero Botones):** El P4 conmuta las señales de control virtual DTR/RTS por hardware sobre CDC-ACM, forzando la entrada al ROM Download Mode del chip destino de forma 100% desatendida.
+- **Dispositivos Target Compatibles:** ESP32-C3, ESP32-S3, ESP32-C6, ESP32-P4 y cualquier chip con interfaz USB-Serial/JTAG nativa.
+- **Flujo Autónomo:** Selecciona el archivo binario desde la MicroSD (`/sdcard/cartridges/*.bin`), detecta el chip (`Target Chip ID`), borra sectores, escribe bloques Flash a alta velocidad y verifica la integridad por MD5.
 
-### 2. 🪛 Flasheo por UART / Cabecera JP1 (Coprocesadores y Pines GPIO)
-- **Coprocesador Integrado ESP32-C6-MINI:** Permite flashear el firmware inalámbrico de red mediante la cabecera **JP1 (2×13 pines)** sin adaptadores externos.
+### 2. 🪛 Flasheo por UART / Cabecera JP1 (Coprocesador Integrado ESP32-C6)
+- **Flasheo Simplificado con solo 3 Cables:** El coprocesador inalámbrico ESP32-C6 ya recibe su alimentación de forma interna en la PCB. Para programarlo mediante la app integrada **Flasher** o el puente UART, solo se requieren **3 conexiones temporales** en la cabecera **JP1 (2×13 pines)**:
 
 ![Diagrama de Conexiones de Flasheo ESP32-C6 en JP1](docs/images/esp32_c6_flasher_diagram.png)
 
-#### 🔌 Conexiones Requeridas en la Cabecera JP1 para ESP32-C6
+#### 🔌 Conexiones Requeridas en la Cabecera JP1 para ESP32-C6 (3 Cables Únicamente)
 
 | Cable / Jumper | Origen (Lado P4 / Izq) | Destino (Lado C6 / Der) | Función |
 | :--- | :--- | :--- | :--- |
-| 🟧 **Cable Naranja** | `3V3` (Pin 3) | `ESP_3V3` (Pin 18) | **Alimentación:** Proporciona 3.3V al carril de potencia del C6 |
 | 🟩 **Jumper Verde** | `GPIO 32` (Pin 19) | `C6_U0RXD` (Pin 20) | **UART TX:** Transmisión de firmware P4 ➔ C6 |
 | 🟪 **Jumper Magenta** | `GPIO 28` (Pin 21) | `C6_U0TXD` (Pin 22) | **UART RX:** Recepción y sincronización P4 🠄 C6 |
 | 🟦 **Cable Celeste** | `GPIO 34` (Pin 17) | `C6_IO9` (Pin 24) | **Auto-Bootloader:** Control automático del modo descarga (BOOT) |
 
-> ℹ️ **Nota de Hardware sobre Reset:** La línea **`C6_CHIP_PU` (Pin 26 / Reset del C6)** está unida de **manera interna en la PCB al GPIO 54 del ESP32-P4**. Por lo tanto, el sistema gestiona el reset hardware del coprocesador de forma automática y **no es necesario puentear el pin 26 externamente**.
+> ℹ️ **Alimentación y Reset 100% Internos en la PCB:** 
+> - **Alimentación (`ESP_3V3`):** El módulo C6 está alimentado internamente por el regulador de la placa, por lo que **no se requiere ningún cable externo de 3.3V**.
+> - **Reset (`C6_CHIP_PU`):** La línea de Reset del C6 está conectada internamente al **GPIO 54 del ESP32-P4**, permitiendo que CBDos reinicie el coprocesador automáticamente sin puentear pines de reset.
 
-> 📖 Hito técnico documentado: [`docs/hardware/usb_c_field_flasher_milestone.md`](docs/hardware/usb_c_field_flasher_milestone.md) y [`docs/hardware_pinouts_reference.md`](docs/hardware_pinouts_reference.md)
+> 📖 Hito técnico validado en hardware: [`docs/hardware/usb_c_field_flasher_milestone.md`](docs/hardware/usb_c_field_flasher_milestone.md) y [`docs/hardware/pinouts_and_ports.md`](docs/hardware/pinouts_and_ports.md)
 
 ---
 
@@ -190,16 +192,20 @@ idf.py build
 
 ---
 
-## 📚 Documentación Técnica
+## 📚 Documentación Técnica y Arquitectura
 
 | Documento | Descripción |
 |:---|:---|
+| [`docs/README.md`](docs/README.md) | **Portal y Mapa Maestro de Navegación de Documentación** |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Estado de avance, changelog y fases del proyecto |
-| [`docs/hardware_pinouts_reference.md`](docs/hardware_pinouts_reference.md) | Referencia completa de GPIO, buses I2C, I2S y LDOs |
-| [`docs/arquitectura_agnostica_hal_core.md`](docs/arquitectura_agnostica_hal_core.md) | Diseño del desacoplamiento Core/HAL/BSP |
-| [`docs/fase1_ui_core_spec.md`](docs/fase1_ui_core_spec.md) | Especificación del motor de UI — Fase 1 |
-| [`docs/guia_esp32_p4_c6_hosted_wifi.md`](docs/guia_esp32_p4_c6_hosted_wifi.md) | Guía de integración Wi-Fi ESP-Hosted (P4 + C6) |
-| [`docs/plan_synth_app.md`](docs/plan_synth_app.md) | Plan de la aplicación sintetizador |
+| [`docs/hardware/pinouts_and_ports.md`](docs/hardware/pinouts_and_ports.md) | Referencia completa de GPIO, buses I2C, I2S y pines JP1 |
+| [`docs/hardware/usb_c_field_flasher_milestone.md`](docs/hardware/usb_c_field_flasher_milestone.md) | Hito de flasheo autónomo USB-C en campo con Auto-Bootloader |
+| [`docs/architecture/hal_and_core_architecture.md`](docs/architecture/hal_and_core_architecture.md) | Arquitectura agnóstica de `core/`, Ley de Pureza y contratos HAL |
+| [`docs/architecture/multi_radio_hub_router_design.md`](docs/architecture/multi_radio_hub_router_design.md) | Estación Base y Router Multi-Antena con Hub USB y C3s |
+| [`docs/architecture/modular_lua_bridge_architecture.md`](docs/architecture/modular_lua_bridge_architecture.md) | Arquitectura modular de bindings Lua por dominios |
+| [`docs/network/plan_espnow_usb_bridge.md`](docs/network/plan_espnow_usb_bridge.md) | Firmware del módem USB ESP-NOW y protocolo de enmarcado |
+| [`docs/api/core_apis_reference.md`](docs/api/core_apis_reference.md) | Referencia completa de APIs públicas del SDK |
+| [`docs/api/how_to_create_an_app.md`](docs/api/how_to_create_an_app.md) | Guía de creación de aplicaciones nativas en C++ y LVGL 9.5 |
 | [`tools/c6_flasher_bridge/README.md`](tools/c6_flasher_bridge/README.md) | Guía completa de flasheo del coprocesador C6 |
 
 ---

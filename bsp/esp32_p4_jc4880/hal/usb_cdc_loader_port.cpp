@@ -199,21 +199,25 @@ esp_loader_error_t loader_port_read(uint8_t *data, uint16_t size, uint32_t timeo
 
 void loader_port_enter_bootloader(void) {
     if (s_usb_active && s_cdc_dev) {
-        ESP_LOGI(TAG, "Enviando secuencia DTR/RTS por USB para entrar en ROM Bootloader...");
+        ESP_LOGI(TAG, "Enviando secuencia DTR/RTS (Auto-Bootloader USB-Serial/JTAG)...");
         s_rx_data_len = 0;
 
-        // Secuencia oficial de Espressif para USB-Serial/JTAG:
-        // 1. DTR=true, RTS=false (Preparar BOOT)
+        // Secuencia exacta de esptool.py para chips con USB-Serial/JTAG nativo (C3/S3/C6):
+        // 1. DTR=1, RTS=0 (Forzar BOOT a nivel bajo)
         cdc_acm_host_set_control_line_state(s_cdc_dev, true, false);
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100));
 
-        // 2. DTR=true, RTS=true (Activar Reset manteniendo BOOT)
+        // 2. DTR=1, RTS=1 (Bajar Reset EN manteniendo BOOT en bajo)
         cdc_acm_host_set_control_line_state(s_cdc_dev, true, true);
         vTaskDelay(pdMS_TO_TICKS(100));
 
-        // 3. DTR=false, RTS=false (Liberar Reset y BOOT para que el chip arranque en ROM Bootloader)
-        cdc_acm_host_set_control_line_state(s_cdc_dev, false, false);
+        // 3. DTR=0, RTS=1 (Mantener Reset mientras se estabilizan los condensadores)
+        cdc_acm_host_set_control_line_state(s_cdc_dev, false, true);
         vTaskDelay(pdMS_TO_TICKS(100));
+
+        // 4. DTR=0, RTS=0 (Liberar Reset -> el chip arranca en ROM Bootloader)
+        cdc_acm_host_set_control_line_state(s_cdc_dev, false, false);
+        vTaskDelay(pdMS_TO_TICKS(150));
 
         s_rx_data_len = 0;
     }
