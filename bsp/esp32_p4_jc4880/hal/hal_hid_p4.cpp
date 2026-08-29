@@ -33,12 +33,18 @@ static const uint8_t hid_configuration_descriptor[] = {
 
 class Esp32P4HidDriver : public cbdos::hid::IHidDriver {
 public:
-    Esp32P4HidDriver() : m_ledState(0), m_initialized(false) {}
+    Esp32P4HidDriver() : m_ledState(0), m_enabled(false) {}
 
     bool init() {
-        if (m_initialized) return true;
+        m_enabled = false;
+        ESP_LOGI(TAG, "Driver USB HID registrado (inactivo por defecto)");
+        return true;
+    }
 
-        ESP_LOGI(TAG, "Inicializando stack TinyUSB Device HID...");
+    bool enable() override {
+        if (m_enabled) return true;
+
+        ESP_LOGI(TAG, "Activando stack TinyUSB Device HID...");
 
         const tinyusb_config_t tusb_cfg = {
             .device_descriptor = NULL,
@@ -65,19 +71,35 @@ public:
         ESP_LOGI(TAG, "tinyusb_driver_install OK. Habilitando conexión D+/D- (tud_connect)...");
         tud_connect();
 
-        m_initialized = true;
+        m_enabled = true;
         return true;
     }
 
+    bool disable() override {
+        if (!m_enabled) return true;
+
+        ESP_LOGI(TAG, "Desconectando y desactivando stack TinyUSB Device HID...");
+        tud_disconnect();
+        tinyusb_driver_uninstall();
+
+        m_enabled = false;
+        return true;
+    }
+
+    bool isEnabled() const override {
+        return m_enabled;
+    }
+
     bool isConnected() override {
-        return tud_mounted() || tud_connected();
+        return m_enabled && (tud_mounted() || tud_connected());
     }
 
     bool isReady() override {
-        return tud_hid_ready();
+        return m_enabled && tud_hid_ready();
     }
 
     void sendReport(uint8_t modifiers, const uint8_t keycodes[6]) override {
+        if (!m_enabled) return;
         if (!tud_hid_ready()) {
             cbdos::system::sleepMs(5);
             if (!tud_hid_ready()) return;
@@ -92,6 +114,7 @@ public:
     }
 
     void sendMouseReport(uint8_t buttons, int8_t x, int8_t y, int8_t wheel) override {
+        if (!m_enabled) return;
         if (!tud_hid_ready()) {
             cbdos::system::sleepMs(5);
             if (!tud_hid_ready()) return;
@@ -118,7 +141,7 @@ public:
 
 private:
     uint8_t m_ledState;
-    bool m_initialized;
+    bool m_enabled;
 };
 
 static Esp32P4HidDriver s_p4HidDriver;

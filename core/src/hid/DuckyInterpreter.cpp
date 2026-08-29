@@ -56,6 +56,7 @@ bool DuckyInterpreter::loadFromString(const std::string& scriptContent) {
 
 void DuckyInterpreter::run() {
     if (m_lines.empty()) return;
+    cbdos::hid::enable();
     m_currentLine = 0;
     m_state = ExecutionState::Running;
     m_delayUntilMs = 0;
@@ -78,6 +79,7 @@ void DuckyInterpreter::stop() {
     m_currentLine = 0;
     m_delayUntilMs = 0;
     cbdos::hid::sendKeyRelease();
+    cbdos::hid::disable();
 }
 
 bool DuckyInterpreter::step() {
@@ -93,6 +95,7 @@ bool DuckyInterpreter::step() {
     if (m_currentLine >= m_lines.size()) {
         m_state = ExecutionState::Completed;
         cbdos::hid::sendKeyRelease();
+        cbdos::hid::disable();
         return false;
     }
 

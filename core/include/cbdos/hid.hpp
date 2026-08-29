@@ -145,6 +145,10 @@ class IHidDriver {
 public:
     virtual ~IHidDriver() = default;
 
+    virtual bool enable() = 0;
+    virtual bool disable() = 0;
+    virtual bool isEnabled() const = 0;
+
     virtual bool isConnected() = 0;
     virtual bool isReady() = 0;
 
@@ -155,6 +159,9 @@ public:
 
 // API Agnóstica accesible para aplicaciones y Lua
 void registerDriver(IHidDriver* driver);
+bool enable();
+bool disable();
+bool isEnabled();
 bool isConnected();
 bool isReady();
 

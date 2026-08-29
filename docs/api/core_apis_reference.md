@@ -281,11 +281,16 @@ cbdos::ui::UIManager::getInstance().pushView(view);
 ## 10. `cbdos::hid` - Emulación USB HID (Teclado, Ratón y LEDs)
 Header: `#include "cbdos/hid.hpp"`
 
-Permite emular periféricos USB HID interactivos (BadUSB interactivo, StreamDeck, MacroPad, Mouse/Touchpad) y monitorizar el estado de los LEDs del host (Caps Lock, Num Lock, Scroll Lock).
+Permite emular periféricos USB HID interactivos (BadUSB interactivo, StreamDeck, MacroPad, Mouse/Touchpad) y monitorizar el estado de los LEDs del host (Caps Lock, Num Lock, Scroll Lock). Por seguridad y para evitar interferir con la interfaz CDC/Serial de flasheo en el arranque, la pila USB HID inicia **desactivada por defecto** y debe activarse bajo demanda.
 
 ```cpp
+// Control dinámico bajo demanda del canal USB HID (Teclado/Ratón)
+cbdos::hid::enable();  // Inicializa TinyUSB/USB HID y habilita D+/D-
+cbdos::hid::disable(); // Desconecta D+/D- y libera la pila USB hardware
+bool active = cbdos::hid::isEnabled();
+
 // Comprobar estado de conexión USB HID
-if (cbdos::hid::isConnected() && cbdos::hid::isReady()) {
+if (cbdos::hid::isEnabled() && cbdos::hid::isConnected() && cbdos::hid::isReady()) {
     // Pulsación simple de tecla
     cbdos::hid::sendKeyPress(cbdos::hid::KEY_ENTER);
 
@@ -310,6 +315,9 @@ bool eventReceived = cbdos::hid::waitForLedEvent(cbdos::hid::LED_CAPSLOCK, 5000)
 
 ### Bindings en Lua (`hid.*` o `cbdos.hid.*`):
 ```lua
+-- Activar USB HID bajo demanda desde script
+hid.enable() -- o hid.start()
+
 if hid.is_connected() then
     hid.press_gui("r")
     hid.delay(200)
@@ -321,6 +329,9 @@ if hid.is_connected() then
         hid.type("echo Host respondio!\n")
     end
 end
+
+-- Desactivar USB HID al terminar trabajo
+hid.disable() -- o hid.stop()
 ```
 
 ---

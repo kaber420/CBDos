@@ -1903,6 +1903,23 @@ static int lua_hid_wait_led_event(lua_State* L) {
     return 1;
 }
 
+static int lua_hid_enable(lua_State* L) {
+    bool ok = cbdos::hid::enable();
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+static int lua_hid_disable(lua_State* L) {
+    bool ok = cbdos::hid::disable();
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+static int lua_hid_is_enabled(lua_State* L) {
+    lua_pushboolean(L, cbdos::hid::isEnabled());
+    return 1;
+}
+
 static int lua_hid_delay(lua_State* L) {
     uint32_t ms = (uint32_t)luaL_checkinteger(L, 1);
     cbdos::system::sleepMs(ms);
@@ -1911,6 +1928,17 @@ static int lua_hid_delay(lua_State* L) {
 
 void LuaBridge::registerHidAPI(lua_State* L) {
     lua_newtable(L);
+
+    lua_pushcfunction(L, lua_hid_enable);
+    lua_setfield(L, -2, "enable");
+    lua_pushcfunction(L, lua_hid_enable);
+    lua_setfield(L, -2, "start");
+    lua_pushcfunction(L, lua_hid_disable);
+    lua_setfield(L, -2, "disable");
+    lua_pushcfunction(L, lua_hid_disable);
+    lua_setfield(L, -2, "stop");
+    lua_pushcfunction(L, lua_hid_is_enabled);
+    lua_setfield(L, -2, "is_enabled");
 
     lua_pushcfunction(L, lua_hid_is_connected);
     lua_setfield(L, -2, "is_connected");

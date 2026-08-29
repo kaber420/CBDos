@@ -15,12 +15,24 @@ void registerDriver(IHidDriver* driver) {
     s_driver = driver;
 }
 
+bool enable() {
+    return s_driver ? s_driver->enable() : false;
+}
+
+bool disable() {
+    return s_driver ? s_driver->disable() : false;
+}
+
+bool isEnabled() {
+    return s_driver ? s_driver->isEnabled() : false;
+}
+
 bool isConnected() {
-    return s_driver ? s_driver->isConnected() : false;
+    return (s_driver && s_driver->isEnabled()) ? s_driver->isConnected() : false;
 }
 
 bool isReady() {
-    return s_driver ? s_driver->isReady() : false;
+    return (s_driver && s_driver->isEnabled()) ? s_driver->isReady() : false;
 }
 
 void sendKeyPress(uint8_t keycode, uint8_t modifiers) {
