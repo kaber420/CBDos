@@ -1,4 +1,4 @@
-#include "ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include "cbdos/persistence.hpp"
 #include "cbdos/system.hpp"
 
@@ -392,4 +392,3 @@ bool ConfigManager::saveRadio(const cbdos::radio::RadioConfig& cfg) {
     }
     return false;
 }
-

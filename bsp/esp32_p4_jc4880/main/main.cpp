@@ -9,7 +9,7 @@
 #include "cbdos/ui.hpp"
 #include "cbdos/mesh/mesh_engine.hpp"
 #include "LVGL_Port.h"
-#include "../../core/src/network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include "cbdos/time.hpp"
 #include <esp_log.h>
 #include <nvs_flash.h>

@@ -8,7 +8,7 @@
 #include "../modals/AboutModal.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
-#include "../../network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include <cstdio>
 
 namespace cbdos {

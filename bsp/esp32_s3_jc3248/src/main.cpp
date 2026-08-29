@@ -7,7 +7,7 @@
 #include "cbdos/radio.hpp"
 #include "cbdos/ui.hpp"
 #include "cbdos/mesh/mesh_engine.hpp"
-#include "../../core/src/network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include "cbdos/time.hpp"
 #include "../../core/src/lua/LuaBridge.hpp"
 #include <Arduino.h>

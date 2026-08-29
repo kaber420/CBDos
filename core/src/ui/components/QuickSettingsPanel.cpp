@@ -8,7 +8,7 @@
 #include "cbdos/system.hpp"
 #include "cbdos/radio.hpp"
 #include "cbdos/mesh/mesh_engine.hpp"
-#include "../../network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include <cstdio>
 
 namespace cbdos {

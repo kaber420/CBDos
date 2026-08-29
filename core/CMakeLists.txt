@@ -56,7 +56,7 @@ idf_component_register(
         "src/mesh/MeshEngine.cpp"
 
         "src/ui/views/LuappView.cpp"
-        "src/network/ConfigManager.cpp"
+        "src/system/ConfigManager.cpp"
         "src/network/http_client.cpp"
         "src/time/TimeManager.cpp"
         "src/lua/LuaEngine.cpp"

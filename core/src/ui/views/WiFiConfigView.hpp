@@ -1,6 +1,6 @@
 #pragma once
 #include "BaseView.hpp"
-#include "../../network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include <lvgl.h>
 
 namespace cbdos {

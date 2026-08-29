@@ -1,7 +1,7 @@
 #include "TimeConfigView.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
-#include "../../network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include "cbdos/time.hpp"
 #include "cbdos/network.hpp"
 #include <cstdio>

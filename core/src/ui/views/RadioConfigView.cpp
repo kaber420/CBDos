@@ -3,7 +3,7 @@
 #include "../themes/DefaultTheme.h"
 #include "cbdos/network.hpp"
 #include "cbdos/display.hpp"
-#include "../../network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include <cstdio>
 #include <cstring>
 

@@ -1,7 +1,7 @@
 #include "cbdos/radio.hpp"
 #include "cbdos/mesh/mesh_engine.hpp"
 #include "cbdos/system.hpp"
-#include "../../core/src/network/ConfigManager.h"
+#include "cbdos/config_manager.hpp"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
