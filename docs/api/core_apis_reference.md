@@ -257,3 +257,82 @@ for (const auto& app : mgr.getDiscoveredApps()) {
 auto view = std::make_shared<cbdos::ui::LuappView>("/sdcard/apps/winamp_mini.luapp", "Winamp Retro", LV_SYMBOL_AUDIO);
 cbdos::ui::UIManager::getInstance().pushView(view);
 ```
+
+---
+
+## 10. `cbdos::hid` - Emulación USB HID (Teclado, Ratón y LEDs)
+Header: `#include "cbdos/hid.hpp"`
+
+Permite emular periféricos USB HID interactivos (BadUSB interactivo, StreamDeck, MacroPad, Mouse/Touchpad) y monitorizar el estado de los LEDs del host (Caps Lock, Num Lock, Scroll Lock).
+
+```cpp
+// Comprobar estado de conexión USB HID
+if (cbdos::hid::isConnected() && cbdos::hid::isReady()) {
+    // Pulsación simple de tecla
+    cbdos::hid::sendKeyPress(cbdos::hid::KEY_ENTER);
+
+    // Combinación con modificadores (ej. GUI + R para Windows Run)
+    cbdos::hid::sendCombo(cbdos::hid::KEY_MOD_LGUI, cbdos::hid::KEY_R);
+
+    // Enviar cadena de texto tipeada
+    cbdos::hid::sendString("notepad.exe\n", 15); // con retardo de 15ms por tecla
+
+    // Movimiento y clic de ratón
+    cbdos::hid::mouseMove(100, -50, 0); // deltaX, deltaY, scroll
+    cbdos::hid::mouseClick(cbdos::hid::MOUSE_BTN_LEFT);
+}
+
+// Consultar estado de LEDs del host
+uint8_t leds = cbdos::hid::getLedState();
+bool capsOn = (leds & cbdos::hid::LED_CAPSLOCK) != 0;
+
+// Espera interactiva de evento de LED con timeout
+bool eventReceived = cbdos::hid::waitForLedEvent(cbdos::hid::LED_CAPSLOCK, 5000);
+```
+
+### Bindings en Lua (`hid.*` o `cbdos.hid.*`):
+```lua
+if hid.is_connected() then
+    hid.press_gui("r")
+    hid.delay(200)
+    hid.type("cmd.exe\n", 10)
+    
+    -- Espera a que el usuario o el script del host cambie NumLock
+    local ok = hid.wait_led_event(hid.LED_NUMLOCK, 5000)
+    if ok then
+        hid.type("echo Host respondio!\n")
+    end
+end
+```
+
+---
+
+## 11. `cbdos::ducky` - Intérprete DuckyScript para BadUSB
+Header: `#include "cbdos/ducky.hpp"`
+
+Permite cargar y ejecutar scripts estándar de BadUSB (ficheros `.dd` o `.txt` con sintaxis DuckyScript).
+
+```cpp
+// Cargar y ejecutar script DuckyScript
+auto& runner = cbdos::ducky::DuckyInterpreter::getInstance();
+if (runner.loadFile("/sdcard/payloads/recon.dd")) {
+    runner.start();
+}
+
+// En el bucle de la aplicación / vista:
+while (runner.isRunning()) {
+    runner.step(); // Ejecución paso a paso no bloqueante
+    cbdos::system::sleepMs(10);
+}
+```
+
+### Bindings en Lua (`ducky.*` o `cbdos.ducky.*`):
+```lua
+ducky.set_default_delay(50)
+if ducky.load_file("/sdcard/payloads/payload.dd") then
+    ducky.run()
+    while ducky.is_running() do
+        sys.sleep(50)
+    end
+end
+```

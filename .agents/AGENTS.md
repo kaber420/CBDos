@@ -104,3 +104,8 @@ El proyecto opera bajo un modelo desacoplado:
 10. **Prohibición Universal de Resúmenes y Ediciones Destructivas (Aplica a TODO el Proyecto):**
     - **ESTRICTAMENTE PROHIBIDO** condensar, simplificar, resumir, truncar o sobreescribir de forma destructiva **CUALQUIER archivo del repositorio** (código fuente `.cpp`/`.c`, cabeceras `.hpp`/`.h`, documentación `.md`, planes, especificaciones, scripts `.lua`/`.py`, Makefiles o configuraciones).
     - Toda modificación en cualquier archivo del proyecto debe ser **estrictamente quirúrgica**, preservando intacto todo el código preexistente, comentarios, contratos de funciones, diagramas ASCII, tablas y explicaciones técnicas previamente desarrolladas.
+
+11. **Flujo de Pruebas y Depuración en Caliente por Serial (Zero Compilaciones Innecesarias):**
+    - **Consola Serial Interactiva:** El BSP cuenta con una tarea de depuración en caliente (`ENABLE_CBDOS_SERIAL_DEBUG_CLI`) a través de la consola `/dev/ttyACM0` (USB-Serial-JTAG).
+    - **Pruebas Inmediatas sin Flashear:** Para validar APIs, ataques BadUSB, eventos HID (`hid.*`), DuckyScript (`ducky: ...`), o llamadas del sistema (`sys.*`, `cbdos.*`), la IA **DEBE conectarse por puerto serie y enviar los comandos de prueba en caliente** para obtener feedback inmediato, en lugar de compilar y flashear repetitivamente.
+    - **Modo Producción:** La macro `ENABLE_CBDOS_SERIAL_DEBUG_CLI` en `hal_hid_p4.cpp` debe mantenerse disponible para desarrollo y comentarse/desactivarse (`0`) únicamente al generar builds finales de producción.

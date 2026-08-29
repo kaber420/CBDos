@@ -21,6 +21,7 @@ namespace bsp {
     void initPersistenceBackend();
     void initMeshTransportP4();
     void initHttpClientP4();
+    void initHidDriverP4();
     cbdos::time::ITimeProvider* getEspIdfTimeProvider();
 }
 }
@@ -43,10 +44,11 @@ extern "C" void app_main(void) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando NVS Flash: %s", esp_err_to_name(nvsRet));
     }
 
-    // Inyectar el backend de persistencia NVS, Transporte de Malla y Cliente HTTP
+    // Inyectar el backend de persistencia NVS, Transporte de Malla, Cliente HTTP y USB HID
     cbdos::bsp::initPersistenceBackend();
     cbdos::bsp::initMeshTransportP4();
     cbdos::bsp::initHttpClientP4();
+    cbdos::bsp::initHidDriverP4();
 
     // Conectar time <--> mesh mediante callbacks (sin acoplamiento directo entre módulos)
     cbdos::time::setTowerSyncRequestCallback([]() {

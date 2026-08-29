@@ -22,4 +22,6 @@ private:
     static void registerUartAPI(lua_State* L);
     static void registerUIAPI(lua_State* L);
     static void registerCanvasAPI(lua_State* L);
+    static void registerHidAPI(lua_State* L);
+    static void registerDuckyAPI(lua_State* L);
 };

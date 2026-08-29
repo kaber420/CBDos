@@ -1,0 +1,19 @@
+REM ============================================================================
+REM CBDos - BadUSB DuckyScript Demo Payload
+REM ============================================================================
+DEFAULT_DELAY 100
+
+DELAY 1000
+GUI r
+DELAY 400
+STRING notepad.exe
+ENTER
+DELAY 500
+STRING ========================================
+ENTER
+STRING   Bienvenido a CBDos USB HID Engine!
+ENTER
+STRING   Ejecutado con DuckyScript Nativo (.dd)
+ENTER
+STRING ========================================
+ENTER

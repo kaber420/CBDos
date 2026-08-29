@@ -59,6 +59,8 @@ idf_component_register(
         "src/system/ConfigManager.cpp"
         "src/network/http_client.cpp"
         "src/time/TimeManager.cpp"
+        "src/hid/HidManager.cpp"
+        "src/hid/DuckyInterpreter.cpp"
         "src/lua/LuaEngine.cpp"
         "src/lua/LuaBridge.cpp"
         "src/lua/LuaRunner.cpp"

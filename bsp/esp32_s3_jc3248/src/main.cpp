@@ -23,6 +23,7 @@ namespace bsp {
     void initPersistenceBackend();
     void initMeshTransportS3();
     void initHttpClientS3();
+    void initHidDriverS3();
     cbdos::time::ITimeProvider* getArduinoTimeProvider();
 }
 }
@@ -72,10 +73,11 @@ void setup() {
     cbdos::system::sleepMs(500);
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) [Target: ESP32-S3] ===");
     
-    // Inyectar el backend de persistencia NVS, Transporte de Malla y Cliente HTTP
+    // Inyectar el backend de persistencia NVS, Transporte de Malla, Cliente HTTP y USB HID
     cbdos::bsp::initPersistenceBackend();
     cbdos::bsp::initMeshTransportS3();
     cbdos::bsp::initHttpClientS3();
+    cbdos::bsp::initHidDriverS3();
 
     // Conectar time <--> mesh mediante callbacks (sin acoplamiento directo entre módulos)
     cbdos::time::setTowerSyncRequestCallback([]() {

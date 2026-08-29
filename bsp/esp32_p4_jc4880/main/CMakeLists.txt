@@ -18,6 +18,7 @@ idf_component_register(
         "../hal/hal_mesh_p4.cpp"
         "../hal/hal_radio_p4.cpp"
         "../hal/hal_http_p4.cpp"
+        "../hal/hal_hid_p4.cpp"
         "../hal/EspIdfTimeProvider.cpp"
     INCLUDE_DIRS 
         "."
@@ -39,6 +40,7 @@ idf_component_register(
         "espressif__esp_lvgl_port"
         "espressif__esp-serial-flasher"
         "espressif__usb_host_cdc_acm"
+        "espressif__esp_tinyusb"
         "usb"
         "lvgl__lvgl"
         "esp_driver_sdmmc"
