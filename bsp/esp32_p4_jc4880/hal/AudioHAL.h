@@ -33,6 +33,8 @@ public:
     bool isMuted() const { return muted; }
 
     esp_err_t writeAudio(const void* src, size_t size, size_t* bytesWritten, uint32_t timeoutMs = 1000);
+    esp_err_t readAudio(void* dest, size_t size, size_t* bytesRead, uint32_t timeoutMs = 100);
+    void setMicGain(float dbGain);
     
     void playTone(uint32_t freqHz, uint32_t durationMs);
     void playBeep();
@@ -48,6 +50,7 @@ private:
     AudioHAL& operator=(const AudioHAL&) = delete;
 
     esp_codec_dev_handle_t playDevHandle = nullptr;
+    esp_codec_dev_handle_t recordDevHandle = nullptr;
     
     uint8_t currentVolume = 70;
     bool muted = false;
@@ -61,6 +64,7 @@ extern "C" {
     bool Board_Audio_Init(uint32_t sampleRate);
     void Board_Audio_SetVolume(uint8_t volumePercent);
     int Board_Audio_Write(const void* data, size_t size);
+    int Board_Audio_Read(void* data, size_t size);
 #ifdef __cplusplus
 }
 #endif

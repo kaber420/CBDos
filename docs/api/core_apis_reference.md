@@ -13,6 +13,10 @@ Este documento es la **guía oficial de referencia para desarrolladores**. Aquí
 6. [cbdos::display - Capacidades de Pantalla y Brillo](#6-cbdosdisplay)
 7. [cbdos::network - Conectividad WiFi y Tiempo](#7-cbdosnetwork)
 8. [cbdos::theme & DefaultTheme - Sistema de Estilos LVGL](#8-cbdostheme--defaulttheme)
+9. [cbdos::lua::LuappManager - Gestor de Apps Lua (.luapp)](#9-cbdoslualuappmanager-y-luappview)
+10. [cbdos::hid - Emulación USB HID (Teclado, Ratón y LEDs)](#10-cbdoshid---emulación-usb-hid-teclado-ratón-y-leds)
+11. [cbdos::ducky - Intérprete DuckyScript para BadUSB](#11-cbdosducky---intérprete-duckyscript-para-badusb)
+12. [Disparadores Tácticos Fuera de Banda (Radio + HID + Lua)](#12-disparadores-tácticos-fuera-de-banda-radio--hid--lua)
 
 ---
 
@@ -98,12 +102,26 @@ Control del subsistema de sonido, códec I2S y volumen general.
 cbdos::audio::setVolume(80);
 int vol = cbdos::audio::getVolume();
 
-// Mute / Unmute
-cbdos::audio::setMute(true);
-bool muted = cbdos::audio::isMuted();
+// Reproducción de audio y tonos
+cbdos::audio::playFile("/sdcard/musica/track.mp3");
+cbdos::audio::playTone(1000, 150); // Beep 1 kHz, 150 ms
+cbdos::audio::stop();
 
-// Salida de audio activa
-cbdos::audio::setAudioOutput(cbdos::audio::AudioOutput::Speaker);
+// Grabación de Audio WAV (Micrófono ES8311 en ESP32-P4)
+cbdos::audio::RecordConfig cfg;
+cfg.sampleRate = 16000; // 16 kHz recomendado para voz o 44100 Hz
+cfg.channels = 1;        // Mono
+cfg.bitsPerSample = 16;  // 16-bit PCM
+cfg.micGainDb = 24;      // Ganancia de entrada analógica (0 a 30 dB)
+
+// Iniciar y detener grabación streaming hacia MicroSD
+cbdos::audio::recordStart("/sdcard/recordings/memo.wav", cfg);
+bool recording = cbdos::audio::isRecording();
+float peakLevel = cbdos::audio::getMicPeakLevel(); // 0.0f a 1.0f para animar vúmetros
+cbdos::audio::recordStop();
+
+// Lectura de streaming crudo PCM desde el micrófono
+size_t bytesRead = cbdos::audio::readAudio(buffer, sizeof(buffer), 100);
 ```
 
 ---
@@ -336,3 +354,22 @@ if ducky.load_file("/sdcard/payloads/payload.dd") then
     end
 end
 ```
+
+---
+
+## 12. Disparadores Tácticos Fuera de Banda (Radio + HID + Lua)
+Referencia detallada de arquitectura: [`oob_tactical_radio_hid_trigger_spec.md`](file:///home/kaber420/Documentos/proyectos/cbdos/docs/architecture/oob_tactical_radio_hid_trigger_spec.md)
+
+CBDos permite enlazar eventos de radio no-IP (**ESP-NOW LR, LoRa, FLRC, Wi-Fi HaLow, Zigbee**) con inyecciones inmediatas por USB HID físico:
+
+```lua
+-- Receptor de disparos tácticos por radio
+radio.onReceive(function(sender, payload, rssi)
+    if payload == "TRIGGER_LOCK" then
+        hid.combo(hid.MOD_GUI, hid.KEY_L)
+    elseif payload == "RUN_PAYLOAD" then
+        ducky.runFile("/sdcard/payloads/recon.dd")
+    end
+end)
+```
+

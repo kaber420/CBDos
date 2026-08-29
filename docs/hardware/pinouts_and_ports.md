@@ -44,8 +44,10 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | | **SDIO D3** | **GPIO 17** | Bus SDIO 4-bit (Slot 1) | Línea de datos 3 |
 | | **C6 Reset (RST)** | **GPIO 54** | Salida Digital | Reset hardware del ESP32-C6 |
 | | **C6 Power (ESP_3V3)** | **GPIO 36 / Pin 18** | VCC 3.3V | Carril de alimentación del C6 |
-| **Consola Serial / Debug** | **UART TX** | **GPIO 38** | UART0 TX @ 115200 bps | Terminal interactivo / ESP-IDF Monitor |
+| **Consola Serial / Debug (USB 1)** | **USB D+ / D-** | Pines Dedicados | USB Serial/JTAG nativo (Full-Speed) | Flasheo de firmware, consola y monitor serie |
+| | **UART TX** | **GPIO 38** | UART0 TX @ 115200 bps | Terminal interactivo / ESP-IDF Monitor |
 | | **UART RX** | **GPIO 37** | UART0 RX @ 115200 bps | |
+| **USB Host / OTG (USB 2)** | **USB_OTG D+ / D-** | Pines Dedicados | **USB 2.0 High-Speed OTG (480 Mbps)** | Host para Android Fastboot/ADB, CDC, HID |
 | **Alimentación LDO P4** | **LDO VO3** | Canal 3 | Salida 2.5V fija | Alimentación carril MIPI DSI |
 | | **LDO VO4** | Canal 4 | Salida 3.3V conmutable | Alimentación carril MicroSD / VDD_SD |
 

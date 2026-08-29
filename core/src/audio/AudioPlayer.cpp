@@ -739,6 +739,7 @@ void AudioPlayer::runWavPlayback() {
         if (nRead == 0) break;
 
         cbdos::audio::writeAudio(pcmBuf, nRead);
+
         m_bytesProcessed += nRead;
         if (byteRate > 0) {
             m_currentSec = m_bytesProcessed / byteRate;

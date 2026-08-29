@@ -107,6 +107,35 @@ static int lua_get_volume(lua_State* L) {
     return 1;
 }
 
+static int lua_record_start(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    uint32_t srate = (uint32_t)luaL_optinteger(L, 2, 16000);
+    cbdos::audio::RecordConfig cfg;
+    cfg.sampleRate = srate;
+    cfg.channels = 1;
+    cfg.bitsPerSample = 16;
+    cfg.micGainDb = 24;
+    bool ok = cbdos::audio::recordStart(path, cfg);
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+static int lua_record_stop(lua_State* L) {
+    cbdos::audio::recordStop();
+    return 0;
+}
+
+static int lua_is_recording(lua_State* L) {
+    lua_pushboolean(L, cbdos::audio::isRecording());
+    return 1;
+}
+
+static int lua_get_mic_level(lua_State* L) {
+    lua_pushnumber(L, cbdos::audio::getMicPeakLevel());
+    return 1;
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // System API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1544,8 +1573,14 @@ void LuaBridge::registerAudioAPI(lua_State* L) {
     lua_setfield(L, -2, "stop");
     lua_pushcfunction(L, lua_set_volume);
     lua_setfield(L, -2, "set_volume");
-    lua_pushcfunction(L, lua_get_volume);
-    lua_setfield(L, -2, "get_volume");
+    lua_pushcfunction(L, lua_record_start);
+    lua_setfield(L, -2, "record_start");
+    lua_pushcfunction(L, lua_record_stop);
+    lua_setfield(L, -2, "record_stop");
+    lua_pushcfunction(L, lua_is_recording);
+    lua_setfield(L, -2, "is_recording");
+    lua_pushcfunction(L, lua_get_mic_level);
+    lua_setfield(L, -2, "get_mic_level");
     lua_setfield(L, -2, "audio");
 
     // Accesos directos en cbdos.*

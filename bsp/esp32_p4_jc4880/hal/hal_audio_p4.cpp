@@ -71,6 +71,12 @@ AudioStats getStats() {
     return AudioPlayer::getInstance().getStats();
 }
 
+size_t readAudio(void* dest, size_t sizeBytes, uint32_t timeoutMs) {
+    size_t readBytes = 0;
+    AudioHAL::getInstance().readAudio(dest, sizeBytes, &readBytes, timeoutMs);
+    return readBytes;
+}
+
 } // namespace audio
 } // namespace cbdos
 

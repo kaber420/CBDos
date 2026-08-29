@@ -40,6 +40,7 @@ namespace audio {
     __attribute__((weak)) void setVolume(uint8_t) {}
     __attribute__((weak)) uint8_t getVolume() { return 75; }
     __attribute__((weak)) AudioStats getStats() { return AudioStats{}; }
+    __attribute__((weak)) size_t readAudio(void*, size_t, uint32_t) { return 0; }
 }
 
 namespace network {

@@ -78,8 +78,30 @@
 | **File Manager View** | Explorador de archivos universal MicroSD/Flash | ⏳ | ⏳ | ⏳ |
 | **System Info Monitor** | Monitor de RAM, Heap, FPS y temperatura en tiempo real | ⏳ | ⏳ | ⏳ |
 | **Lua Script Engine** | Intérprete Lua embebido para micro-apps y Direct 2D GFX | ✅ 90% | ⏳ | ✅ |
+| **USB HID / BadUSB Engine** | Teclado + Ratón compuesto, DuckyScript (`.dd`) y Lua reactivo con feedback de LEDs | ✅ | ✅ | ✅ |
 
 *Leyenda: ✅ Operativo · 🟡 Integración de driver en curso · 🔄 Portando desde espOS32 · 📋 Planificado · ⏳ Pendiente · ➖ No aplica*
+
+---
+
+## 🎯 USB HID / BadUSB & Smart Automation Engine
+
+CBDos incorpora un motor de emulación **USB HID nativo compuesto (Teclado + Ratón)** que opera tanto en modo estándar como en modo de automatización avanzada / pruebas de seguridad:
+
+### 1. ⌨️ Compatibilidad DuckyScript Puro (`.dd` / `.txt`)
+- Ejecución nativa de scripts Duckyscript estándar (`GUI r`, `STRING`, `ENTER`, `DELAY`, `ALT`, `CTRL`, `SHIFT`).
+- Carga y ejecución directa de archivos `.dd` desde la MicroSD (`/sdcard/scripts/`) o la Flash interna (`/spiffs/`).
+
+### 2. 🧠 Smart BadUSB Reactivo en Lua (Feedback Bidireccional de LEDs)
+- Los scripts Lua tienen acceso a `hid.get_leds()`, retornando en tiempo real el estado de `numlock`, `capslock` y `scrolllock` del Host.
+- **Payloads con sincronización perfecta:** El script puede pausar su ejecución y esperar a que una aplicación del Host abra y cambie el estado de un LED (ej. confirmación de terminal abierta o elevación de privilegios) antes de continuar tiroteando comandos.
+
+### 3. 🖱️ Macros y Emulación de Ratón de Alta Precisión
+- Control analógico de coordenadas relativas (`hid.mouse_move(dx, dy, wheel)`).
+- Botones de ratón configurables (`hid.mouse_click("left")`, `"right"`, `"middle"`).
+
+### 4. ⚡ Consola Serial Interactiva para Desarrollo en Tiempo Real
+- Consola de desarrollo en `/dev/ttyACM0` (`ENABLE_CBDOS_SERIAL_DEBUG_CLI`) para enviar comandos Lua y DuckyScript directamente en caliente con respuesta en 0 segundos.
 
 ---
 

@@ -26,6 +26,7 @@ idf_component_register(
         "src/ui/views/StorageConfigView.cpp"
         "src/ui/views/TimeConfigView.cpp"
         "src/ui/views/MusicPlayerView.cpp"
+        "src/ui/views/AudioRecorderView.cpp"
         "src/ui/views/GalleryListView.cpp"
         "src/ui/views/GalleryView.cpp"
         "src/ui/views/RadioView.cpp"
@@ -48,6 +49,7 @@ idf_component_register(
         "src/ui/modals/AboutModal.cpp"
         "src/ui/modals/C6FlasherModal.cpp"
         "src/audio/AudioPlayer.cpp"
+        "src/audio/WavRecorder.cpp"
         "src/audio/RadioManager.cpp"
 
         "src/tlv/mesh_header.cpp"

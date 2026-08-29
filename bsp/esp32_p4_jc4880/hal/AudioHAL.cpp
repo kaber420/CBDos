@@ -51,15 +51,16 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
         return ESP_FAIL;
     }
 
-    // 3. Configurar Interfaz de Datos I2S con buffers DMA continuos y estables
+    // 3. Configurar Interfaz de Datos I2S con buffers DMA continuos y estables (Dúplex TX + RX)
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(BOARD_AUDIO_I2S_PORT, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = 16;
     chan_cfg.dma_frame_num = 512;
     chan_cfg.auto_clear = true;
     i2s_chan_handle_t tx_handle = nullptr;
-    esp_err_t ret = i2s_new_channel(&chan_cfg, &tx_handle, nullptr);
+    i2s_chan_handle_t rx_handle = nullptr;
+    esp_err_t ret = i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Fallo al crear canal I2S: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Fallo al crear canales I2S: %s", esp_err_to_name(ret));
         return ret;
     }
 
@@ -82,13 +83,21 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
 
     ret = i2s_channel_init_std_mode(tx_handle, &std_cfg);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Fallo al inicializar modo estándar I2S: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Fallo al inicializar modo estándar I2S TX: %s", esp_err_to_name(ret));
         return ret;
+    }
+
+    if (rx_handle) {
+        ret = i2s_channel_init_std_mode(rx_handle, &std_cfg);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Aviso: Fallo al inicializar I2S RX: %s", esp_err_to_name(ret));
+        }
     }
 
     audio_codec_i2s_cfg_t i2s_cfg = {};
     i2s_cfg.port = (uint8_t)BOARD_AUDIO_I2S_PORT;
     i2s_cfg.tx_handle = tx_handle;
+    i2s_cfg.rx_handle = rx_handle;
     
     const audio_codec_data_if_t* data_if = audio_codec_new_i2s_data(&i2s_cfg);
     if (!data_if) {
@@ -96,15 +105,16 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
         return ESP_FAIL;
     }
 
-    // 4. Crear interfaz del códec ES8311
+    // 4. Crear interfaz del códec ES8311 (Dúplex DAC + ADC)
     es8311_codec_cfg_t es8311_cfg = {};
     es8311_cfg.ctrl_if = i2c_ctrl;
     es8311_cfg.gpio_if = audio_codec_new_gpio();
-    es8311_cfg.codec_mode = ESP_CODEC_DEV_WORK_MODE_DAC;
+    es8311_cfg.codec_mode = ESP_CODEC_DEV_WORK_MODE_BOTH;
     es8311_cfg.pa_pin = BOARD_AUDIO_PA_GPIO;
     es8311_cfg.pa_reverted = false;
     es8311_cfg.master_mode = false;
     es8311_cfg.use_mclk = true;
+    es8311_cfg.digital_mic = false;
     es8311_cfg.mclk_div = 256;
 
     const audio_codec_if_t* codec_if = es8311_codec_new(&es8311_cfg);
@@ -113,19 +123,42 @@ esp_err_t AudioHAL::init(uint32_t sampleRate) {
         return ESP_FAIL;
     }
 
-    // 5. Crear instancia del dispositivo códec
-    esp_codec_dev_cfg_t dev_cfg = {};
-    dev_cfg.dev_type = ESP_CODEC_DEV_TYPE_OUT;
-    dev_cfg.codec_if = codec_if;
-    dev_cfg.data_if = data_if;
+    // 5. Crear instancia del dispositivo códec para reproducción (OUT)
+    esp_codec_dev_cfg_t play_dev_cfg = {};
+    play_dev_cfg.dev_type = ESP_CODEC_DEV_TYPE_OUT;
+    play_dev_cfg.codec_if = codec_if;
+    play_dev_cfg.data_if = data_if;
 
-    playDevHandle = esp_codec_dev_new(&dev_cfg);
+    playDevHandle = esp_codec_dev_new(&play_dev_cfg);
     if (!playDevHandle) {
-        ESP_LOGE(TAG, "Fallo al instanciar códec ES8311");
+        ESP_LOGE(TAG, "Fallo al instanciar códec ES8311 (Play)");
         return ESP_FAIL;
     }
 
-    // 6. Abrir dispositivo para reproducción
+    // 6. Crear instancia del dispositivo códec para grabación (IN)
+    if (rx_handle) {
+        esp_codec_dev_cfg_t rec_dev_cfg = {};
+        rec_dev_cfg.dev_type = ESP_CODEC_DEV_TYPE_IN;
+        rec_dev_cfg.codec_if = codec_if;
+        rec_dev_cfg.data_if = data_if;
+
+        recordDevHandle = esp_codec_dev_new(&rec_dev_cfg);
+        if (!recordDevHandle) {
+            ESP_LOGW(TAG, "Aviso: Fallo al instanciar dev grabación ES8311");
+        } else {
+            esp_codec_dev_sample_info_t fs_rec = {};
+            fs_rec.bits_per_sample = 16;
+            fs_rec.channel = 2; // I2S Philips slot stereo
+            fs_rec.sample_rate = sampleRate;
+            fs_rec.mclk_multiple = 256;
+            if (esp_codec_dev_open(recordDevHandle, &fs_rec) == ESP_OK) {
+                esp_codec_dev_set_in_gain(recordDevHandle, 24.0f); // Ganancia micrófono +24dB
+                ESP_LOGI(TAG, "Dispositivo de grabación ES8311 abierto correctamente");
+            }
+        }
+    }
+
+    // 7. Abrir dispositivo para reproducción
     esp_codec_dev_sample_info_t fs = {};
     fs.bits_per_sample = 16;
     fs.channel = 2;
@@ -276,3 +309,26 @@ extern "C" int Board_Audio_Write(const void* data, size_t size) {
     AudioHAL::getInstance().writeAudio(data, size, &written, portMAX_DELAY);
     return (int)written;
 }
+
+esp_err_t AudioHAL::readAudio(void* dest, size_t size, size_t* bytesRead, uint32_t timeoutMs) {
+    (void)timeoutMs;
+    if (!recordDevHandle || !dest || size == 0) return ESP_ERR_INVALID_STATE;
+    int ret = esp_codec_dev_read(recordDevHandle, dest, size);
+    if (bytesRead) {
+        *bytesRead = (ret == ESP_CODEC_DEV_OK) ? size : 0;
+    }
+    return (ret == ESP_CODEC_DEV_OK) ? ESP_OK : ESP_FAIL;
+}
+
+void AudioHAL::setMicGain(float dbGain) {
+    if (recordDevHandle) {
+        esp_codec_dev_set_in_gain(recordDevHandle, dbGain);
+    }
+}
+
+extern "C" int Board_Audio_Read(void* data, size_t size) {
+    size_t readBytes = 0;
+    AudioHAL::getInstance().readAudio(data, size, &readBytes, 100);
+    return (int)readBytes;
+}
+

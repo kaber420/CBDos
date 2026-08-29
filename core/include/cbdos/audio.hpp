@@ -38,5 +38,23 @@ uint32_t getTotalTimeSec();
 bool writeAudio(const void* src, size_t size);
 AudioStats getStats();
 
+// Grabación de Audio y Captura de Micrófono
+struct RecordConfig {
+    uint32_t sampleRate = 16000; // 16 kHz recomendado para voz o 44100 Hz
+    uint8_t channels = 1;        // 1 = Mono, 2 = Estéreo
+    uint8_t bitsPerSample = 16;  // 16-bit PCM
+    uint8_t micGainDb = 24;      // Ganancia de entrada analógica de micrófono (0 a 30 dB)
+};
+
+bool recordStart(const char* targetFilePath, const RecordConfig& cfg = RecordConfig());
+void recordPause();
+void recordResume();
+void recordStop();
+bool isRecording();
+bool isRecordPaused();
+uint32_t getRecordDurationMs();
+float getMicPeakLevel();
+size_t readAudio(void* dest, size_t sizeBytes, uint32_t timeoutMs = 100);
+
 } // namespace audio
 } // namespace cbdos
