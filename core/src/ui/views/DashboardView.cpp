@@ -132,8 +132,7 @@ void DashboardView::createCards() {
         lv_obj_set_size(btnIcon, iconSize, iconSize);
         lv_obj_set_style_radius(btnIcon, iconRadius, 0);
         lv_obj_set_style_bg_color(btnIcon, lv_color_hex(0x1E2230), 0);
-        lv_obj_set_style_bg_grad_color(btnIcon, lv_color_hex(0x13161F), 0);
-        lv_obj_set_style_bg_grad_dir(btnIcon, LV_GRAD_DIR_VER, 0);
+        lv_obj_set_style_bg_opa(btnIcon, LV_OPA_60, 0);
         lv_obj_set_style_border_color(btnIcon, lv_color_hex(app.accentColor), 0);
         lv_obj_set_style_border_width(btnIcon, 1, 0);
         lv_obj_set_style_border_opa(btnIcon, LV_OPA_60, 0);

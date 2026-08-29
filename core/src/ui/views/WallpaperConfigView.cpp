@@ -26,7 +26,10 @@ void WallpaperConfigView::default_btn_cb(lv_event_t* e) {
 void WallpaperConfigView::animated_btn_cb(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
-        WallpaperManager::getInstance().setWallpaper("animated");
+        lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+        const char* mode = (const char*)lv_obj_get_user_data(btn);
+        if (!mode) mode = "animated_constellation";
+        WallpaperManager::getInstance().setWallpaper(mode);
         UIManager::showToast("Fondo Animado Vectorial activado");
         UIManager::getInstance().popView();
     }
@@ -60,25 +63,47 @@ bool WallpaperConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_bg_opa(m_container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(m_container, 0, 0);
 
-    // 1. Botón Fondo Animado Vectorial (60 FPS)
-    lv_obj_t* animCard = lv_button_create(m_container);
-    lv_obj_set_width(animCard, lv_pct(100));
-    lv_obj_set_height(animCard, 54);
-    DefaultTheme::applyButton(animCard, 14);
-    lv_obj_add_event_cb(animCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+    // 1. Botón Fondo Animado: Constelación Neón
+    lv_obj_t* animConstCard = lv_button_create(m_container);
+    lv_obj_set_width(animConstCard, lv_pct(100));
+    lv_obj_set_height(animConstCard, 54);
+    DefaultTheme::applyButton(animConstCard, 14);
+    lv_obj_set_user_data(animConstCard, (void*)"animated_constellation");
+    lv_obj_add_event_cb(animConstCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_set_flex_flow(animCard, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(animCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_hor(animCard, 16, 0);
+    lv_obj_set_flex_flow(animConstCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animConstCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animConstCard, 16, 0);
 
-    lv_obj_t* iconAnim = lv_label_create(animCard);
-    lv_label_set_text(iconAnim, LV_SYMBOL_REFRESH);
-    lv_obj_set_style_text_color(iconAnim, lv_color_hex(0x00e5ff), 0);
-    lv_obj_set_style_margin_right(iconAnim, 12, 0);
+    lv_obj_t* iconConst = lv_label_create(animConstCard);
+    lv_label_set_text(iconConst, LV_SYMBOL_REFRESH);
+    lv_obj_set_style_text_color(iconConst, lv_color_hex(0x00e5ff), 0);
+    lv_obj_set_style_margin_right(iconConst, 12, 0);
 
-    lv_obj_t* lblAnim = lv_label_create(animCard);
-    lv_label_set_text(lblAnim, "Fondo Animado Vectorial (60 FPS)");
-    lv_obj_set_style_text_color(lblAnim, DefaultTheme::getTextColor(), 0);
+    lv_obj_t* lblConst = lv_label_create(animConstCard);
+    lv_label_set_text(lblConst, "Animado: Constelación Neón");
+    lv_obj_set_style_text_color(lblConst, DefaultTheme::getTextColor(), 0);
+
+    // 2. Botón Fondo Animado: Ondas Neón
+    lv_obj_t* animWavesCard = lv_button_create(m_container);
+    lv_obj_set_width(animWavesCard, lv_pct(100));
+    lv_obj_set_height(animWavesCard, 54);
+    DefaultTheme::applyButton(animWavesCard, 14);
+    lv_obj_set_user_data(animWavesCard, (void*)"animated_waves");
+    lv_obj_add_event_cb(animWavesCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_flex_flow(animWavesCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animWavesCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animWavesCard, 16, 0);
+
+    lv_obj_t* iconWaves = lv_label_create(animWavesCard);
+    lv_label_set_text(iconWaves, LV_SYMBOL_CHARGE);
+    lv_obj_set_style_text_color(iconWaves, lv_color_hex(0x9d4edd), 0);
+    lv_obj_set_style_margin_right(iconWaves, 12, 0);
+
+    lv_obj_t* lblWaves = lv_label_create(animWavesCard);
+    lv_label_set_text(lblWaves, "Animado: Ondas Neón");
+    lv_obj_set_style_text_color(lblWaves, DefaultTheme::getTextColor(), 0);
 
     // 2. Botón Fondo Predeterminado de Fábrica
     lv_obj_t* defaultCard = lv_button_create(m_container);

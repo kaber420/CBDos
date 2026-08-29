@@ -60,7 +60,9 @@ idf_component_register(
         "src/mesh/MeshEngine.cpp"
 
         "src/ui/views/LuappView.cpp"
+        "src/ui/views/PowerConfigView.cpp"
         "src/system/ConfigManager.cpp"
+        "src/system/PowerManager.cpp"
         "src/network/http_client.cpp"
         "src/time/TimeManager.cpp"
         "src/hid/HidManager.cpp"
@@ -73,7 +75,9 @@ idf_component_register(
         ${LUA_SRCS}
     INCLUDE_DIRS 
         "include"
+        "src/system"
         "src/ui"
+        "src/ui/components"
         "src/ui/views"
         "src/ui/views/utilities"
         "src/tlv"

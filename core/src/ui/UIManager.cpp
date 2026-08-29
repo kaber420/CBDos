@@ -4,6 +4,7 @@
 #include "themes/DefaultTheme.h"
 #include "assets/SystemIcons.hpp"
 #include "cbdos/system.hpp"
+#include "PowerManager.hpp"
 #include "../../lua/LuaBridge.hpp"
 
 namespace cbdos {
@@ -107,7 +108,10 @@ bool UIManager::init(lv_obj_t* rootScreen) {
         this->onThemeChanged(theme, pal);
     });
 
-    // 7. Cargar vista inicial directa (Dashboard)
+    // 7. Inicializar gestor de energía
+    cbdos::system::PowerManager::getInstance().init();
+
+    // 8. Cargar vista inicial directa (Dashboard)
     openDashboard();
 
     m_initialized = true;
@@ -117,6 +121,8 @@ bool UIManager::init(lv_obj_t* rootScreen) {
 
 void UIManager::update() {
     if (!m_initialized) return;
+
+    cbdos::system::PowerManager::getInstance().update();
 
     if (LuaBridge::checkAndClearNeedsRefresh()) {
         lv_obj_t* scr = lv_screen_active();

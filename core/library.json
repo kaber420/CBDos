@@ -7,7 +7,9 @@
     "srcDir": "src",
     "flags": [
       "-I include",
+      "-I src/system",
       "-I src/ui",
+      "-I src/ui/components",
       "-I src/ui/views",
       "-I src/ui/views/utilities",
       "-I src/tlv",

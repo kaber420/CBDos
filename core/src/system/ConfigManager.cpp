@@ -154,6 +154,21 @@ void ConfigManager::setTimezoneOffset(int32_t offsetSec) {
     }
 }
 
+uint32_t ConfigManager::getIdleTimeoutSec() {
+    SystemConfig cfg;
+    loadSystem(cfg);
+    return cfg.screenTimeoutSeconds;
+}
+
+void ConfigManager::setIdleTimeoutSec(uint32_t seconds) {
+    s_cachedSys.screenTimeoutSeconds = seconds;
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("cbdos_sys", false)) {
+        backend->setUInt("scr_tout", seconds);
+        backend->end();
+    }
+}
+
 // ─── WiFi Config ───
 bool ConfigManager::loadWiFi(WiFiConfig& cfg) {
     auto* backend = cbdos::persistence::getBackend();

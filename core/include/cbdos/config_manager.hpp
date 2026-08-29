@@ -88,6 +88,8 @@ public:
     void setWifiAutoConnect(bool enable);
     int32_t getTimezoneOffset();
     void setTimezoneOffset(int32_t offsetSec);
+    uint32_t getIdleTimeoutSec();
+    void setIdleTimeoutSec(uint32_t seconds);
 
     // WiFi
     bool loadWiFi(WiFiConfig& cfg);

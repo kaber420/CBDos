@@ -1,4 +1,5 @@
 #include "ConfigView.hpp"
+#include "PowerConfigView.hpp"
 #include "RadioConfigView.hpp"
 #include "WiFiConfigView.hpp"
 #include "WallpaperConfigView.hpp"
@@ -98,6 +99,8 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
             UIManager::getInstance().pushView(std::make_shared<StorageConfigView>());
         } else if (id == 3) {
             UIManager::getInstance().pushView(std::make_shared<TimeConfigView>());
+        } else if (id == 4) {
+            UIManager::getInstance().pushView(std::make_shared<PowerConfigView>());
         } else if (id == 5) {
             UIManager::getInstance().pushView(std::make_shared<WallpaperConfigView>());
         } else if (id == 6) {
@@ -129,6 +132,7 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
     };
 
     OptionItem options[] = {
+        {"Sistema y Energia", "Apagado, reinicio, standby y auto-suspension", 4},
         {"Radio Integrada (2.4 GHz)", "Wi-Fi, ESP-NOW, Long Range y Canales", 9},
         {"WiFi", "Red local y parametros IP", 1},
         {"Fecha y Hora", "Zona horaria, horario de verano y NTP", 3},

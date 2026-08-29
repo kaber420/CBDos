@@ -18,8 +18,8 @@ public:
     void restoreDefault();
     std::string getCurrentWallpaper() const { return currentPath; }
     bool isCustom() const { return hasCustomWallpaper; }
-    bool isAnimated() const { return currentPath == "animated"; }
-    void setAnimatedMode(lv_obj_t* parent);
+    bool isAnimated() const { return currentPath == "animated" || currentPath == "animated_constellation" || currentPath == "animated_waves"; }
+    void setAnimatedMode(lv_obj_t* parent, const std::string& mode = "animated_constellation");
     std::vector<std::string> getAvailableWallpapers();
 
 private:

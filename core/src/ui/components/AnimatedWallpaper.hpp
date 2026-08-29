@@ -25,11 +25,18 @@ public:
         return instance;
     }
 
+    enum class Style {
+        Constellation = 0,
+        Waves = 1
+    };
+
     void init(lv_obj_t* parent);
     void start();
     void stop();
     bool isRunning() const { return m_running; }
     void destroy();
+    void setStyle(Style style) { m_style = style; }
+    Style getStyle() const { return m_style; }
 
 private:
     AnimatedWallpaper();
@@ -45,6 +52,7 @@ private:
     lv_timer_t* m_timer;
     bool m_running;
     uint32_t m_tick;
+    Style m_style;
     
     static const int PARTICLE_COUNT = 16;
     Particle m_particles[PARTICLE_COUNT];

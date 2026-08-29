@@ -91,14 +91,11 @@ void LVGL_Port::lvglTask(void* arg) {
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
-        uint32_t task_delay_ms = 5;
         if (self->lock(10)) {
-            task_delay_ms = lv_timer_handler();
+            lv_timer_handler();
             self->unlock();
         }
-        if (task_delay_ms > 50) task_delay_ms = 50;
-        if (task_delay_ms < 1) task_delay_ms = 1;
-        vTaskDelay(pdMS_TO_TICKS(task_delay_ms));
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
     vTaskDelete(NULL);
 }

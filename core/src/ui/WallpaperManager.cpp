@@ -108,7 +108,11 @@ void WallpaperManager::init() {
 void WallpaperManager::applyWallpaper(lv_obj_t* parent) {
     if (!parent) return;
 
-    if (currentPath == "animated") {
+    if (currentPath == "animated" || currentPath == "animated_constellation") {
+        cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::Constellation);
+        cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
+    } else if (currentPath == "animated_waves") {
+        cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::Waves);
         cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
     } else if (hasCustomWallpaper && customBuffer) {
         cbdos::ui::AnimatedWallpaper::getInstance().destroy();
@@ -121,13 +125,13 @@ void WallpaperManager::applyWallpaper(lv_obj_t* parent) {
     }
 }
 
-void WallpaperManager::setAnimatedMode(lv_obj_t* parent) {
-    currentPath = "animated";
+void WallpaperManager::setAnimatedMode(lv_obj_t* parent, const std::string& mode) {
+    currentPath = mode.empty() ? "animated_constellation" : mode;
     hasCustomWallpaper = false;
     auto* backend = cbdos::persistence::getBackend();
     if (backend && backend->begin("wallpaper", false)) {
         backend->setBool("custom", false);
-        backend->setString("path", "animated");
+        backend->setString("path", currentPath);
         backend->end();
     }
     if (parent) {
@@ -136,8 +140,8 @@ void WallpaperManager::setAnimatedMode(lv_obj_t* parent) {
 }
 
 bool WallpaperManager::setWallpaper(const std::string& path) {
-    if (path == "animated") {
-        setAnimatedMode(nullptr);
+    if (path == "animated" || path == "animated_constellation" || path == "animated_waves") {
+        setAnimatedMode(nullptr, path);
         return true;
     }
 #if defined(ARDUINO)
