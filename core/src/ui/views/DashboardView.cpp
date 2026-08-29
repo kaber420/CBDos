@@ -83,29 +83,32 @@ void DashboardView::onDestroy() {
 void DashboardView::setupLayout() {
     auto caps = cbdos::display::getCapabilities();
 
-    // Configurar Flex Wrap para distribución automática de tarjetas en Grid
+    // Configurar Flex Wrap para distribución automática de 3 columnas
     lv_obj_set_flex_flow(m_container, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(m_container, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     
     if (caps.width >= 480) {
-        // Modo Alta Resolución (ESP32-P4: 480x800)
-        lv_obj_set_flex_align(m_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-        lv_obj_set_style_pad_row(m_container, 16, 0);
-        lv_obj_set_style_pad_column(m_container, 12, 0);
+        // ESP32-P4 (480x800): 3 columnas amplias
+        lv_obj_set_style_pad_row(m_container, 20, 0);
+        lv_obj_set_style_pad_column(m_container, 8, 0);
+        lv_obj_set_style_pad_hor(m_container, 16, 0);
+        lv_obj_set_style_pad_ver(m_container, 16, 0);
     } else {
-        // Modo Compacto (ESP32-S3: 320x480)
-        lv_obj_set_flex_align(m_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-        lv_obj_set_style_pad_row(m_container, 12, 0);
-        lv_obj_set_style_pad_column(m_container, 12, 0);
+        // ESP32-S3 (320x480): 3 columnas compactas
+        lv_obj_set_style_pad_row(m_container, 14, 0);
+        lv_obj_set_style_pad_column(m_container, 6, 0);
+        lv_obj_set_style_pad_hor(m_container, 10, 0);
+        lv_obj_set_style_pad_ver(m_container, 12, 0);
     }
 }
 
 void DashboardView::createCards() {
     auto caps = cbdos::display::getCapabilities();
 
-    // Dimensiones del ítem de app en el OS
-    int32_t itemWidth = (caps.width >= 480) ? 104 : 96;
-    int32_t iconSize = (caps.width >= 480) ? 68 : 60;
-    int32_t iconRadius = (caps.width >= 480) ? 20 : 18;
+    // Dimensiones para 3 iconos por fila: más grandes y cómodos al tacto
+    int32_t itemWidth = (caps.width >= 480) ? 140 : 96;
+    int32_t iconSize = (caps.width >= 480) ? 84 : 64;
+    int32_t iconRadius = (caps.width >= 480) ? 24 : 18;
 
     m_cardObjs.clear();
 
@@ -326,6 +329,145 @@ void DashboardView::createCards() {
             lv_obj_set_style_text_color(lblPrompt, lv_color_hex(0x4ADE80), 0);
             lv_obj_set_style_text_font(lblPrompt, &lv_font_montserrat_16, 0);
             lv_obj_center(lblPrompt);
+
+        } else if (app.id == "browser") {
+            // 🌐 Navegador Cyberpunk (Globo con meridianos y anillo orbital neón)
+            lv_obj_t* globBox = lv_obj_create(btnIcon);
+            lv_obj_set_size(globBox, 36, 36);
+            lv_obj_set_style_bg_opa(globBox, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(globBox, 0, 0);
+            lv_obj_set_style_pad_all(globBox, 0, 0);
+            lv_obj_center(globBox);
+            lv_obj_remove_flag(globBox, LV_OBJ_FLAG_CLICKABLE);
+            DefaultTheme::disableScroll(globBox);
+
+            // Esfera central cian
+            lv_obj_t* globe = lv_obj_create(globBox);
+            lv_obj_set_size(globe, 24, 24);
+            lv_obj_set_style_radius(globe, 12, 0);
+            lv_obj_set_style_bg_color(globe, lv_color_hex(0x083344), 0);
+            lv_obj_set_style_border_color(globe, lv_color_hex(0x06B6D4), 0);
+            lv_obj_set_style_border_width(globe, 2, 0);
+            lv_obj_center(globe);
+            lv_obj_remove_flag(globe, LV_OBJ_FLAG_CLICKABLE);
+
+            // Meridiano vertical interno
+            lv_obj_t* merid = lv_obj_create(globe);
+            lv_obj_set_size(merid, 10, 20);
+            lv_obj_set_style_radius(merid, 5, 0);
+            lv_obj_set_style_bg_opa(merid, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_color(merid, lv_color_hex(0x22D3EE), 0);
+            lv_obj_set_style_border_width(merid, 1, 0);
+            lv_obj_center(merid);
+            lv_obj_remove_flag(merid, LV_OBJ_FLAG_CLICKABLE);
+
+            // Anillo orbital magenta neón inclinado
+            lv_obj_t* ring = lv_obj_create(globBox);
+            lv_obj_set_size(ring, 34, 12);
+            lv_obj_set_style_radius(ring, 6, 0);
+            lv_obj_set_style_bg_opa(ring, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_color(ring, lv_color_hex(0xF43F5E), 0);
+            lv_obj_set_style_border_width(ring, 2, 0);
+            lv_obj_set_style_transform_rotation(ring, 300, 0); // ~30 grados
+            lv_obj_center(ring);
+            lv_obj_remove_flag(ring, LV_OBJ_FLAG_CLICKABLE);
+
+        } else if (app.id == "editor") {
+            // 📝 Editor Glassmorphism (Hoja de código con syntax highlighting + lápiz)
+            lv_obj_t* editBox = lv_obj_create(btnIcon);
+            lv_obj_set_size(editBox, 34, 36);
+            lv_obj_set_style_bg_opa(editBox, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(editBox, 0, 0);
+            lv_obj_set_style_pad_all(editBox, 0, 0);
+            lv_obj_center(editBox);
+            lv_obj_remove_flag(editBox, LV_OBJ_FLAG_CLICKABLE);
+            DefaultTheme::disableScroll(editBox);
+
+            // Hoja de código
+            lv_obj_t* sheet = lv_obj_create(editBox);
+            lv_obj_set_size(sheet, 24, 30);
+            lv_obj_set_style_radius(sheet, 4, 0);
+            lv_obj_set_style_bg_color(sheet, lv_color_hex(0x1E293B), 0);
+            lv_obj_set_style_border_color(sheet, lv_color_hex(0x38BDF8), 0);
+            lv_obj_set_style_border_width(sheet, 1, 0);
+            lv_obj_align(sheet, LV_ALIGN_LEFT_MID, 0, 0);
+            lv_obj_remove_flag(sheet, LV_OBJ_FLAG_CLICKABLE);
+
+            // Renglones de código sintáctico
+            lv_obj_t* line1 = lv_obj_create(sheet);
+            lv_obj_set_size(line1, 10, 2);
+            lv_obj_set_style_bg_color(line1, lv_color_hex(0xA855F7), 0);
+            lv_obj_set_style_border_width(line1, 0, 0);
+            lv_obj_align(line1, LV_ALIGN_TOP_LEFT, 2, 4);
+            lv_obj_remove_flag(line1, LV_OBJ_FLAG_CLICKABLE);
+
+            lv_obj_t* line2 = lv_obj_create(sheet);
+            lv_obj_set_size(line2, 14, 2);
+            lv_obj_set_style_bg_color(line2, lv_color_hex(0x38BDF8), 0);
+            lv_obj_set_style_border_width(line2, 0, 0);
+            lv_obj_align(line2, LV_ALIGN_TOP_LEFT, 2, 9);
+            lv_obj_remove_flag(line2, LV_OBJ_FLAG_CLICKABLE);
+
+            lv_obj_t* line3 = lv_obj_create(sheet);
+            lv_obj_set_size(line3, 12, 2);
+            lv_obj_set_style_bg_color(line3, lv_color_hex(0x22C55E), 0);
+            lv_obj_set_style_border_width(line3, 0, 0);
+            lv_obj_align(line3, LV_ALIGN_TOP_LEFT, 2, 14);
+            lv_obj_remove_flag(line3, LV_OBJ_FLAG_CLICKABLE);
+
+            // Lápiz flotante dorado
+            lv_obj_t* pen = lv_obj_create(editBox);
+            lv_obj_set_size(pen, 6, 18);
+            lv_obj_set_style_radius(pen, 2, 0);
+            lv_obj_set_style_bg_color(pen, lv_color_hex(0xF59E0B), 0);
+            lv_obj_set_style_border_color(pen, lv_color_hex(0xFEF08A), 0);
+            lv_obj_set_style_border_width(pen, 1, 0);
+            lv_obj_set_style_transform_rotation(pen, 450, 0); // 45 grados
+            lv_obj_align(pen, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+            lv_obj_remove_flag(pen, LV_OBJ_FLAG_CLICKABLE);
+
+        } else if (app.id == "utilities") {
+            // 🧰 Utilidades Tácticas (Llave inglesa y herramienta cruzada)
+            lv_obj_t* utilBox = lv_obj_create(btnIcon);
+            lv_obj_set_size(utilBox, 34, 34);
+            lv_obj_set_style_bg_opa(utilBox, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(utilBox, 0, 0);
+            lv_obj_set_style_pad_all(utilBox, 0, 0);
+            lv_obj_center(utilBox);
+            lv_obj_remove_flag(utilBox, LV_OBJ_FLAG_CLICKABLE);
+            DefaultTheme::disableScroll(utilBox);
+
+            // Llave inglesa cruzada (+45°)
+            lv_obj_t* bar1 = lv_obj_create(utilBox);
+            lv_obj_set_size(bar1, 6, 26);
+            lv_obj_set_style_radius(bar1, 2, 0);
+            lv_obj_set_style_bg_color(bar1, lv_color_hex(0x0D9488), 0);
+            lv_obj_set_style_border_color(bar1, lv_color_hex(0x2DD4BF), 0);
+            lv_obj_set_style_border_width(bar1, 1, 0);
+            lv_obj_set_style_transform_rotation(bar1, 450, 0);
+            lv_obj_center(bar1);
+            lv_obj_remove_flag(bar1, LV_OBJ_FLAG_CLICKABLE);
+
+            // Destornillador cruzado (-45°)
+            lv_obj_t* bar2 = lv_obj_create(utilBox);
+            lv_obj_set_size(bar2, 4, 26);
+            lv_obj_set_style_radius(bar2, 2, 0);
+            lv_obj_set_style_bg_color(bar2, lv_color_hex(0xF59E0B), 0);
+            lv_obj_set_style_border_color(bar2, lv_color_hex(0xFDE68A), 0);
+            lv_obj_set_style_border_width(bar2, 1, 0);
+            lv_obj_set_style_transform_rotation(bar2, -450, 0);
+            lv_obj_center(bar2);
+            lv_obj_remove_flag(bar2, LV_OBJ_FLAG_CLICKABLE);
+
+            // Núcleo / Tuerca central
+            lv_obj_t* nut = lv_obj_create(utilBox);
+            lv_obj_set_size(nut, 10, 10);
+            lv_obj_set_style_radius(nut, 5, 0);
+            lv_obj_set_style_bg_color(nut, lv_color_hex(0x134E4A), 0);
+            lv_obj_set_style_border_color(nut, lv_color_hex(0x2DD4BF), 0);
+            lv_obj_set_style_border_width(nut, 2, 0);
+            lv_obj_center(nut);
+            lv_obj_remove_flag(nut, LV_OBJ_FLAG_CLICKABLE);
 
         } else {
             // Icono estándar por símbolo LVGL

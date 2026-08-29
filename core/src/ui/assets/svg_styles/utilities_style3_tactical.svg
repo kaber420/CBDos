@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="utilBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064E3B"/>
+      <stop offset="100%" stop-color="#022C22"/>
+    </linearGradient>
+    <linearGradient id="wrenchGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2DD4BF"/>
+      <stop offset="100%" stop-color="#0F766E"/>
+    </linearGradient>
+    <linearGradient id="driverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base con Borde Ámbar Táctico -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#utilBg)" stroke="#2DD4BF" stroke-width="1.5" stroke-opacity="0.6"/>
+  <!-- Llave Inglesa Cruzada -->
+  <g transform="rotate(45 32 32)">
+    <rect x="30" y="14" width="4" height="36" rx="2" fill="url(#wrenchGrad)"/>
+    <!-- Cabeza Llave Abierta -->
+    <path d="M26 14 C26 9 38 9 38 14 L34 16 L34 20 L30 20 L30 16 Z" fill="url(#wrenchGrad)"/>
+    <!-- Ojo Cerrado Hexagonal Inferior -->
+    <circle cx="32" cy="46" r="5" fill="none" stroke="url(#wrenchGrad)" stroke-width="3"/>
+  </g>
+  <!-- Destornillador Cruzado -->
+  <g transform="rotate(-45 32 32)">
+    <!-- Mango Destornillador -->
+    <rect x="29" y="34" width="6" height="16" rx="2" fill="url(#driverGrad)"/>
+    <rect x="27" y="38" width="10" height="3" rx="1" fill="#FDE68A"/>
+    <!-- Vástago y Punta de Estrella/Plana -->
+    <rect x="30.5" y="18" width="3" height="16" fill="#CBD5E1"/>
+    <polygon points="30.5,18 32,12 33.5,18" fill="#94A3B8"/>
+  </g>
+  <!-- Engranaje Central / Núcleo de Ajuste -->
+  <circle cx="32" cy="32" r="4" fill="#022C22" stroke="#2DD4BF" stroke-width="2"/>
+</svg>
