@@ -15,26 +15,29 @@ public:
 
     bool init() {
         if (m_initialized) return true;
-
-        m_keyboard.begin();
-        m_mouse.begin();
-        USB.begin();
-
-        m_initialized = true;
+        ensureInitialized();
         return true;
     }
 
     bool isConnected() override {
-        return USB;
+        return m_initialized && USB;
     }
 
     bool isReady() override {
         return m_initialized;
     }
 
+    void ensureInitialized() {
+        if (!m_initialized) {
+            m_keyboard.begin();
+            m_mouse.begin();
+            USB.begin();
+            m_initialized = true;
+        }
+    }
+
     void sendReport(uint8_t modifiers, const uint8_t keycodes[6]) override {
-        // Enviar modificadores y teclas
-        // Para simplificar, mapear primer código
+        ensureInitialized();
         if (keycodes[0] != 0) {
             m_keyboard.pressRaw(keycodes[0]);
         } else {
@@ -43,6 +46,7 @@ public:
     }
 
     void sendMouseReport(uint8_t buttons, int8_t x, int8_t y, int8_t wheel) override {
+        ensureInitialized();
         if (x != 0 || y != 0 || wheel != 0) {
             m_mouse.move(x, y, wheel);
         }

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="radioGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#064E3B"/>
+    </linearGradient>
+  </defs>
+  <line x1="14" y1="16" x2="38" y2="6" stroke="#10B981" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="39" cy="6" r="2.5" fill="#34D399"/>
+  <rect x="8" y="16" width="48" height="36" rx="8" fill="url(#radioGrad)" stroke="#34D399" stroke-width="2.5"/>
+  <circle cx="24" cy="34" r="10" fill="#022C22" stroke="#34D399" stroke-width="2"/>
+  <circle cx="24" cy="34" r="4" fill="#34D399"/>
+  <rect x="40" y="24" width="10" height="6" rx="2" fill="#A7F3D0"/>
+  <circle cx="45" cy="40" r="4.5" fill="#34D399" stroke="#022C22" stroke-width="1.5"/>
+</svg>

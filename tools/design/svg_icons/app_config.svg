@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="gearGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C084FC"/>
+      <stop offset="100%" stop-color="#9333EA"/>
+    </linearGradient>
+  </defs>
+  <!-- Engranaje Central con 6 Dientes -->
+  <circle cx="32" cy="32" r="14" fill="none" stroke="url(#gearGrad)" stroke-width="6"/>
+  <circle cx="32" cy="32" r="7" fill="#0F172A" stroke="#C084FC" stroke-width="2"/>
+  <!-- Dientes del Engranaje -->
+  <rect x="29" y="8" width="6" height="8" rx="2" fill="url(#gearGrad)"/>
+  <rect x="29" y="48" width="6" height="8" rx="2" fill="url(#gearGrad)"/>
+  <rect x="8" y="29" width="8" height="6" rx="2" fill="url(#gearGrad)"/>
+  <rect x="48" y="29" width="8" height="6" rx="2" fill="url(#gearGrad)"/>
+  <rect x="15" y="15" width="6" height="7" rx="1.5" fill="url(#gearGrad)" transform="rotate(45 18 18.5)"/>
+  <rect x="43" y="43" width="6" height="7" rx="1.5" fill="url(#gearGrad)" transform="rotate(45 46 46.5)"/>
+  <rect x="43" y="15" width="6" height="7" rx="1.5" fill="url(#gearGrad)" transform="rotate(-45 46 18.5)"/>
+  <rect x="15" y="43" width="6" height="7" rx="1.5" fill="url(#gearGrad)" transform="rotate(-45 18 46.5)"/>
+</svg>

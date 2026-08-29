@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="cartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="10" width="40" height="46" rx="6" fill="url(#cartGrad)" stroke="#60A5FA" stroke-width="2.5"/>
+  <rect x="18" y="20" width="28" height="24" rx="3" fill="#1E293B" stroke="#93C5FD" stroke-width="1.5"/>
+  <polygon points="26,26 26,38 38,32" fill="#FACC15"/>
+  <rect x="42" y="10" width="8" height="4" fill="#0F172A"/>
+</svg>

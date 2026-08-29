@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Cápsula del Micrófono con relleno degradado o sólido -->
+  <rect x="9" y="2" width="6" height="12" rx="3" fill="#EF4444" stroke="#FFFFFF" stroke-width="2"/>
+  
+  <!-- Rejilla / Soporte del Micrófono -->
+  <path d="M5 10a7 7 0 0 0 14 0" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+  
+  <!-- Brazo Vertical -->
+  <line x1="12" y1="17" x2="12" y2="21" stroke="#FFFFFF" stroke-width="2"/>
+  
+  <!-- Base Horizontal -->
+  <line x1="8" y1="21" x2="16" y2="21" stroke="#FFFFFF" stroke-width="2"/>
+</svg>

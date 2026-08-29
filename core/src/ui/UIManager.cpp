@@ -2,6 +2,7 @@
 #include "views/DashboardView.hpp"
 #include "WallpaperManager.h"
 #include "themes/DefaultTheme.h"
+#include "assets/SystemIcons.hpp"
 #include "cbdos/system.hpp"
 #include "../../lua/LuaBridge.hpp"
 
@@ -51,8 +52,9 @@ bool UIManager::init(lv_obj_t* rootScreen) {
 
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "Inicializando UIManager...");
 
-    // 1. Inicializar ThemeEngine
+    // 1. Inicializar ThemeEngine y SystemIcons
     ThemeEngine::getInstance().init();
+    SystemIcons::init();
     const auto& palette = ThemeEngine::getInstance().getPalette();
 
     // 2. Pantalla Raíz

@@ -2,6 +2,7 @@
 #include "DisplayHAL.h"
 #include "TouchHAL.h"
 #include "../../core/src/lua/LuaBridge.hpp"
+#include "misc/cache/instance/lv_image_cache.h"
 #include <esp_log.h>
 #include <esp_heap_caps.h>
 #include <esp_cache.h>
@@ -115,9 +116,12 @@ esp_err_t LVGL_Port::init(int h_res, int v_res) {
         return ESP_ERR_NO_MEM;
     }
 
-    // 2. Inicializar el Core de LVGL 9 y Tick Timer
+    // 2. Inicializar el Core de LVGL 9, Caché de Imágenes en PSRAM y Tick Timer
     lv_init();
     lv_tick_set_cb(lvgl_tick_cb);
+    lv_image_cache_resize(2 * 1024 * 1024, true);
+    ESP_LOGI(TAG, "Caché de imágenes LVGL 9 configurado a 2 MB (activado: %s)",
+             lv_image_cache_is_enabled() ? "SÍ" : "NO");
 
     // 3. Vincular los búferes de fotogramas del controlador DPI
     buf1 = DisplayHAL::getInstance().getFrameBuffer(0);

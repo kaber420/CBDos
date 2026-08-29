@@ -48,15 +48,21 @@
 
 /* --- LVGL 9.5 Memory Pool Allocator (PSRAM 8MB en ESP32-S3) --- */
 #define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
-#define LV_MEM_SIZE          (1024 * 1024U) /* 1 MB de heap exclusivo para LVGL 9.5 en PSRAM */
+#define LV_MEM_SIZE          (2048 * 1024U) /* 2 MB de heap exclusivo para LVGL 9.5 en PSRAM */
 #define LV_MEM_POOL_INCLUDE  <esp_heap_caps.h>
 #define LV_MEM_POOL_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
 
+#define LV_CACHE_DEF_SIZE (1024 * 1024U) /* Cache de imágenes en PSRAM para dibujar los SVG a 30 FPS instantáneos */
 
 
-/* --- Image and Vector SVG Decoders --- */
-#define LV_USE_VECTOR_GRAPHIC 1
-#define LV_USE_SVG 1
+
+/* --- Image and Vector Decoders (S3 usa BINs nativos directos) --- */
+#define LV_USE_FLOAT 0
+#define LV_USE_MATRIX 0
+#define LV_USE_VECTOR_GRAPHIC 0
+#define LV_USE_THORVG 0
+#define LV_USE_THORVG_INTERNAL 0
+#define LV_USE_SVG 0
 #define LV_USE_BMP 1
 #define LV_USE_TJPGD 1
 #define LV_USE_PNG 1

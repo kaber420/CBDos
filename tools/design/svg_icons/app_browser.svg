@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="globeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F5D4"/>
+      <stop offset="100%" stop-color="#0077B6"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="20" fill="#03071E" stroke="url(#globeGrad)" stroke-width="2.5"/>
+  <ellipse cx="32" cy="32" rx="9" ry="20" fill="none" stroke="url(#globeGrad)" stroke-width="1.8"/>
+  <line x1="12" y1="32" x2="52" y2="32" stroke="url(#globeGrad)" stroke-width="1.8"/>
+  <ellipse cx="32" cy="32" rx="27" ry="9" fill="none" stroke="#F72585" stroke-width="2.5" transform="rotate(-28 32 32)"/>
+  <circle cx="53" cy="21" r="3.5" fill="#F72585"/>
+</svg>

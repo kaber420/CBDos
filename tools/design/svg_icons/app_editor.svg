@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="penGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+  <path d="M14 10 L38 10 L48 20 L48 54 C48 55 47 56 46 56 L14 56 C13 56 12 55 12 54 L12 12 C12 11 13 10 14 10 Z" fill="#1E293B" stroke="#38BDF8" stroke-width="2"/>
+  <path d="M38 10 L38 20 L48 20 Z" fill="#38BDF8"/>
+  <line x1="18" y1="24" x2="30" y2="24" stroke="#A855F7" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="18" y1="32" x2="42" y2="32" stroke="#38BDF8" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="18" y1="40" x2="34" y2="40" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="18" y1="48" x2="28" y2="48" stroke="#F43F5E" stroke-width="2.5" stroke-linecap="round"/>
+  <g transform="rotate(-40 46 42)">
+    <rect x="42" y="24" width="8" height="22" rx="2" fill="url(#penGrad)" stroke="#FEF08A" stroke-width="1.2"/>
+    <polygon points="42,46 46,54 50,46" fill="#E2E8F0"/>
+  </g>
+</svg>
