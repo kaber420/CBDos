@@ -23,6 +23,15 @@ void WallpaperConfigView::default_btn_cb(lv_event_t* e) {
     }
 }
 
+void WallpaperConfigView::animated_btn_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_CLICKED) {
+        WallpaperManager::getInstance().setWallpaper("animated");
+        UIManager::showToast("Fondo Animado Vectorial activado");
+        UIManager::getInstance().popView();
+    }
+}
+
 void WallpaperConfigView::wallpaper_select_cb(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
@@ -51,7 +60,27 @@ bool WallpaperConfigView::onCreate(lv_obj_t* parent) {
     lv_obj_set_style_bg_opa(m_container, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(m_container, 0, 0);
 
-    // 1. Botón Fondo Predeterminado de Fábrica
+    // 1. Botón Fondo Animado Vectorial (60 FPS)
+    lv_obj_t* animCard = lv_button_create(m_container);
+    lv_obj_set_width(animCard, lv_pct(100));
+    lv_obj_set_height(animCard, 54);
+    DefaultTheme::applyButton(animCard, 14);
+    lv_obj_add_event_cb(animCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_flex_flow(animCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animCard, 16, 0);
+
+    lv_obj_t* iconAnim = lv_label_create(animCard);
+    lv_label_set_text(iconAnim, LV_SYMBOL_REFRESH);
+    lv_obj_set_style_text_color(iconAnim, lv_color_hex(0x00e5ff), 0);
+    lv_obj_set_style_margin_right(iconAnim, 12, 0);
+
+    lv_obj_t* lblAnim = lv_label_create(animCard);
+    lv_label_set_text(lblAnim, "Fondo Animado Vectorial (60 FPS)");
+    lv_obj_set_style_text_color(lblAnim, DefaultTheme::getTextColor(), 0);
+
+    // 2. Botón Fondo Predeterminado de Fábrica
     lv_obj_t* defaultCard = lv_button_create(m_container);
     lv_obj_set_width(defaultCard, lv_pct(100));
     lv_obj_set_height(defaultCard, 54);

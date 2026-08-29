@@ -14,6 +14,7 @@ public:
 
 private:
     static void default_btn_cb(lv_event_t* e);
+    static void animated_btn_cb(lv_event_t* e);
     static void wallpaper_select_cb(lv_event_t* e);
 };
 

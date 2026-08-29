@@ -1,5 +1,6 @@
 #include "WallpaperManager.h"
 #include "assets/default_wallpaper.h"
+#include "components/AnimatedWallpaper.hpp"
 #include "cbdos/memory.hpp"
 #include "cbdos/log.hpp"
 #include "cbdos/persistence.hpp"
@@ -107,15 +108,38 @@ void WallpaperManager::init() {
 void WallpaperManager::applyWallpaper(lv_obj_t* parent) {
     if (!parent) return;
 
-    if (hasCustomWallpaper && customBuffer) {
+    if (currentPath == "animated") {
+        cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
+    } else if (hasCustomWallpaper && customBuffer) {
+        cbdos::ui::AnimatedWallpaper::getInstance().destroy();
         lv_obj_set_style_bg_image_src(parent, &customDsc, 0);
+        lv_obj_set_style_bg_image_opa(parent, LV_OPA_COVER, 0);
     } else {
+        cbdos::ui::AnimatedWallpaper::getInstance().destroy();
         lv_obj_set_style_bg_image_src(parent, &default_wallpaper, 0);
+        lv_obj_set_style_bg_image_opa(parent, LV_OPA_COVER, 0);
     }
-    lv_obj_set_style_bg_image_opa(parent, LV_OPA_COVER, 0);
+}
+
+void WallpaperManager::setAnimatedMode(lv_obj_t* parent) {
+    currentPath = "animated";
+    hasCustomWallpaper = false;
+    auto* backend = cbdos::persistence::getBackend();
+    if (backend && backend->begin("wallpaper", false)) {
+        backend->setBool("custom", false);
+        backend->setString("path", "animated");
+        backend->end();
+    }
+    if (parent) {
+        applyWallpaper(parent);
+    }
 }
 
 bool WallpaperManager::setWallpaper(const std::string& path) {
+    if (path == "animated") {
+        setAnimatedMode(nullptr);
+        return true;
+    }
 #if defined(ARDUINO)
     if (path == "default" || path.empty()) {
         restoreDefault();

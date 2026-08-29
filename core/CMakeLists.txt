@@ -20,6 +20,7 @@ idf_component_register(
         "src/ui/assets/SystemIcons.cpp"
         "src/ui/components/HeaderBar.cpp"
         "src/ui/components/QuickSettingsPanel.cpp"
+        "src/ui/components/AnimatedWallpaper.cpp"
         "src/ui/views/DashboardView.cpp"
         "src/ui/views/ConfigView.cpp"
         "src/ui/views/WiFiConfigView.cpp"
