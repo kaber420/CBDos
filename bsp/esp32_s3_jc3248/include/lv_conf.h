@@ -54,7 +54,9 @@
 
 
 
-/* --- Image and GIF Decoders --- */
+/* --- Image and Vector SVG Decoders --- */
+#define LV_USE_VECTOR_GRAPHIC 1
+#define LV_USE_SVG 1
 #define LV_USE_BMP 1
 #define LV_USE_TJPGD 1
 #define LV_USE_PNG 1

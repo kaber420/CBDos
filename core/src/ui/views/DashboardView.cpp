@@ -102,52 +102,112 @@ void DashboardView::setupLayout() {
 void DashboardView::createCards() {
     auto caps = cbdos::display::getCapabilities();
 
-    int32_t cardWidth = (caps.width >= 480) ? 140 : 138;
-    int32_t cardHeight = (caps.width >= 480) ? 115 : 95;
+    // Dimensiones del ítem de app en el OS
+    int32_t itemWidth = (caps.width >= 480) ? 104 : 96;
+    int32_t iconSize = (caps.width >= 480) ? 68 : 60;
+    int32_t iconRadius = (caps.width >= 480) ? 20 : 18;
 
     m_cardObjs.clear();
 
     for (size_t i = 0; i < m_apps.size(); ++i) {
         const auto& app = m_apps[i];
 
-        // Botón con estilo original DefaultTheme
-        lv_obj_t* card = lv_button_create(m_container);
-        lv_obj_set_size(card, cardWidth, cardHeight);
-        DefaultTheme::applyButton(card, 16);
-        lv_obj_set_style_pad_all(card, 8, 0);
+        // 1. Contenedor vertical transparente de la app (Ícono + Título)
+        lv_obj_t* appItem = lv_obj_create(m_container);
+        lv_obj_set_size(appItem, itemWidth, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(appItem, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(appItem, 0, 0);
+        lv_obj_set_style_pad_all(appItem, 0, 0);
+        DefaultTheme::disableScroll(appItem);
 
-        // Layout vertical interno
-        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_flex_flow(appItem, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(appItem, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-        // Contenedor hundido para el icono
-        lv_obj_t* iconContainer = lv_obj_create(card);
-        lv_obj_set_size(iconContainer, 46, 46);
-        DefaultTheme::applySunkenCard(iconContainer, 23);
-        DefaultTheme::disableScroll(iconContainer);
-        lv_obj_set_style_pad_all(iconContainer, 0, 0);
-        lv_obj_remove_flag(iconContainer, LV_OBJ_FLAG_CLICKABLE);
+        // 2. Botón Squircle del Icono (iOS / Android style)
+        lv_obj_t* btnIcon = lv_button_create(appItem);
+        lv_obj_set_size(btnIcon, iconSize, iconSize);
+        lv_obj_set_style_radius(btnIcon, iconRadius, 0);
+        lv_obj_set_style_bg_color(btnIcon, lv_color_hex(0x1E2230), 0);
+        lv_obj_set_style_bg_grad_color(btnIcon, lv_color_hex(0x13161F), 0);
+        lv_obj_set_style_bg_grad_dir(btnIcon, LV_GRAD_DIR_VER, 0);
+        lv_obj_set_style_border_color(btnIcon, lv_color_hex(app.accentColor), 0);
+        lv_obj_set_style_border_width(btnIcon, 1, 0);
+        lv_obj_set_style_border_opa(btnIcon, LV_OPA_60, 0);
+        lv_obj_set_style_shadow_width(btnIcon, 12, 0);
+        lv_obj_set_style_shadow_color(btnIcon, lv_color_black(), 0);
+        lv_obj_set_style_shadow_opa(btnIcon, LV_OPA_40, 0);
+        lv_obj_set_style_pad_all(btnIcon, 0, 0);
 
-        // 1. Icono de la App
-        lv_obj_t* lblIcon = lv_label_create(iconContainer);
-        lv_label_set_text(lblIcon, app.icon.c_str());
-        lv_obj_set_style_text_color(lblIcon, lv_color_hex(app.accentColor), 0);
-        lv_obj_set_style_text_font(lblIcon, &lv_font_montserrat_24, 0);
-        lv_obj_center(lblIcon);
+        if (app.id == "recorder") {
+            // Icono vectorial estilizado de Micrófono (Cápsula + Soporte + Base)
+            lv_obj_t* micBox = lv_obj_create(btnIcon);
+            lv_obj_set_size(micBox, 28, 36);
+            lv_obj_set_style_bg_opa(micBox, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(micBox, 0, 0);
+            lv_obj_set_style_pad_all(micBox, 0, 0);
+            lv_obj_center(micBox);
+            lv_obj_remove_flag(micBox, LV_OBJ_FLAG_CLICKABLE);
+            DefaultTheme::disableScroll(micBox);
 
-        // 2. Título de la App
-        lv_obj_t* lblTitle = lv_label_create(card);
+            // Cápsula superior del micrófono
+            lv_obj_t* capsule = lv_obj_create(micBox);
+            lv_obj_set_size(capsule, 12, 20);
+            lv_obj_set_style_radius(capsule, 6, 0);
+            lv_obj_set_style_bg_color(capsule, lv_color_hex(0xEF4444), 0);
+            lv_obj_set_style_border_color(capsule, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_border_width(capsule, 1, 0);
+            lv_obj_align(capsule, LV_ALIGN_TOP_MID, 0, 0);
+            lv_obj_remove_flag(capsule, LV_OBJ_FLAG_CLICKABLE);
+
+            // Soporte envolvente inferior
+            lv_obj_t* arcHolder = lv_obj_create(micBox);
+            lv_obj_set_size(arcHolder, 22, 14);
+            lv_obj_set_style_radius(arcHolder, 11, 0);
+            lv_obj_set_style_bg_opa(arcHolder, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_color(arcHolder, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_border_width(arcHolder, 2, 0);
+            lv_obj_set_style_border_side(arcHolder, (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT), 0);
+            lv_obj_align(arcHolder, LV_ALIGN_TOP_MID, 0, 9);
+            lv_obj_remove_flag(arcHolder, LV_OBJ_FLAG_CLICKABLE);
+
+            // Brazo vertical
+            lv_obj_t* stem = lv_obj_create(micBox);
+            lv_obj_set_size(stem, 2, 6);
+            lv_obj_set_style_bg_color(stem, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_border_width(stem, 0, 0);
+            lv_obj_align(stem, LV_ALIGN_BOTTOM_MID, 0, -4);
+            lv_obj_remove_flag(stem, LV_OBJ_FLAG_CLICKABLE);
+
+            // Base horizontal
+            lv_obj_t* base = lv_obj_create(micBox);
+            lv_obj_set_size(base, 14, 2);
+            lv_obj_set_style_bg_color(base, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_border_width(base, 0, 0);
+            lv_obj_align(base, LV_ALIGN_BOTTOM_MID, 0, -2);
+            lv_obj_remove_flag(base, LV_OBJ_FLAG_CLICKABLE);
+        } else {
+            // Icono estándar por símbolo LVGL
+            lv_obj_t* lblIcon = lv_label_create(btnIcon);
+            lv_label_set_text(lblIcon, app.icon.c_str());
+            lv_obj_set_style_text_color(lblIcon, lv_color_hex(app.accentColor), 0);
+            lv_obj_set_style_text_font(lblIcon, &lv_font_montserrat_24, 0);
+            lv_obj_center(lblIcon);
+        }
+
+        // 3. Título de la App situado debajo del ícono (como en un OS)
+        lv_obj_t* lblTitle = lv_label_create(appItem);
         lv_label_set_text(lblTitle, app.title.c_str());
         lv_obj_set_style_text_color(lblTitle, DefaultTheme::getTextColor(), 0);
-        lv_obj_set_style_text_font(lblTitle, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_margin_top(lblTitle, 4, 0);
+        lv_obj_set_style_text_font(lblTitle, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_margin_top(lblTitle, 6, 0);
         lv_obj_set_style_text_align(lblTitle, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_width(lblTitle, itemWidth);
 
-        // Evento de Click en la tarjeta pasando el índice del AppItem en user_data del widget
-        lv_obj_set_user_data(card, (void*)(uintptr_t)i);
-        lv_obj_add_event_cb(card, cardClickedEventCb, LV_EVENT_CLICKED, this);
+        // Evento de Click pasando el índice de la App
+        lv_obj_set_user_data(btnIcon, (void*)(uintptr_t)i);
+        lv_obj_add_event_cb(btnIcon, cardClickedEventCb, LV_EVENT_CLICKED, this);
 
-        m_cardObjs.push_back(card);
+        m_cardObjs.push_back(btnIcon);
     }
 }
 
