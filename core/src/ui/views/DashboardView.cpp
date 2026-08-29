@@ -141,6 +141,18 @@ void DashboardView::createCards() {
         lv_obj_set_style_shadow_opa(btnIcon, LV_OPA_40, 0);
         lv_obj_set_style_pad_all(btnIcon, 0, 0);
 
+        // --- EFECTO 1: Reacción Táctil Cinematográfica (LV_STATE_PRESSED) ---
+        // 1. Escala elástica (se encoge al 92% al tocarlo)
+        lv_obj_set_style_transform_scale(btnIcon, 235, LV_STATE_PRESSED); // 256 es 100%, 235 es ~92%
+        // 2. Borde y Glow Neón intensos al contacto
+        lv_obj_set_style_border_width(btnIcon, 2, LV_STATE_PRESSED);
+        lv_obj_set_style_border_opa(btnIcon, LV_OPA_100, LV_STATE_PRESSED);
+        lv_obj_set_style_shadow_width(btnIcon, 20, LV_STATE_PRESSED);
+        lv_obj_set_style_shadow_color(btnIcon, lv_color_hex(app.accentColor), LV_STATE_PRESSED);
+        lv_obj_set_style_shadow_opa(btnIcon, LV_OPA_80, LV_STATE_PRESSED);
+        // 3. Fondo reactivo más brillante al pulsar
+        lv_obj_set_style_bg_color(btnIcon, lv_color_hex(0x2A3045), LV_STATE_PRESSED);
+
         if (app.id == "recorder") {
             // 🎙️ Icono vectorial estilizado de Micrófono
             lv_obj_t* micBox = lv_obj_create(btnIcon);
