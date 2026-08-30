@@ -27,7 +27,11 @@ public:
 
     enum class Style {
         Constellation = 0,
-        Waves = 1
+        Waves = 1,
+        ComicDrive = 2,
+        Fireflies = 3,
+        TouchSwarm = 4,
+        Synthwave80s = 5
     };
 
     void init(lv_obj_t* parent);

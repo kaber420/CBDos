@@ -105,6 +105,90 @@ bool WallpaperConfigView::onCreate(lv_obj_t* parent) {
     lv_label_set_text(lblWaves, "Animado: Ondas Neón");
     lv_obj_set_style_text_color(lblWaves, DefaultTheme::getTextColor(), 0);
 
+    // 3. Botón Fondo Animado: Carrito Cómic 2D
+    lv_obj_t* animComicCard = lv_button_create(m_container);
+    lv_obj_set_width(animComicCard, lv_pct(100));
+    lv_obj_set_height(animComicCard, 54);
+    DefaultTheme::applyButton(animComicCard, 14);
+    lv_obj_set_user_data(animComicCard, (void*)"animated_comic");
+    lv_obj_add_event_cb(animComicCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_flex_flow(animComicCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animComicCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animComicCard, 16, 0);
+
+    lv_obj_t* iconComic = lv_label_create(animComicCard);
+    lv_label_set_text(iconComic, LV_SYMBOL_DRIVE);
+    lv_obj_set_style_text_color(iconComic, lv_color_hex(0xef233c), 0);
+    lv_obj_set_style_margin_right(iconComic, 12, 0);
+
+    lv_obj_t* lblComic = lv_label_create(animComicCard);
+    lv_label_set_text(lblComic, "Animado: Carrito Cómic 2D");
+    lv_obj_set_style_text_color(lblComic, DefaultTheme::getTextColor(), 0);
+
+    // 4. Botón Fondo Animado: Luciérnagas en el Bosque
+    lv_obj_t* animFfCard = lv_button_create(m_container);
+    lv_obj_set_width(animFfCard, lv_pct(100));
+    lv_obj_set_height(animFfCard, 54);
+    DefaultTheme::applyButton(animFfCard, 14);
+    lv_obj_set_user_data(animFfCard, (void*)"animated_fireflies");
+    lv_obj_add_event_cb(animFfCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_flex_flow(animFfCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animFfCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animFfCard, 16, 0);
+
+    lv_obj_t* iconFf = lv_label_create(animFfCard);
+    lv_label_set_text(iconFf, LV_SYMBOL_EYE_OPEN);
+    lv_obj_set_style_text_color(iconFf, lv_color_hex(0xd4ff00), 0);
+    lv_obj_set_style_margin_right(iconFf, 12, 0);
+
+    lv_obj_t* lblFf = lv_label_create(animFfCard);
+    lv_label_set_text(lblFf, "Animado: Luciérnagas Bosque");
+    lv_obj_set_style_text_color(lblFf, DefaultTheme::getTextColor(), 0);
+
+    // 5. Botón Fondo Animado: Touch Swarm Magnético
+    lv_obj_t* animTouchCard = lv_button_create(m_container);
+    lv_obj_set_width(animTouchCard, lv_pct(100));
+    lv_obj_set_height(animTouchCard, 54);
+    DefaultTheme::applyButton(animTouchCard, 14);
+    lv_obj_set_user_data(animTouchCard, (void*)"animated_touch");
+    lv_obj_add_event_cb(animTouchCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_flex_flow(animTouchCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animTouchCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animTouchCard, 16, 0);
+
+    lv_obj_t* iconTouch = lv_label_create(animTouchCard);
+    lv_label_set_text(iconTouch, LV_SYMBOL_EDIT);
+    lv_obj_set_style_text_color(iconTouch, lv_color_hex(0x00f5d4), 0);
+    lv_obj_set_style_margin_right(iconTouch, 12, 0);
+
+    lv_obj_t* lblTouch = lv_label_create(animTouchCard);
+    lv_label_set_text(lblTouch, "Animado: Partículas Touch Magnet");
+    lv_obj_set_style_text_color(lblTouch, DefaultTheme::getTextColor(), 0);
+
+    // 6. Botón Fondo Animado: Synthwave 80s Grid 3D
+    lv_obj_t* animSynthCard = lv_button_create(m_container);
+    lv_obj_set_width(animSynthCard, lv_pct(100));
+    lv_obj_set_height(animSynthCard, 54);
+    DefaultTheme::applyButton(animSynthCard, 14);
+    lv_obj_set_user_data(animSynthCard, (void*)"animated_synthwave");
+    lv_obj_add_event_cb(animSynthCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_flex_flow(animSynthCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animSynthCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animSynthCard, 16, 0);
+
+    lv_obj_t* iconSynth = lv_label_create(animSynthCard);
+    lv_label_set_text(iconSynth, LV_SYMBOL_POWER);
+    lv_obj_set_style_text_color(iconSynth, lv_color_hex(0xff007f), 0);
+    lv_obj_set_style_margin_right(iconSynth, 12, 0);
+
+    lv_obj_t* lblSynth = lv_label_create(animSynthCard);
+    lv_label_set_text(lblSynth, "Animado: Synthwave 80s Grid");
+    lv_obj_set_style_text_color(lblSynth, DefaultTheme::getTextColor(), 0);
+
     // 2. Botón Fondo Predeterminado de Fábrica
     lv_obj_t* defaultCard = lv_button_create(m_container);
     lv_obj_set_width(defaultCard, lv_pct(100));

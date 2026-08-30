@@ -114,6 +114,18 @@ void WallpaperManager::applyWallpaper(lv_obj_t* parent) {
     } else if (currentPath == "animated_waves") {
         cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::Waves);
         cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
+    } else if (currentPath == "animated_comic") {
+        cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::ComicDrive);
+        cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
+    } else if (currentPath == "animated_fireflies") {
+        cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::Fireflies);
+        cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
+    } else if (currentPath == "animated_touch") {
+        cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::TouchSwarm);
+        cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
+    } else if (currentPath == "animated_synthwave") {
+        cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::Synthwave80s);
+        cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
     } else if (hasCustomWallpaper && customBuffer) {
         cbdos::ui::AnimatedWallpaper::getInstance().destroy();
         lv_obj_set_style_bg_image_src(parent, &customDsc, 0);
@@ -140,7 +152,7 @@ void WallpaperManager::setAnimatedMode(lv_obj_t* parent, const std::string& mode
 }
 
 bool WallpaperManager::setWallpaper(const std::string& path) {
-    if (path == "animated" || path == "animated_constellation" || path == "animated_waves") {
+    if (path.rfind("animated", 0) == 0) {
         setAnimatedMode(nullptr, path);
         return true;
     }

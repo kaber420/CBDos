@@ -54,9 +54,14 @@ El **Navegador Vectorial Alternet (v0.1.2)** es una evolución desacoplada de la
 
 ## 📄 3. Especificación del Modelo de Documento Vectorial (V-DOM Schema)
 
-Las páginas de la red Alternet se estructuran como un diccionario de nodos primitivos.
+> [!NOTE]
+> **Formato de Red vs Formato de Desarrollo y Editor Visual Drag & Drop:**  
+> 1. **Editor Visual Drag & Drop (Web UI):** Permite diseñar la interfaz gráficamente arrastrando componentes o editándolos en código (JSON/V-DOM).  
+> 2. **Importación / Exportación Bidireccional:** Se puede importar una plantilla en código (JSON) al editor Drag & Drop para modificarla visualmente o mantener la plantilla guardada como código fuente.  
+> 3. **Compilador TLV (Runtime de Red):** Al publicar en la red Mesh o guardar en SD, el editor compila el diseño a **Formato Binario Compacto TLV (`.vdom` / `.mesh`)**.  
+> Esto reduce el peso de ~1,200 bytes en JSON a solo **~140 bytes en binario TLV** (cabiendo en 1 solo paquete ESP-NOW de 250B) y elimina el parseo de texto en C++.
 
-### Esquema JSON Representativo:
+### Esquema Representativo (Equivalencia JSON para humanos):
 
 ```json
 {
@@ -148,13 +153,20 @@ Las páginas de la red Alternet se estructuran como un diccionario de nodos prim
 
 ---
 
-## 🔗 5. Mapeo de Acciones e Interacción
+## 🔗 5. Modelo Extensible de Prefijos URI (Protocol Handlers)
 
-El navegador soporta eventos táctiles mapeados a esquemas URI:
+El navegador adopta un **Enfoque Modular por Prefijos URI (Protocol Handlers)**. Toda solicitud pasa por un router de URI que despacha el paquete al manejador de protocolo correspondiente, permitiendo registrar nuevos prefijos experimentales a medida que evoluciona el ecosistema:
 
-- `nav://<path>`: Navegación interna a otra página del portal.
-- `alternet://<ip_or_mesh_id>/<page>`: Solicitud de documento vectorial a un nodo remoto.
-- `lua://<script_name>`: Ejecución de un script interactivo local en el motor Lua de CBDos.
+### 🌐 Prefijos de Protocolo Soportados e Iniciales:
+- `ws://` / `wss://`: WebSockets interactivos de tiempo real (streaming de datos y **MQTT sobre WebSockets**).
+- `alt://` / `mesh://`: Protocolo experimental nativo para la carga de portales vectoriales V-DOM en la red Mesh.
+- `mqtt://` / `mqtts://`: Conexión de mensajes IoT (con soporte para NATS actuando como Broker MQTT).
+- `http://` / `https://`: Navegación web estándar a servidores o portales cautivos local/WAN.
+- `lora://`: Prefijo proyectado para consultas directas sobre módems LoRa.
+- `nav://`: Rutas de navegación interna entre vistas locales de CBDos.
+
+### 🧩 Arquitectura Extensible:
+Cualquier nuevo servicio solo requiere implementar un nuevo `IProtocolHandler` C++ y registrar su prefijo URI en la tabla del navegador.
 
 ---
 

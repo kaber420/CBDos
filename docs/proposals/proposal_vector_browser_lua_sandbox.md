@@ -13,9 +13,11 @@ El **Navegador Vectorial Alternet (v0.1.2)** permite visualizar sitios web ultra
 
 ### Objetivos Principales:
 1. **Dinamismo Interactivo:** Permitir que los sitios web de la red Mesh modifiquen elementos del DOM, respondan a eventos táctiles y procesen lógica local en el cliente.
-2. **Seguridad Absoluta (Zero-Trust):** Garantizar que ningún script remoto pueda acceder a archivos locales (MicroSD), registros NVS, APIs de sistema, subsistemas de radio cruda ni comandos de hardware.
-3. **Protección Anti-Congelamiento:** Evitar que scripts maliciosos o mal optimizados agoten la memoria RAM o bloqueen el bucle de renderizado de LVGL 9.5.
-4. **Control de Usuario (Policy Enforcement):** Ofrecer un interruptor global de seguridad en la configuración de CBDos para habilitar, preguntar o deshabilitar la ejecución de scripts web.
+2. **Editor Visual Drag & Drop y Plantillas:** Soporte bidireccional en el Editor Web (SaaS) para diseñar arrastrando widgets o importando/exportando plantillas en código JSON.
+3. **Optimización de Red y Memoria (Binario TLV / MsgPack):** El compilador traduce el diseño visual o código a **búferes binarios TLV (`.vdom` / `.mesh`)** de ~140 bytes por página para envío ultrarrápido sobre ESP-NOW/LoRa.
+4. **Seguridad Absoluta (Zero-Trust):** Garantizar que ningún script remoto pueda acceder a archivos locales (MicroSD), registros NVS, APIs de sistema, subsistemas de radio cruda ni comandos de hardware.
+5. **Protección Anti-Congelamiento:** Evitar que scripts maliciosos o mal optimizados agoten la memoria RAM o bloqueen el bucle de renderizado de LVGL 9.5.
+6. **Control de Usuario (Policy Enforcement):** Ofrecer un interruptor global de seguridad en la configuración de CBDos para habilitar, preguntar o deshabilitar la ejecución de scripts web.
 
 ---
 
@@ -120,7 +122,7 @@ int l_vdom_navigate(lua_State* L);        // vdom.navigate("nav://target")
 {
   "meta": {
     "title": "Portal Mesh Interactivo",
-    "script_src": "alternet://node_04/assets/dashboard.lua"
+    "script_src": "alt://node4.alt/assets/dashboard.lua"
   },
   "body": [ ... ]
 }
