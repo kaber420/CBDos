@@ -14,6 +14,7 @@ docs/
 ├── 📱 apps/              -> Especificaciones funcionales de cada aplicación
 ├── 💾 storage/           -> Almacenamiento SPIFFS, MicroSD y persistencia NVS
 ├── 🌐 network/           -> Conectividad WiFi y coprocesadores de red
+├── 💡 proposals/         -> Propuestas de aplicaciones e implementaciones futuras
 └── 📝 drafts/            -> Borradores de trabajo e ideas de evolución
 ```
 
@@ -70,3 +71,12 @@ docs/
 * **[Cliente SSH y Administración de Campo](drafts/draft_ssh_client_and_field_admin.md):** Especificación para terminal SSH embebida en CBDos.
 * **[Borrador de Cartuchos Pico8 / Lua](drafts/BORRADOR_CARTRIDGE_LUA_PICO8.md):** Motor de juegos y emulación de cartuchos virtuales.
 * **[Plan de Aplicación Sintetizador](drafts/plan_synth_app.md):** Generador de audio y teclado musical interactivo.
+
+---
+
+### 7. 💡 [Propuestas de Apps e Implementaciones Futuras (`docs/proposals/`)](proposals/)
+* **[Índice Central de Propuestas](proposals/README.md):** Portal general de especificaciones de nuevas aplicaciones y herramientas proyectadas.
+* **[Propuesta: Navegador Vectorial Alternet (v0.1.2)](drafts/BORRADOR_NAVEGADOR_VECTORIAL_v0.1.2.md):** Modelo de Documento Vectorial (V-DOM) para renderizado ultraligero de portales mesh con primitivas LVGL 9.5.
+* **[Propuesta: Lua Sandbox & Scripting Web Seguro](proposals/proposal_vector_browser_lua_sandbox.md):** Especificación de seguridad (Zero-Trust VM, hooks de CPU anti-bucle, cuota de RAM) para scripting dinámico estilo JavaScript en el Navegador Vectorial.
+* **[Propuesta: App Cliente SSH y Herramienta de Campo](proposals/proposal_ssh_client_and_lua_field_admin.md):** Especificación completa de terminal SSH interactiva ANSI, automatización en Lua para Ubiquiti / MikroTik y perfiles en MicroSD.
+
