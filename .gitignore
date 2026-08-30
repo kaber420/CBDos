@@ -96,4 +96,4 @@ wifi_credentials.h
 tools/tlvgl_gateway/data/
 tools/tlvgl_gateway/clients.json
 tools/tlvgl_gateway/clients.db
-core/src/audio/libhelix
+
