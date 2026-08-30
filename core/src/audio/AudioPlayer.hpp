@@ -4,9 +4,7 @@
 #include <string>
 #include <vector>
 #include <cstdio>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <freertos/semphr.h>
+#include "cbdos/rtos.hpp"
 
 namespace cbdos {
 namespace audio {
@@ -78,8 +76,8 @@ private:
     volatile bool m_stopRequested = false;
     volatile int32_t m_seekRequestSec = -1;
     
-    TaskHandle_t m_taskHandle = nullptr;
-    SemaphoreHandle_t m_mutex = nullptr;
+    cbdos::rtos::TaskHandle m_taskHandle = nullptr;
+    cbdos::rtos::MutexHandle m_mutex = nullptr;
 };
 
 } // namespace audio

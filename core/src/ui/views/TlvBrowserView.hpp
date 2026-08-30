@@ -6,8 +6,7 @@
 #include "../../tlv/mesh_header.hpp"
 #include "../../tlv/tlv_dictionary.hpp"
 #include "../../tlv/tlv_parser.hpp"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "cbdos/rtos.hpp"
 
 namespace cbdos {
 namespace ui {
@@ -50,7 +49,7 @@ private:
     std::string m_gatewayHost = "192.168.66.254";
     uint16_t m_gatewayPort = 8080;
 
-    TaskHandle_t m_fetchTaskHandle = nullptr;
+    cbdos::rtos::TaskHandle m_fetchTaskHandle = nullptr;
 
     static void onUrlSubmit(lv_event_t* e);
     static void onBookmarkClick(lv_event_t* e);

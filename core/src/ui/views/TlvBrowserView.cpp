@@ -55,7 +55,7 @@ TlvBrowserView::~TlvBrowserView() {
         s_instance = nullptr;
     }
     if (m_fetchTaskHandle) {
-        vTaskDelete(m_fetchTaskHandle);
+        cbdos::rtos::deleteTask(m_fetchTaskHandle);
         m_fetchTaskHandle = nullptr;
     }
 }
@@ -65,7 +65,7 @@ void TlvBrowserView::onDestroy() {
         s_instance = nullptr;
     }
     if (m_fetchTaskHandle) {
-        vTaskDelete(m_fetchTaskHandle);
+        cbdos::rtos::deleteTask(m_fetchTaskHandle);
         m_fetchTaskHandle = nullptr;
     }
     cbdos::mesh::MeshEngine::getInstance().unregisterServiceHandler(cbdos::mesh::ServiceId::TlvglResponse);
@@ -93,7 +93,7 @@ void TlvBrowserView::onUplinkFrameGenerated(const uint8_t* frame, size_t len) {
 
     if (tag == TYPE_REQ_LINK_CLICK && len >= 4) {
         uint8_t link_id = frame[3];
-        ESP_LOGI(TAG, "Link click #%u -> enviando al gateway", link_id);
+        CBD_LOG_I(TAG, "Link click #%u -> enviando al gateway", link_id);
     } else if (tag == TYPE_REQ_CONTROL_EVT && len >= 6) {
         uint8_t elem_id = frame[3];
         int16_t val = (frame[4] << 8) | frame[5];
@@ -124,7 +124,7 @@ void TlvBrowserView::onUplinkFrameGenerated(const uint8_t* frame, size_t len) {
     params->uplink_len = (len < sizeof(params->uplink_frame)) ? len : sizeof(params->uplink_frame);
     memcpy(params->uplink_frame, frame, params->uplink_len);
 
-    xTaskCreatePinnedToCore(fetchTask, "tlv_fetch", 8192, params, 5, nullptr, 1);
+    cbdos::rtos::createTask(fetchTask, "tlv_fetch", 8192, params, 5, 1);
 }
 
 void TlvBrowserView::render(const uint8_t* data, size_t length) {
@@ -268,13 +268,13 @@ void TlvBrowserView::fetchFromGatewayAsync(const std::string& host, uint16_t por
     params->path = path;
     params->uplink_len = 0;
 
-    xTaskCreatePinnedToCore(fetchTask, "tlv_fetch", 8192, params, 5, nullptr, 1);
+    cbdos::rtos::createTask(fetchTask, "tlv_fetch", 8192, params, 5, 1);
 }
 
 void TlvBrowserView::fetchTask(void* param) {
     FetchParams* p = (FetchParams*)param;
     if (!p) {
-        vTaskDelete(NULL);
+        cbdos::rtos::deleteTask(nullptr);
         return;
     }
 
@@ -285,7 +285,7 @@ void TlvBrowserView::fetchTask(void* param) {
         CBD_LOG_E(TAG, "No se pudo crear socket");
         UIManager::showToast("Error de socket");
         delete p;
-        vTaskDelete(NULL);
+        cbdos::rtos::deleteTask(nullptr);
         return;
     }
 
@@ -310,7 +310,7 @@ void TlvBrowserView::fetchTask(void* param) {
             close(sock);
             UIManager::showToast("Error de host/DNS");
             delete p;
-            vTaskDelete(NULL);
+            cbdos::rtos::deleteTask(nullptr);
             return;
         }
     }
@@ -322,7 +322,7 @@ void TlvBrowserView::fetchTask(void* param) {
         UIManager::showToast(errBuf);
         close(sock);
         delete p;
-        vTaskDelete(NULL);
+        cbdos::rtos::deleteTask(nullptr);
         return;
     }
 
@@ -372,7 +372,7 @@ void TlvBrowserView::fetchTask(void* param) {
     }
 
     delete p;
-    vTaskDelete(NULL);
+    cbdos::rtos::deleteTask(nullptr);
 }
 
 bool TlvBrowserView::loadLocalFile(const char* path) {

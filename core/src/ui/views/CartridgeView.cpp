@@ -11,10 +11,7 @@
 #include "cbdos/display.hpp"
 #include "cbdos/system.hpp"
 
-#ifdef ESP_PLATFORM
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#endif
+#include "cbdos/rtos.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -336,8 +333,7 @@ void CartridgeView::startFlashing(const std::string& binPath, esp_partition_subt
         lv_obj_t* percent;
     };
 
-#ifdef ESP_PLATFORM
-    xTaskCreatePinnedToCore(
+    cbdos::rtos::createTask(
         [](void* param) {
             auto* ctx = static_cast<FlashContext*>(param);
             
@@ -373,35 +369,14 @@ void CartridgeView::startFlashing(const std::string& binPath, esp_partition_subt
                 cbdos::display::unlock();
             }
             delete ctx;
-            vTaskDelete(NULL);
+            cbdos::rtos::deleteTask(nullptr);
         },
         "cart_flash_task",
         8192,
         new FlashContext{this, binPath, targetSlot, pBar, pPercent},
         3,
-        nullptr,
         0 // Core 0
     );
-#else
-    bool ok = cbdos::cartridge::CartridgeManager::flashFromSD(binPath, targetSlot, [pBar, pPercent](size_t written, size_t total) {
-        if (total > 0) {
-            int pct = (int)((written * 100) / total);
-            lv_bar_set_value(pBar, pct, LV_ANIM_OFF);
-            char pctBuf[16];
-            snprintf(pctBuf, sizeof(pctBuf), "%d %%", pct);
-            lv_label_set_text(pPercent, pctBuf);
-            lv_timer_handler();
-        }
-    });
-
-    closeCurrentModal();
-    if (ok) {
-        UIManager::getInstance().showToast("Instalacion exitosa!");
-    } else {
-        UIManager::getInstance().showToast("Fallo al escribir en Flash");
-    }
-    refreshSlots();
-#endif
 }
 
 void CartridgeView::bootSlotCb(lv_event_t* e) {

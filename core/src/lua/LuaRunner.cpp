@@ -18,7 +18,7 @@ LuaRunner::LuaRunner()
       _abortRequested(false),
       _taskHandle(nullptr),
       _isInlineCode(false) {
-    _logMutex = xSemaphoreCreateMutex();
+    _logMutex = cbdos::rtos::createMutex();
     _logBuffer.reserve(64);
 
     // Conectar el callback de print de Lua con el buffer de logs de LuaRunner
@@ -30,7 +30,7 @@ LuaRunner::LuaRunner()
 LuaRunner::~LuaRunner() {
     stop();
     if (_logMutex) {
-        vSemaphoreDelete(_logMutex);
+        cbdos::rtos::deleteMutex(_logMutex);
         _logMutex = nullptr;
     }
 }
@@ -53,25 +53,25 @@ std::string LuaRunner::getCurrentScript() const {
 
 void LuaRunner::appendLog(const std::string& log) {
     if (!_logMutex) return;
-    if (xSemaphoreTake(_logMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (cbdos::rtos::lockMutex(_logMutex, 100)) {
         if (_logBuffer.size() >= 200) {
             _logBuffer.erase(_logBuffer.begin()); // Descartar los más viejos si se satura
         }
         _logBuffer.push_back(log);
-        xSemaphoreGive(_logMutex);
+        cbdos::rtos::unlockMutex(_logMutex);
     }
 }
 
 bool LuaRunner::drainLogs(std::vector<std::string>& outLogs) {
     if (!_logMutex) return false;
-    if (xSemaphoreTake(_logMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    if (cbdos::rtos::lockMutex(_logMutex, 50)) {
         if (_logBuffer.empty()) {
-            xSemaphoreGive(_logMutex);
+            cbdos::rtos::unlockMutex(_logMutex);
             return false;
         }
         outLogs.insert(outLogs.end(), _logBuffer.begin(), _logBuffer.end());
         _logBuffer.clear();
-        xSemaphoreGive(_logMutex);
+        cbdos::rtos::unlockMutex(_logMutex);
         return true;
     }
     return false;
@@ -79,9 +79,9 @@ bool LuaRunner::drainLogs(std::vector<std::string>& outLogs) {
 
 void LuaRunner::clearLogs() {
     if (!_logMutex) return;
-    if (xSemaphoreTake(_logMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (cbdos::rtos::lockMutex(_logMutex, 100)) {
         _logBuffer.clear();
-        xSemaphoreGive(_logMutex);
+        cbdos::rtos::unlockMutex(_logMutex);
     }
 }
 
@@ -90,11 +90,11 @@ void LuaRunner::hookCb(lua_State* L, lua_Debug* ar) {
     if (LuaRunner::getInstance().isAbortRequested()) {
         luaL_error(L, "Ejecución cancelada por el usuario.");
     }
-    // Ceder 1 tick a FreeRTOS periódicamente para alimentar el Task Watchdog Timer (TWDT)
+    // Ceder 1 tick al sistema periódicamente para alimentar el Task Watchdog Timer
     static uint32_t s_hookCounter = 0;
     if (++s_hookCounter >= 50) { // Cada 50,000 instrucciones de Lua (~3-5ms de CPU)
         s_hookCounter = 0;
-        vTaskDelay(pdMS_TO_TICKS(1));
+        cbdos::rtos::sleepMs(1);
     }
 }
 
@@ -111,19 +111,18 @@ bool LuaRunner::startScript(const std::string& filePath) {
 
     appendLog(std::string("[Sistema] Iniciando script: ") + filePath);
 
-    BaseType_t res = xTaskCreatePinnedToCore(
+    _taskHandle = cbdos::rtos::createTask(
         luaTask,
         "LuaRunnerTask",
         16384,
         this,
         1,
-        &_taskHandle,
         0 // Core 0
     );
 
-    if (res != pdPASS) {
+    if (!_taskHandle) {
         _state = LuaRunnerState::ERROR;
-        appendLog("[Error] No se pudo crear la tarea de FreeRTOS.");
+        appendLog("[Error] No se pudo crear la tarea del sistema.");
         return false;
     }
 
@@ -143,19 +142,18 @@ bool LuaRunner::startString(const std::string& code) {
 
     appendLog("[Sistema] Ejecutando código dinámico...");
 
-    BaseType_t res = xTaskCreatePinnedToCore(
+    _taskHandle = cbdos::rtos::createTask(
         luaTask,
         "LuaRunnerTask",
         16384,
         this,
         1,
-        &_taskHandle,
         0 // Core 0
     );
 
-    if (res != pdPASS) {
+    if (!_taskHandle) {
         _state = LuaRunnerState::ERROR;
-        appendLog("[Error] No se pudo crear la tarea de FreeRTOS.");
+        appendLog("[Error] No se pudo crear la tarea del sistema.");
         return false;
     }
 
@@ -213,5 +211,5 @@ void LuaRunner::luaTask(void* param) {
     LuaBridge::resumeUI();
 
     runner->_taskHandle = nullptr;
-    vTaskDelete(NULL);
+    cbdos::rtos::deleteTask(nullptr);
 }

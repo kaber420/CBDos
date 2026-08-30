@@ -13,13 +13,13 @@ WavPlayer& WavPlayer::getInstance() {
 }
 
 WavPlayer::WavPlayer() {
-    m_mutex = xSemaphoreCreateMutex();
+    m_mutex = cbdos::rtos::createMutex();
 }
 
 WavPlayer::~WavPlayer() {
     stop();
     if (m_mutex) {
-        vSemaphoreDelete(m_mutex);
+        cbdos::rtos::deleteMutex(m_mutex);
         m_mutex = nullptr;
     }
 }
@@ -70,7 +70,7 @@ void WavPlayer::stop() {
     if (m_taskHandle) {
         int timeout = 50;
         while (m_isPlaying && timeout-- > 0) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            cbdos::rtos::sleepMs(10);
         }
     }
     m_isPlaying = false;
@@ -81,14 +81,14 @@ bool WavPlayer::play(const char* filepath) {
 
     stop();
 
-    if (xSemaphoreTake(m_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+    if (!cbdos::rtos::lockMutex(m_mutex, 500)) {
         return false;
     }
 
     FILE* f = fopen(filepath, "rb");
     if (!f) {
         CBD_LOG_E(TAG, "No se pudo abrir el archivo de audio: %s", filepath);
-        xSemaphoreGive(m_mutex);
+        cbdos::rtos::unlockMutex(m_mutex);
         return false;
     }
 
@@ -97,7 +97,7 @@ bool WavPlayer::play(const char* filepath) {
     if (fread(riffHeader, 1, 12, f) != 12 || memcmp(riffHeader, "RIFF", 4) != 0 || memcmp(riffHeader + 8, "WAVE", 4) != 0) {
         CBD_LOG_E(TAG, "Encabezado RIFF/WAVE no valido en: %s", filepath);
         fclose(f);
-        xSemaphoreGive(m_mutex);
+        cbdos::rtos::unlockMutex(m_mutex);
         return false;
     }
 
@@ -143,7 +143,7 @@ bool WavPlayer::play(const char* filepath) {
     if (!fmtFound || !dataFound) {
         CBD_LOG_E(TAG, "Formato WAV corrupto o sin chunk data: %s", filepath);
         fclose(f);
-        xSemaphoreGive(m_mutex);
+        cbdos::rtos::unlockMutex(m_mutex);
         return false;
     }
 
@@ -159,16 +159,16 @@ bool WavPlayer::play(const char* filepath) {
     CBD_LOG_I(TAG, "Iniciando reproduccion: '%s' (%lu Hz, %d canales, %d-bit, duracion: %lu seg)",
              filepath, m_header.sampleRate, m_header.numChannels, m_header.bitsPerSample, m_totalTimeSec);
 
-    xTaskCreatePinnedToCore(playbackTask, "wav_player_task", 4096, this, 4, &m_taskHandle, 0);
+    m_taskHandle = cbdos::rtos::createTask(playbackTask, "wav_player_task", 4096, this, 4, 0);
 
-    xSemaphoreGive(m_mutex);
+    cbdos::rtos::unlockMutex(m_mutex);
     return true;
 }
 
 void WavPlayer::playbackTask(void* param) {
     WavPlayer* player = static_cast<WavPlayer*>(param);
     player->runPlayback();
-    vTaskDelete(NULL);
+    cbdos::rtos::deleteTask(nullptr);
 }
 
 void WavPlayer::runPlayback() {
@@ -177,7 +177,7 @@ void WavPlayer::runPlayback() {
 
     while (!m_stopRequested && m_file) {
         if (m_isPaused) {
-            vTaskDelay(pdMS_TO_TICKS(50));
+            cbdos::rtos::sleepMs(50);
             continue;
         }
 

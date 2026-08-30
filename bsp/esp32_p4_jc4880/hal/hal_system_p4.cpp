@@ -1,16 +1,106 @@
 #include "cbdos/system.hpp"
+#include "cbdos/memory.hpp"
+#include "cbdos/log.hpp"
+#include "cbdos/rtos.hpp"
 #include <driver/temperature_sensor.h>
 #include <esp_timer.h>
 #include <esp_rom_sys.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <esp_log.h>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 
 namespace cbdos {
+
+namespace mem {
+    void* alloc_psram(size_t size) {
+        void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        return ptr ? ptr : ::malloc(size);
+    }
+    void* realloc_psram(void* ptr, size_t size) {
+        void* p = heap_caps_realloc(ptr, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        return p ? p : ::realloc(ptr, size);
+    }
+    void* alloc_dma(size_t size) {
+        return heap_caps_malloc(size, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+    }
+    void* alloc_internal(size_t size) {
+        return heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    void* realloc_internal(void* ptr, size_t size) {
+        return heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    void free_mem(void* ptr) {
+        if (ptr) ::free(ptr);
+    }
+}
+
+namespace log {
+    void write(LogLevel level, const char* tag, const char* format, ...) {
+        esp_log_level_t esp_level = ESP_LOG_INFO;
+        switch (level) {
+            case LogLevel::Error:   esp_level = ESP_LOG_ERROR; break;
+            case LogLevel::Warn:    esp_level = ESP_LOG_WARN;  break;
+            case LogLevel::Info:    esp_level = ESP_LOG_INFO;  break;
+            case LogLevel::Debug:   esp_level = ESP_LOG_DEBUG; break;
+            case LogLevel::Verbose: esp_level = ESP_LOG_VERBOSE; break;
+        }
+        va_list args;
+        va_start(args, format);
+        esp_log_writev(esp_level, tag ? tag : "CBDos", format, args);
+        va_end(args);
+        printf("\n");
+    }
+}
+
+namespace rtos {
+    TaskHandle createTask(TaskFunction fn, const char* name, uint32_t stackSize, void* param, uint32_t priority, int coreId) {
+        TaskHandle_t handle = nullptr;
+        BaseType_t res;
+        if (coreId >= 0) {
+            res = xTaskCreatePinnedToCore((TaskFunction_t)fn, name, stackSize, param, priority, &handle, coreId);
+        } else {
+            res = xTaskCreate((TaskFunction_t)fn, name, stackSize, param, priority, &handle);
+        }
+        return (res == pdPASS) ? (TaskHandle)handle : nullptr;
+    }
+
+    void deleteTask(TaskHandle handle) {
+        vTaskDelete((TaskHandle_t)handle);
+    }
+
+    void sleepMs(uint32_t ms) {
+        vTaskDelay(pdMS_TO_TICKS(ms));
+    }
+
+    MutexHandle createMutex() {
+        return (MutexHandle)xSemaphoreCreateMutex();
+    }
+
+    bool lockMutex(MutexHandle handle, uint32_t timeoutMs) {
+        if (!handle) return false;
+        TickType_t ticks = (timeoutMs == 0xFFFFFFFF) ? portMAX_DELAY : pdMS_TO_TICKS(timeoutMs);
+        return xSemaphoreTake((SemaphoreHandle_t)handle, ticks) == pdTRUE;
+    }
+
+    void unlockMutex(MutexHandle handle) {
+        if (handle) {
+            xSemaphoreGive((SemaphoreHandle_t)handle);
+        }
+    }
+
+    void deleteMutex(MutexHandle handle) {
+        if (handle) {
+            vSemaphoreDelete((SemaphoreHandle_t)handle);
+        }
+    }
+}
+
 namespace system {
 
 uint32_t getTimeMs() {

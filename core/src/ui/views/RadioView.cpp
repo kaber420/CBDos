@@ -6,8 +6,7 @@
 #include "cbdos/network.hpp"
 #include "cbdos/storage.hpp"
 #include "cbdos/system.hpp"
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
+#include "cbdos/rtos.hpp"
 #include <cstring>
 #include <cstdio>
 
@@ -671,17 +670,16 @@ void RadioView::performSearch() {
     m_searchPollTimer = lv_timer_create(searchPollTimerCb, 60, this);
 
     // Lanzar tarea de red en Core 0 con prioridad 1
-    BaseType_t ret = xTaskCreatePinnedToCore(
+    cbdos::rtos::TaskHandle taskH = cbdos::rtos::createTask(
         asyncSearchTask,
         "RadioSearch",
         8192,
         NULL,
         1,
-        NULL,
         0
     );
 
-    if (ret != pdPASS) {
+    if (!taskH) {
         s_searchInProgress = false;
         if (m_searchPollTimer) {
             lv_timer_delete(m_searchPollTimer);
@@ -701,7 +699,7 @@ void RadioView::asyncSearchTask(void* param) {
     s_asyncSearchResults = audio::RadioManager::getInstance().searchStations(
         s_currentSearchQuery, s_currentSearchOffset, 10);
     s_searchCompleted = true;
-    vTaskDelete(NULL);
+    cbdos::rtos::deleteTask(nullptr);
 }
 
 void RadioView::searchPollTimerCb(lv_timer_t* timer) {

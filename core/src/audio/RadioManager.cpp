@@ -252,13 +252,13 @@ void RadioManager::loadPlaylists() {
     if (cbdos::storage::fileExists(PLAYLISTS_STORAGE_PATH)) {
         std::string rawData = cbdos::storage::readFile(PLAYLISTS_STORAGE_PATH);
         if (deserializePlaylistsFromMsgPack(rawData, m_playlists)) {
-            ESP_LOGI(TAG, "Cargadas %d listas de reproduccion desde %s (MessagePack)", (int)m_playlists.size(), PLAYLISTS_STORAGE_PATH);
+            CBD_LOG_I(TAG, "Cargadas %d listas de reproduccion desde %s (MessagePack)", (int)m_playlists.size(), PLAYLISTS_STORAGE_PATH);
             return;
         }
     }
 
     // 2. Si no existe o está vacío, inicializar listas por defecto
-    ESP_LOGI(TAG, "Inicializando listas por defecto en Flash SPIFFS...");
+    CBD_LOG_I(TAG, "Inicializando listas por defecto en Flash SPIFFS...");
     RadioPlaylist favPlaylist("fav", "Favoritos", true);
     favPlaylist.stations.push_back(RadioStation("SomaFM Groove Salad", "http://ice1.somafm.com/groovesalad-128-mp3", "USA", "Ambient / Chill", 128, true));
     favPlaylist.stations.push_back(RadioStation("Ibiza Global Radio", "http://listento.ibizaglobalradio.com:8024/stream", "Espana", "Electronic", 128, true));
@@ -274,9 +274,9 @@ void RadioManager::savePlaylists() {
     if (!binData.empty()) {
         bool ok = cbdos::storage::writeFile(PLAYLISTS_STORAGE_PATH, binData);
         if (ok) {
-            ESP_LOGI(TAG, "Guardadas %d listas en %s (MessagePack, %d bytes)", (int)m_playlists.size(), PLAYLISTS_STORAGE_PATH, (int)binData.size());
+            CBD_LOG_I(TAG, "Guardadas %d listas en %s (MessagePack, %d bytes)", (int)m_playlists.size(), PLAYLISTS_STORAGE_PATH, (int)binData.size());
         } else {
-            ESP_LOGE(TAG, "Error al escribir en %s", PLAYLISTS_STORAGE_PATH);
+            CBD_LOG_E(TAG, "Error al escribir en %s", PLAYLISTS_STORAGE_PATH);
         }
     }
 }
@@ -289,7 +289,7 @@ bool RadioManager::exportPlaylistToSd(const std::string& playlistId, const std::
     if (!pl) return false;
 
     if (!cbdos::storage::isSdMounted()) {
-        ESP_LOGW(TAG, "exportPlaylistToSd: MicroSD no montada.");
+        CBD_LOG_W(TAG, "exportPlaylistToSd: MicroSD no montada.");
         return false;
     }
 

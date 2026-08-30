@@ -23,13 +23,13 @@ AudioPlayer& AudioPlayer::getInstance() {
 }
 
 AudioPlayer::AudioPlayer() {
-    m_mutex = xSemaphoreCreateMutex();
+    m_mutex = cbdos::rtos::createMutex();
 }
 
 AudioPlayer::~AudioPlayer() {
     stop();
     if (m_mutex) {
-        vSemaphoreDelete(m_mutex);
+        cbdos::rtos::deleteMutex(m_mutex);
         m_mutex = nullptr;
     }
 }
@@ -104,7 +104,7 @@ void AudioPlayer::stop() {
     if (m_taskHandle) {
         int timeout = 60;
         while (m_isPlaying && timeout-- > 0) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            cbdos::rtos::sleepMs(10);
         }
     }
     m_isPlaying = false;
@@ -189,7 +189,7 @@ bool AudioPlayer::play(const char* filepath) {
 
     stop();
 
-    if (xSemaphoreTake(m_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+    if (!cbdos::rtos::lockMutex(m_mutex, 500)) {
         return false;
     }
 
@@ -206,7 +206,7 @@ bool AudioPlayer::play(const char* filepath) {
     }
     if (!f) {
         CBD_LOG_E(TAG, "No se pudo abrir el archivo: %s", filepath);
-        xSemaphoreGive(m_mutex);
+        cbdos::rtos::unlockMutex(m_mutex);
         return false;
     }
 
@@ -241,9 +241,9 @@ bool AudioPlayer::play(const char* filepath) {
         cbdos::audio::setSampleRate(m_sampleRate);
     }
 
-    xTaskCreatePinnedToCore(playbackTask, "helix_audio_task", 8192, this, 6, &m_taskHandle, 0);
+    m_taskHandle = cbdos::rtos::createTask(playbackTask, "helix_audio_task", 8192, this, 6, 0);
 
-    xSemaphoreGive(m_mutex);
+    cbdos::rtos::unlockMutex(m_mutex);
     return true;
 }
 
@@ -257,7 +257,7 @@ bool AudioPlayer::playStream(const char* url) {
 
     stop();
 
-    if (xSemaphoreTake(m_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+    if (!cbdos::rtos::lockMutex(m_mutex, 500)) {
         return false;
     }
 
@@ -281,22 +281,22 @@ bool AudioPlayer::playStream(const char* url) {
 
     CBD_LOG_I(TAG, "Iniciando Helix Stream Player para: %s", url);
 
-    xTaskCreatePinnedToCore(streamPlaybackTask, "helix_stream_task", 12288, this, 6, &m_taskHandle, 0);
+    m_taskHandle = cbdos::rtos::createTask(streamPlaybackTask, "helix_stream_task", 12288, this, 6, 0);
 
-    xSemaphoreGive(m_mutex);
+    cbdos::rtos::unlockMutex(m_mutex);
     return true;
 }
 
 void AudioPlayer::playbackTask(void* param) {
     AudioPlayer* player = static_cast<AudioPlayer*>(param);
     player->runPlayback();
-    vTaskDelete(NULL);
+    cbdos::rtos::deleteTask(nullptr);
 }
 
 void AudioPlayer::streamPlaybackTask(void* param) {
     AudioPlayer* player = static_cast<AudioPlayer*>(param);
     player->runStreamPlayback();
-    vTaskDelete(NULL);
+    cbdos::rtos::deleteTask(nullptr);
 }
 
 void AudioPlayer::runStreamPlayback() {
@@ -455,7 +455,7 @@ void AudioPlayer::runStreamPlayback() {
 
     while (!m_stopRequested) {
         if (m_isPaused) {
-            vTaskDelay(pdMS_TO_TICKS(50));
+            cbdos::rtos::sleepMs(50);
             continue;
         }
 
@@ -580,7 +580,7 @@ void AudioPlayer::runMp3Playback() {
 
     while (!m_stopRequested && m_file && (!eofReached || bytesLeft > 0)) {
         if (m_isPaused) {
-            vTaskDelay(pdMS_TO_TICKS(50));
+            cbdos::rtos::sleepMs(50);
             continue;
         }
 
@@ -723,7 +723,7 @@ void AudioPlayer::runWavPlayback() {
 
     while (!m_stopRequested && m_file) {
         if (m_isPaused) {
-            vTaskDelay(pdMS_TO_TICKS(50));
+            cbdos::rtos::sleepMs(50);
             continue;
         }
 

@@ -15,13 +15,13 @@ WavRecorder& WavRecorder::getInstance() {
 }
 
 WavRecorder::WavRecorder() {
-    m_mutex = xSemaphoreCreateMutex();
+    m_mutex = cbdos::rtos::createMutex();
 }
 
 WavRecorder::~WavRecorder() {
     stop();
     if (m_mutex) {
-        vSemaphoreDelete(m_mutex);
+        cbdos::rtos::deleteMutex(m_mutex);
         m_mutex = nullptr;
     }
 }
@@ -85,7 +85,7 @@ bool WavRecorder::writeWavHeader(FILE* f, const RecordConfig& cfg, uint32_t data
 bool WavRecorder::start(const char* filepath, const RecordConfig& cfg) {
     if (!filepath || m_isRecording) return false;
 
-    if (xSemaphoreTake(m_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+    if (!cbdos::rtos::lockMutex(m_mutex, 1000)) {
         return false;
     }
 
@@ -99,44 +99,43 @@ bool WavRecorder::start(const char* filepath, const RecordConfig& cfg) {
 
     m_file = fopen(m_filePath.c_str(), "wb");
     if (!m_file) {
-        ESP_LOGE(TAG, "Error fopen wb en '%s'. Verificando si /sdcard esta montado...", m_filePath.c_str());
-        xSemaphoreGive(m_mutex);
+        CBD_LOG_E(TAG, "Error fopen wb en '%s'. Verificando si /sdcard esta montado...", m_filePath.c_str());
+        cbdos::rtos::unlockMutex(m_mutex);
         return false;
     }
 
     // Escribir cabecera provisional de 44 bytes
     if (!writeWavHeader(m_file, m_config, 0)) {
-        ESP_LOGE(TAG, "Error escribiendo header WAV en '%s'", m_filePath.c_str());
+        CBD_LOG_E(TAG, "Error escribiendo header WAV en '%s'", m_filePath.c_str());
         fclose(m_file);
         m_file = nullptr;
-        xSemaphoreGive(m_mutex);
+        cbdos::rtos::unlockMutex(m_mutex);
         return false;
     }
     fflush(m_file);
 
     m_isRecording = true;
 
-    BaseType_t res = xTaskCreatePinnedToCore(
+    m_taskHandle = cbdos::rtos::createTask(
         recordingTask,
         "wav_rec_task",
         8192,
         this,
         5,
-        &m_taskHandle,
         1
     );
 
-    if (res != pdPASS) {
-        ESP_LOGE(TAG, "Fallo al crear tarea de grabación");
+    if (!m_taskHandle) {
+        CBD_LOG_E(TAG, "Fallo al crear tarea de grabación");
         fclose(m_file);
         m_file = nullptr;
         m_isRecording = false;
-        xSemaphoreGive(m_mutex);
+        cbdos::rtos::unlockMutex(m_mutex);
         return false;
     }
 
-    xSemaphoreGive(m_mutex);
-    ESP_LOGI(TAG, "Grabación iniciada en: %s (%lu Hz, %d ch, %d bits)",
+    cbdos::rtos::unlockMutex(m_mutex);
+    CBD_LOG_I(TAG, "Grabación iniciada en: %s (%lu Hz, %d ch, %d bits)",
              m_filePath.c_str(), m_config.sampleRate, m_config.channels, m_config.bitsPerSample);
     return true;
 }
@@ -157,7 +156,7 @@ void WavRecorder::stop() {
     // Esperar a que la tarea finalice
     int timeout = 50;
     while (m_isRecording && timeout-- > 0) {
-        vTaskDelay(pdMS_TO_TICKS(20));
+        cbdos::rtos::sleepMs(20);
     }
 }
 
@@ -166,7 +165,7 @@ void WavRecorder::recordingTask(void* param) {
     self->runRecording();
     self->m_isRecording = false;
     self->m_taskHandle = nullptr;
-    vTaskDelete(nullptr);
+    cbdos::rtos::deleteTask(nullptr);
 }
 
 void WavRecorder::runRecording() {
@@ -177,7 +176,7 @@ void WavRecorder::runRecording() {
     // Búfer DMA / PSRAM para leer del micrófono
     uint8_t* pcmBuffer = (uint8_t*)malloc(chunkBytes);
     if (!pcmBuffer) {
-        ESP_LOGE(TAG, "No hay memoria para buffer de grabación");
+        CBD_LOG_E(TAG, "No hay memoria para buffer de grabación");
         if (m_file) {
             fclose(m_file);
             m_file = nullptr;
@@ -190,7 +189,7 @@ void WavRecorder::runRecording() {
     while (!m_stopRequested) {
         if (m_isPaused) {
             m_peakLevel = 0.0f;
-            vTaskDelay(pdMS_TO_TICKS(50));
+            cbdos::rtos::sleepMs(50);
             continue;
         }
 
@@ -216,7 +215,7 @@ void WavRecorder::runRecording() {
                 m_durationMs = (uint32_t)(((uint64_t)m_totalDataBytesWritten * 1000) / bytesPerSecond);
             }
         } else {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            cbdos::rtos::sleepMs(10);
         }
     }
 
@@ -226,7 +225,7 @@ void WavRecorder::runRecording() {
         fflush(m_file);
         fclose(m_file);
         m_file = nullptr;
-        ESP_LOGI(TAG, "Grabación finalizada con éxito: %lu bytes (%lu ms)",
+        CBD_LOG_I(TAG, "Grabación finalizada con éxito: %lu bytes (%lu ms)",
                  m_totalDataBytesWritten, m_durationMs);
     }
 

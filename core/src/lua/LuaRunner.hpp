@@ -3,9 +3,7 @@
 #include <string>
 #include <vector>
 #include <atomic>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
+#include "cbdos/rtos.hpp"
 
 enum class LuaRunnerState {
     IDLE,
@@ -44,8 +42,8 @@ private:
 
     std::atomic<LuaRunnerState> _state;
     std::atomic<bool> _abortRequested;
-    TaskHandle_t _taskHandle;
-    SemaphoreHandle_t _logMutex;
+    cbdos::rtos::TaskHandle _taskHandle = nullptr;
+    cbdos::rtos::MutexHandle _logMutex = nullptr;
 
     std::string _targetScript;
     std::string _targetCode;
