@@ -239,12 +239,13 @@ const std::vector<UartPinPreset>& getPinPresets();
 
 ## 🛠️ 4. Etapas de Ejecución
 
-### Etapa 2.1: Almacenamiento (`IStorageBackend`)
-1. Actualizar `core/include/cbdos/storage.hpp` con la interfaz `IStorageBackend`.
-2. Crear `core/src/system/storage.cpp` implementando el despacho agnóstico.
-3. Implementar `S3StorageBackend` en `bsp/esp32_s3_jc3248/hal/hal_storage_s3.cpp`.
-4. Implementar `P4StorageBackend` en `bsp/esp32_p4_jc4880/hal/hal_storage_p4.cpp`.
-5. Inyectar `initStorageBackend()` en `main.cpp` de S3 y P4.
+### Etapa 2.1: Almacenamiento (`IStorageBackend`) ✅ [COMPLETADA Y VALIDADA]
+1. Actualizar `core/include/cbdos/storage.hpp` con la interfaz `IStorageBackend`. (Completado)
+2. Crear `core/src/system/storage.cpp` implementando el despacho agnóstico. (Completado)
+3. Implementar `S3StorageBackend` en `bsp/esp32_s3_jc3248/hal/hal_storage_s3.cpp`. (Completado)
+4. Implementar `P4StorageBackend` en `bsp/esp32_p4_jc4880/hal/hal_storage_p4.cpp`. (Completado)
+5. Inyectar `initStorageBackend()` en `main.cpp` de S3 y P4. (Completado)
+6. Validación multi-target limpia: ESP-IDF 5.5 (P4) y PlatformIO (S3). (Completado)
 
 ### Etapa 2.2: Salida de Audio (`IAudioSink`)
 1. Actualizar `core/include/cbdos/audio.hpp` con la interfaz `IAudioSink`.

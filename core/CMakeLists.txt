@@ -61,6 +61,7 @@ idf_component_register(
 
         "src/ui/views/LuappView.cpp"
         "src/ui/views/PowerConfigView.cpp"
+        "src/system/storage.cpp"
         "src/system/ConfigManager.cpp"
         "src/system/PowerManager.cpp"
         "src/network/http_client.cpp"

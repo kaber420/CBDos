@@ -20,6 +20,7 @@
 namespace cbdos {
 namespace bsp {
     void initPersistenceBackend();
+    void initStorageBackend();
     void initMeshTransportP4();
     void initHttpClientP4();
     void initHidDriverP4();
@@ -47,8 +48,9 @@ extern "C" void app_main(void) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando NVS Flash: %s", esp_err_to_name(nvsRet));
     }
 
-    // Inyectar el backend de persistencia NVS, Radio, Red, Transporte de Malla, Cliente HTTP y USB HID
+    // Inyectar el backend de persistencia NVS, Almacenamiento, Radio, Red, Transporte de Malla, Cliente HTTP y USB HID
     cbdos::bsp::initPersistenceBackend();
+    cbdos::bsp::initStorageBackend();
     cbdos::bsp::initNetworkAdapterP4();
     cbdos::bsp::initRadioBackendP4();
     cbdos::bsp::initMeshTransportP4();
