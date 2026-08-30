@@ -92,17 +92,6 @@ namespace audio {
     __attribute__((weak)) size_t readAudio(void*, size_t, uint32_t) { return 0; }
 }
 
-namespace network {
-    __attribute__((weak)) bool init() { return true; }
-    __attribute__((weak)) bool connectWifi(const char*, const char*) { return true; }
-    __attribute__((weak)) bool connectWifiStatic(const char*, const char*, const char*, const char*, const char*, const char*) { return true; }
-    __attribute__((weak)) void disconnectWifi() {}
-    __attribute__((weak)) NetStatus getStatus() { return NetStatus::Disconnected; }
-    __attribute__((weak)) bool isConnected() { return false; }
-    __attribute__((weak)) std::string getIpAddress() { return "0.0.0.0"; }
-    __attribute__((weak)) int8_t getRssi() { return 0; }
-}
-
 namespace storage {
     __attribute__((weak)) bool init() { return true; }
     __attribute__((weak)) bool mountSd() { return false; }

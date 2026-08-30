@@ -35,6 +35,14 @@ Este directorio almacena las especificaciones de diseño, borradores de arquitec
 
 ---
 
+## 🎒 Hardware, Expansión & Mochilas Modulares
+
+| Propuesta | Descripción | Estado | Archivo |
+| :--- | :--- | :--- | :--- |
+| **Mochilas Modulares Hot-Plug por NFC** | Detección de módulos acoplables (SX1280 FLRC, SX1262 LoRa, CardKB, GPS) con etiquetas NFC y carga perezosa de drivers en la HAL. | 💡 Propuesta Formal | [`proposal_backpack_nfc_hotplug_hardware_modules.md`](proposal_backpack_nfc_hotplug_hardware_modules.md) |
+
+---
+
 ## 📌 Guía para Registrar una Nueva Propuesta de App
 
 Toda nueva propuesta debe seguir la plantilla estándar e incluir:

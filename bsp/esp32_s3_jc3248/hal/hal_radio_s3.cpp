@@ -11,21 +11,24 @@
 
 static const char* TAG_RADIO = "HAL_RADIO_S3";
 
+namespace cbdos {
+namespace bsp {
+
 namespace {
 
 struct RadioStateS3 {
     bool powered = true;
-    cbdos::radio::RadioMode mode = cbdos::radio::RadioMode::EspNow;
+    radio::RadioMode mode = radio::RadioMode::EspNow;
     uint8_t channel = 1;
     int8_t txPower = 20;
 
     bool wifiScanning = false;
-    cbdos::radio::WifiScanCallback wifiScanCb = nullptr;
+    radio::WifiScanCallback wifiScanCb = nullptr;
 
     bool channelSweeping = false;
     uint8_t sweepCurrentChannel = 1;
-    cbdos::radio::ChannelSweepCallback sweepCb = nullptr;
-    std::vector<cbdos::radio::DiscoveredNode> sweepNodes;
+    radio::ChannelSweepCallback sweepCb = nullptr;
+    std::vector<radio::DiscoveredNode> sweepNodes;
     uint32_t sweepStepStartTime = 0;
 };
 
@@ -39,11 +42,11 @@ void ensureWifiStarted() {
 }
 
 void applyRadioModeConfig() {
-    if (!s_radio.powered || s_radio.mode == cbdos::radio::RadioMode::Off) {
+    if (!s_radio.powered || s_radio.mode == radio::RadioMode::Off) {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
         esp_wifi_stop();
-        cbdos::system::log(cbdos::system::LogLevel::Info, TAG_RADIO, "Radio 2.4 GHz apagada (OFF)");
+        system::log(system::LogLevel::Info, TAG_RADIO, "Radio 2.4 GHz apagada (OFF)");
         return;
     }
 
@@ -61,113 +64,26 @@ void applyRadioModeConfig() {
     esp_wifi_set_channel(s_radio.channel, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
 
-    if (s_radio.mode == cbdos::radio::RadioMode::WifiSta) {
+    if (s_radio.mode == radio::RadioMode::WifiSta) {
         esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
-        cbdos::mesh::MeshEngine::getInstance().setRadioMode(cbdos::mesh::RadioMode::WifiIp);
-        cbdos::system::log(cbdos::system::LogLevel::Info, TAG_RADIO, "Radio en Modo Wi-Fi STA (Canal %u, TX %d dBm)", s_radio.channel, s_radio.txPower);
-    } else if (s_radio.mode == cbdos::radio::RadioMode::EspNowLR) {
+        mesh::MeshEngine::getInstance().setRadioMode(mesh::RadioMode::WifiIp);
+        system::log(system::LogLevel::Info, TAG_RADIO, "Radio en Modo Wi-Fi STA (Canal %u, TX %d dBm)", s_radio.channel, s_radio.txPower);
+    } else if (s_radio.mode == radio::RadioMode::EspNowLR) {
         esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
-        cbdos::mesh::MeshEngine::getInstance().setRadioMode(cbdos::mesh::RadioMode::EspNowLR);
-        cbdos::mesh::MeshEngine::getInstance().init(s_radio.channel);
-        cbdos::system::log(cbdos::system::LogLevel::Info, TAG_RADIO, "Radio en Modo ESP-NOW Long Range (LR) (Canal %u, TX +20 dBm)", s_radio.channel);
-    } else if (s_radio.mode == cbdos::radio::RadioMode::EspNow) {
+        mesh::MeshEngine::getInstance().setRadioMode(mesh::RadioMode::EspNowLR);
+        mesh::MeshEngine::getInstance().init(s_radio.channel);
+        system::log(system::LogLevel::Info, TAG_RADIO, "Radio en Modo ESP-NOW Long Range (LR) (Canal %u, TX +20 dBm)", s_radio.channel);
+    } else if (s_radio.mode == radio::RadioMode::EspNow) {
         esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
-        cbdos::mesh::MeshEngine::getInstance().setRadioMode(cbdos::mesh::RadioMode::EspNowNormal);
-        cbdos::mesh::MeshEngine::getInstance().init(s_radio.channel);
-        cbdos::system::log(cbdos::system::LogLevel::Info, TAG_RADIO, "Radio en Modo ESP-NOW Normal (Canal %u, TX %d dBm)", s_radio.channel, s_radio.txPower);
-    } else if (s_radio.mode == cbdos::radio::RadioMode::Hybrid) {
+        mesh::MeshEngine::getInstance().setRadioMode(mesh::RadioMode::EspNowNormal);
+        mesh::MeshEngine::getInstance().init(s_radio.channel);
+        system::log(system::LogLevel::Info, TAG_RADIO, "Radio en Modo ESP-NOW Normal (Canal %u, TX %d dBm)", s_radio.channel, s_radio.txPower);
+    } else if (s_radio.mode == radio::RadioMode::Hybrid) {
         esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR);
-        cbdos::mesh::MeshEngine::getInstance().setRadioMode(cbdos::mesh::RadioMode::EspNowNormal);
-        cbdos::mesh::MeshEngine::getInstance().init(s_radio.channel);
-        cbdos::system::log(cbdos::system::LogLevel::Info, TAG_RADIO, "Radio en Modo Hibrido Wi-Fi + ESP-NOW (Canal %u)", s_radio.channel);
+        mesh::MeshEngine::getInstance().setRadioMode(mesh::RadioMode::EspNowNormal);
+        mesh::MeshEngine::getInstance().init(s_radio.channel);
+        system::log(system::LogLevel::Info, TAG_RADIO, "Radio en Modo Hibrido Wi-Fi + ESP-NOW (Canal %u)", s_radio.channel);
     }
-}
-
-} // anonymous namespace
-
-namespace cbdos {
-namespace radio {
-
-bool init() {
-    RadioConfig cfg;
-    ConfigManager::getInstance().loadRadio(cfg);
-    s_radio.powered = cfg.enabled;
-    s_radio.mode = cfg.mode;
-    s_radio.channel = (cfg.channel >= 1 && cfg.channel <= 13) ? cfg.channel : 1;
-    s_radio.txPower = (cfg.txPower >= 2 && cfg.txPower <= 20) ? cfg.txPower : 20;
-
-    cbdos::system::log(cbdos::system::LogLevel::Info, TAG_RADIO,
-                       "Iniciando Radio desde NVS: Enabled=%s, Mode=%s, Canal=%u, TX=%d dBm",
-                       s_radio.powered ? "SI" : "NO", getModeName(s_radio.mode), s_radio.channel, s_radio.txPower);
-
-    applyRadioModeConfig();
-    return true;
-}
-
-bool isRadioPowered() {
-    return s_radio.powered && (s_radio.mode != RadioMode::Off);
-}
-
-void setRadioPower(bool on) {
-    s_radio.powered = on;
-    if (!on) {
-        s_radio.mode = RadioMode::Off;
-    } else if (s_radio.mode == RadioMode::Off) {
-        s_radio.mode = RadioMode::EspNow;
-    }
-    applyRadioModeConfig();
-}
-
-bool setMode(RadioMode mode) {
-    s_radio.mode = mode;
-    s_radio.powered = (mode != RadioMode::Off);
-    applyRadioModeConfig();
-    return true;
-}
-
-RadioMode getMode() {
-    return s_radio.mode;
-}
-
-const char* getModeName(RadioMode mode) {
-    switch (mode) {
-        case RadioMode::Off: return "Apagada (OFF)";
-        case RadioMode::WifiSta: return "Wi-Fi";
-        case RadioMode::EspNow: return "ESP-NOW Normal (1 Mbps)";
-        case RadioMode::EspNowLR: return "ESP-NOW LR (Long Range)";
-        case RadioMode::Hybrid: return "Hibrido (Wi-Fi + ESP-NOW)";
-        default: return "Desconocido";
-    }
-}
-
-uint8_t getChannel() {
-    return s_radio.channel;
-}
-
-bool setChannel(uint8_t channel) {
-    if (channel < 1 || channel > 13) return false;
-    s_radio.channel = channel;
-    if (s_radio.powered && s_radio.mode != RadioMode::Off) {
-        esp_wifi_set_promiscuous(true);
-        esp_err_t err = esp_wifi_set_channel(s_radio.channel, WIFI_SECOND_CHAN_NONE);
-        esp_wifi_set_promiscuous(false);
-        cbdos::mesh::MeshEngine::getInstance().setChannel(channel);
-        return (err == ESP_OK);
-    }
-    return true;
-}
-
-int8_t getTxPower() {
-    return s_radio.txPower;
-}
-
-bool setTxPower(int8_t dbm) {
-    if (dbm < 2 || dbm > 20) return false;
-    s_radio.txPower = dbm;
-    if (s_radio.powered && s_radio.mode != RadioMode::Off) {
-        esp_wifi_set_max_tx_power(dbm * 4);
-    }
-    return true;
 }
 
 // ─── Tarea de Escaneo Asíncrono en FreeRTOS ───
@@ -177,10 +93,10 @@ static void radioScanWorkerTask(void* param) {
         if (s_radio.wifiScanning) {
             ensureWifiStarted();
             int16_t n = WiFi.scanNetworks(false, true); // show_hidden = false, passive = false
-            std::vector<WifiApInfo> apList;
+            std::vector<radio::WifiApInfo> apList;
             if (n >= 0) {
                 for (int16_t i = 0; i < n; ++i) {
-                    WifiApInfo ap;
+                    radio::WifiApInfo ap;
                     ap.ssid = WiFi.SSID(i).c_str();
                     ap.rssi = static_cast<int8_t>(WiFi.RSSI(i));
                     ap.channel = static_cast<uint8_t>(WiFi.channel(i));
@@ -200,23 +116,31 @@ static void radioScanWorkerTask(void* param) {
         if (s_radio.channelSweeping) {
             ensureWifiStarted();
             s_radio.sweepNodes.clear();
-            cbdos::mesh::MeshEngine::getInstance().clearDiscoveredTowers();
+            mesh::MeshEngine::getInstance().clearDiscoveredTowers();
             uint8_t originalCh = s_radio.channel;
 
             for (uint8_t ch = 1; ch <= 13 && s_radio.channelSweeping; ch++) {
                 s_radio.sweepCurrentChannel = ch;
-                setChannel(ch);
+                
+                // Ajustar canal temporal
+                s_radio.channel = ch;
+                if (s_radio.powered && s_radio.mode != radio::RadioMode::Off) {
+                    esp_wifi_set_promiscuous(true);
+                    esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+                    esp_wifi_set_promiscuous(false);
+                    mesh::MeshEngine::getInstance().setChannel(ch);
+                }
 
                 // Enviar sondeo broadcast en este canal
-                cbdos::mesh::MeshEngine::getInstance().sendTowerProbe();
+                mesh::MeshEngine::getInstance().sendTowerProbe();
 
                 // Dwell time: escuchar durante 75 ms
                 vTaskDelay(pdMS_TO_TICKS(75));
 
                 // Recopilar nodos detectados en este canal
-                const auto& found = cbdos::mesh::MeshEngine::getInstance().getDiscoveredTowers();
+                const auto& found = mesh::MeshEngine::getInstance().getDiscoveredTowers();
                 for (const auto& t : found) {
-                    DiscoveredNode n;
+                    radio::DiscoveredNode n;
                     memcpy(n.mac, t.mac, 6);
                     n.short_id = t.short_id;
                     n.channel = (t.channel >= 1 && t.channel <= 13) ? t.channel : ch;
@@ -245,7 +169,13 @@ static void radioScanWorkerTask(void* param) {
             }
 
             // Restaurar canal original si terminó normalmente
-            setChannel(originalCh);
+            s_radio.channel = originalCh;
+            if (s_radio.powered && s_radio.mode != radio::RadioMode::Off) {
+                esp_wifi_set_promiscuous(true);
+                esp_wifi_set_channel(originalCh, WIFI_SECOND_CHAN_NONE);
+                esp_wifi_set_promiscuous(false);
+                mesh::MeshEngine::getInstance().setChannel(originalCh);
+            }
             s_radio.channelSweeping = false;
         }
 
@@ -253,36 +183,120 @@ static void radioScanWorkerTask(void* param) {
     }
 }
 
-bool startWifiScan(WifiScanCallback cb) {
-    if (!s_radio.powered || s_radio.mode == RadioMode::Off) {
-        setRadioPower(true);
-    }
-    s_radio.wifiScanCb = cb;
-    s_radio.wifiScanning = true;
+} // anonymous namespace
 
-    if (!s_scanTaskHandle) {
-        xTaskCreatePinnedToCore(radioScanWorkerTask, "RadioScanTask", 4096, nullptr, 1, &s_scanTaskHandle, 0);
+class S3RadioBackend : public radio::IRadioBackend {
+public:
+    ~S3RadioBackend() override = default;
+
+    bool init(const radio::RadioConfig& cfg) override {
+        s_radio.powered = cfg.enabled;
+        s_radio.mode = cfg.mode;
+        s_radio.channel = (cfg.channel >= 1 && cfg.channel <= 13) ? cfg.channel : 1;
+        s_radio.txPower = (cfg.txPower >= 2 && cfg.txPower <= 20) ? cfg.txPower : 20;
+
+        system::log(system::LogLevel::Info, TAG_RADIO,
+                    "Iniciando Radio S3: Enabled=%s, Mode=%d, Canal=%u, TX=%d dBm",
+                    s_radio.powered ? "SI" : "NO", (int)s_radio.mode, s_radio.channel, s_radio.txPower);
+
+        applyRadioModeConfig();
+        return true;
     }
-    return true;
+
+    bool setPower(bool on) override {
+        s_radio.powered = on;
+        if (!on) {
+            s_radio.mode = radio::RadioMode::Off;
+        } else if (s_radio.mode == radio::RadioMode::Off) {
+            s_radio.mode = radio::RadioMode::EspNow;
+        }
+        applyRadioModeConfig();
+        return true;
+    }
+
+    bool isPowered() const override {
+        return s_radio.powered && (s_radio.mode != radio::RadioMode::Off);
+    }
+
+    bool setMode(radio::RadioMode mode) override {
+        s_radio.mode = mode;
+        s_radio.powered = (mode != radio::RadioMode::Off);
+        applyRadioModeConfig();
+        return true;
+    }
+
+    radio::RadioMode getMode() const override {
+        return s_radio.mode;
+    }
+
+    bool setChannel(uint8_t channel) override {
+        if (channel < 1 || channel > 13) return false;
+        s_radio.channel = channel;
+        if (s_radio.powered && s_radio.mode != radio::RadioMode::Off) {
+            esp_wifi_set_promiscuous(true);
+            esp_err_t err = esp_wifi_set_channel(s_radio.channel, WIFI_SECOND_CHAN_NONE);
+            esp_wifi_set_promiscuous(false);
+            mesh::MeshEngine::getInstance().setChannel(channel);
+            return (err == ESP_OK);
+        }
+        return true;
+    }
+
+    uint8_t getChannel() const override {
+        return s_radio.channel;
+    }
+
+    bool setTxPower(int8_t dbm) override {
+        if (dbm < 2 || dbm > 20) return false;
+        s_radio.txPower = dbm;
+        if (s_radio.powered && s_radio.mode != radio::RadioMode::Off) {
+            esp_wifi_set_max_tx_power(dbm * 4);
+        }
+        return true;
+    }
+
+    int8_t getTxPower() const override {
+        return s_radio.txPower;
+    }
+
+    bool startWifiScan(radio::WifiScanCallback cb) override {
+        if (!s_radio.powered || s_radio.mode == radio::RadioMode::Off) {
+            setPower(true);
+        }
+        s_radio.wifiScanCb = cb;
+        s_radio.wifiScanning = true;
+
+        if (!s_scanTaskHandle) {
+            xTaskCreatePinnedToCore(radioScanWorkerTask, "RadioScanTask", 4096, nullptr, 1, &s_scanTaskHandle, 0);
+        }
+        return true;
+    }
+
+    bool startChannelSweep(radio::ChannelSweepCallback cb) override {
+        if (!s_radio.powered || s_radio.mode == radio::RadioMode::Off) {
+            setPower(true);
+        }
+        s_radio.sweepCb = cb;
+        s_radio.channelSweeping = true;
+
+        if (!s_scanTaskHandle) {
+            xTaskCreatePinnedToCore(radioScanWorkerTask, "RadioScanTask", 4096, nullptr, 1, &s_scanTaskHandle, 0);
+        }
+        return true;
+    }
+
+    void stopScan() override {
+        s_radio.wifiScanning = false;
+        s_radio.channelSweeping = false;
+    }
+};
+
+static S3RadioBackend s_s3RadioBackend;
+
+void initRadioBackendS3() {
+    radio::setRadioBackend(&s_s3RadioBackend);
+    Serial.println("[RADIO_S3] S3 Radio Backend inicializado e inyectado.");
 }
 
-bool startChannelSweep(ChannelSweepCallback cb) {
-    if (!s_radio.powered || s_radio.mode == RadioMode::Off) {
-        setRadioPower(true);
-    }
-    s_radio.sweepCb = cb;
-    s_radio.channelSweeping = true;
-
-    if (!s_scanTaskHandle) {
-        xTaskCreatePinnedToCore(radioScanWorkerTask, "RadioScanTask", 4096, nullptr, 1, &s_scanTaskHandle, 0);
-    }
-    return true;
-}
-
-void stopScan() {
-    s_radio.wifiScanning = false;
-    s_radio.channelSweeping = false;
-}
-
-} // namespace radio
+} // namespace bsp
 } // namespace cbdos

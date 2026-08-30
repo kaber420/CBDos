@@ -4,6 +4,7 @@
 #include "cbdos/storage.hpp"
 #include "cbdos/audio.hpp"
 #include "cbdos/network.hpp"
+#include "cbdos/radio.hpp"
 #include "cbdos/flasher.hpp"
 #include "cbdos/uart.hpp"
 #include "cbdos/ui.hpp"
@@ -22,6 +23,8 @@ namespace bsp {
     void initMeshTransportP4();
     void initHttpClientP4();
     void initHidDriverP4();
+    void initNetworkAdapterP4();
+    void initRadioBackendP4();
     cbdos::time::ITimeProvider* getEspIdfTimeProvider();
 }
 }
@@ -44,11 +47,16 @@ extern "C" void app_main(void) {
         cbdos::system::log(cbdos::system::LogLevel::Error, TAG, "Error inicializando NVS Flash: %s", esp_err_to_name(nvsRet));
     }
 
-    // Inyectar el backend de persistencia NVS, Transporte de Malla, Cliente HTTP y USB HID
+    // Inyectar el backend de persistencia NVS, Radio, Red, Transporte de Malla, Cliente HTTP y USB HID
     cbdos::bsp::initPersistenceBackend();
+    cbdos::bsp::initNetworkAdapterP4();
+    cbdos::bsp::initRadioBackendP4();
     cbdos::bsp::initMeshTransportP4();
     cbdos::bsp::initHttpClientP4();
     cbdos::bsp::initHidDriverP4();
+
+    // Inicializar radio determinista segun NVS (Offline-First)
+    cbdos::radio::init();
 
     // Conectar time <--> mesh mediante callbacks (sin acoplamiento directo entre módulos)
     cbdos::time::setTowerSyncRequestCallback([]() {

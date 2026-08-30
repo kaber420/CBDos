@@ -158,29 +158,23 @@ public:
 
 ---
 
-### 3.3. Adaptador de Red (`INetworkAdapter`)
-Estandariza la conectividad ya sea nativa (ESP32-S3) o a través de coprocesador SDIO (ESP32-P4 + C6).
+### 3.3. Adaptador de Red (`INetworkAdapter`) y Backend de Radio (`IRadioBackend`)
+Estandariza la conectividad ya sea nativa (ESP32-S3) o a través de coprocesador SDIO (ESP32-P4 + C6). *Para el análisis exhaustivo, consultar [arquitectura_abstraccion_radio_y_red_hal.md](file:///home/kaber420/Documentos/proyectos/cbdos/docs/network/arquitectura_abstraccion_radio_y_red_hal.md).*
 
 ```cpp
-// core/include/cbdos/network_adapter.hpp
+// core/include/cbdos/network.hpp
 #pragma once
+#include <cstdint>
 #include <string>
-#include <vector>
 
 namespace cbdos {
 namespace network {
 
-struct AccessPoint {
-    std::string ssid;
-    int8_t rssi;
-    uint8_t authmode;
-};
-
-enum class NetState {
+enum class NetStatus {
     Disconnected,
     Connecting,
     Connected,
-    Failed
+    Error
 };
 
 class INetworkAdapter {
@@ -188,13 +182,17 @@ public:
     virtual ~INetworkAdapter() = default;
 
     virtual bool init() = 0;
-    virtual bool scanAsync() = 0;
-    virtual std::vector<AccessPoint> getScanResults() = 0;
-    virtual bool connect(const std::string& ssid, const std::string& password) = 0;
-    virtual bool disconnect() = 0;
-    virtual NetState getState() const = 0;
+    virtual bool connectWifi(const char* ssid, const char* password) = 0;
+    virtual bool connectWifiStatic(const char* ssid, const char* password, const char* ip, const char* gateway, const char* subnet = "255.255.255.0", const char* dns = nullptr) = 0;
+    virtual void disconnectWifi() = 0;
+    virtual NetStatus getStatus() const = 0;
+    virtual bool isConnected() const = 0;
     virtual std::string getIpAddress() const = 0;
+    virtual int8_t getRssi() const = 0;
 };
+
+void setNetworkAdapter(INetworkAdapter* adapter);
+INetworkAdapter* getNetworkAdapter();
 
 } // namespace network
 } // namespace cbdos
