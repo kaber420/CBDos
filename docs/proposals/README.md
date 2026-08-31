@@ -13,6 +13,7 @@ Este directorio almacena las especificaciones de diseño, borradores de arquitec
 | **Navegador Vectorial Alternet (V-DOM v0.1.2)** | Visualizador de páginas web vectoriales ultraligeras en V-DOM (JSON/TLV) renderizadas con primitivas LVGL 9.5 sobre redes Mesh/ESP-NOW. | 💡 Propuesta / Borrador | [`../drafts/BORRADOR_NAVEGADOR_VECTORIAL_v0.1.2.md`](../drafts/BORRADOR_NAVEGADOR_VECTORIAL_v0.1.2.md) |
 | **Lua Sandbox & Scripting Web Seguro** | Entorno de aislamiento de Lua capado (Zero-Trust VM, hooks anti-bucle, cuota de RAM) para dinamismo estilo JavaScript en el Navegador Vectorial. | 💡 Propuesta / Borrador | [`proposal_vector_browser_lua_sandbox.md`](proposal_vector_browser_lua_sandbox.md) |
 | **Cliente SSH & Tool de Campo** | Terminal SSH interactiva ANSI + automatización de antenas Ubiquiti / MikroTik con scripts Lua. | 💡 Propuesta / Borrador | [`proposal_ssh_client_and_lua_field_admin.md`](proposal_ssh_client_and_lua_field_admin.md) |
+| **Tokenización Semántica & Optimización de Airtime (CBD-Net)** | Compresión semántica por conceptos (1/2/3 bytes por bancos), detección visual con marcador en UI y reducción radical de Airtime de RF con cifrado ChaCha20-Poly1305. | 💡 Propuesta Formal | [`proposal_semantic_concept_tokenization_and_airtime_optimization.md`](proposal_semantic_concept_tokenization_and_airtime_optimization.md) |
 | **Pasarela USB ↔ ESP-NOW Gateway** | Módem firmware C3, protocolo serial `0xAA 0x55` y pasarela Python/CBDos. | 🔬 En investigación | [`../network/plan_espnow_usb_bridge.md`](../network/plan_espnow_usb_bridge.md) |
 | **Monitor RAW 802.15.4** | Capturador y analizador de paquetes Thread / Zigbee directo en coprocesador C6. | 💡 Propuesta / Borrador | [`../drafts/draft_raw_802_15_4_protocol_design.md`](../drafts/draft_raw_802_15_4_protocol_design.md) |
 
@@ -23,7 +24,16 @@ Este directorio almacena las especificaciones de diseño, borradores de arquitec
 | Propuesta | Descripción | Estado | Archivo |
 | :--- | :--- | :--- | :--- |
 | **Pico-8 / Lua Cartridge Engine** | Motor de juegos y emulador de cartuchos virtuales en Lua con API gráfica dedicada. | 💡 Propuesta / Borrador | [`../drafts/BORRADOR_CARTRIDGE_LUA_PICO8.md`](../drafts/BORRADOR_CARTRIDGE_LUA_PICO8.md) |
+| **Historias Interactivas, Dating Sims & Juegos Vectoriales** | Motor de novelas visuales interactivas, dating sims estilo japonés clásico y juegos arcade vectoriales tipo Gamby con Lua + ThorVG/Lottie + Audio MP3/WAV. | 💡 Propuesta Formal | [`proposal_interactive_stories_dating_sims_and_vector_games_lua.md`](proposal_interactive_stories_dating_sims_and_vector_games_lua.md) |
 | **Sintetizador de Audio Interactivo** | Generador de formas de onda (Sine, Square, Saw, PWM), polifonía básica y teclado en pantalla. | 💡 Propuesta / Borrador | [`../drafts/plan_synth_app.md`](../drafts/plan_synth_app.md) |
+
+---
+
+## 🤖 Inteligencia Artificial, Asistente de Voz y Comunicación
+
+| Propuesta | Descripción | Estado | Archivo |
+| :--- | :--- | :--- | :--- |
+| **Asistente de Voz, TTS/STT & Chat Manos Libres** | Subsistema de voz conversacional (TTS local eSpeak/SAM + Streaming Neural, STT Push-to-Talk) para interactuar con agentes de IA (Ollama/DeepSeek/Claude) y lectura de chat en segundo plano. | 💡 Propuesta Formal | [`proposal_voice_assistant_tts_stt_ai_agents.md`](proposal_voice_assistant_tts_stt_ai_agents.md) |
 
 ---
 

@@ -24,11 +24,12 @@ El objetivo central de **CBDos** es consolidarse como un **Sistema Operativo Emb
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 🟡 FASE 2: Periféricos Locales & Multimedia                   [40% IN PROG] │
+│ 🟢 FASE 2: Periféricos Locales & Multimedia                   [100% DONE]   │
 │ • IStorageBackend (MicroSD SDMMC 4-bit P4 / SPI S3 / SPIFFS) ──► [✅ 100%]   │
-│ • IAudioSink & IAudioSource (I2S DMA / ES8311 / ES8388)      ──► [Siguiente]│
-│ • IUartBackend (Terminal Serie interactiva / Flasheador JP1) ──► [Pendiente]│
-│ • Purga definitiva de 'weak symbols' en cbdos_core.cpp       ──► [Pendiente]│
+│ • IAudioSink & IAudioSource (I2S DMA / ES8311 / S3 I2S)      ──► [✅ 100%]   │
+│ • IUartBackend (Terminal Serie multi-puerto / JP1 / MX 1.25) ──► [✅ 100%]   │
+│ • IGpioBackend (Control digital de pines para mochilas / Lua)──► [✅ 100%]   │
+│ • Purga definitiva de 'weak symbols' en cbdos_core.cpp       ──► [✅ 100%]   │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -58,6 +59,13 @@ El objetivo central de **CBDos** es consolidarse como un **Sistema Operativo Emb
 │ • Target de compilación en Linux nativo (SDL2 / LVGL en PC)                 │
 │ • Script scripts/verify_architecture.sh para validar cero includes ilegales│
 │ • Pipeline de pruebas y validación continua multi-target                    │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ⏳ FASE 7: Gaming, Fantasy Consoles & Cartridge Engine        [PROPUESTA]   │
+│ • Integración de Runtimes LIKO-12 (.lk12) y TIC-80 (.tic)                   │
+│ • CartridgeView con Gamepad Virtual táctil de baja latencia y audio I2S     │
+│ • Soporte para Gamepads externos USB HID y Bluetooth                        │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -75,14 +83,16 @@ El objetivo central de **CBDos** es consolidarse como un **Sistema Operativo Emb
 | **F1** | Emulación USB HID | `IHidDriver` | TinyUSB CDC/HID | USB HAL S3 | Teclado X11 / Virtual | ✅ **Completado** |
 | **F1** | Sincronización NTP | `ITimeProvider` | `esp_sntp` | `time.h` Arduino | `clock_gettime` | ✅ **Completado** |
 | **F2** | **Almacenamiento (SD/Flash)** | `IStorageBackend` | **SDMMC 4-bit + SPIFFS** | **SD SPI + LittleFS** | **Carpeta `./fs_root`** | ✅ **Completado** |
-| **F2** | **Salida de Audio (I2S)** | `IAudioSink` | **ES8311 I2S DMA** | **ES8388 / I2S DAC** | **ALSA / PulseAudio** | 🔄 *Siguiente paso* |
-| **F2** | **Micrófono (Entrada I2S)** | `IAudioSource` | **ES8311 ADC DMA** | **No-op / I2S Mic** | **Microphone Pulse** | 🔄 *Siguiente paso* |
-| **F2** | **Terminal Serie / JP1** | `IUartBackend` | **`driver/uart` UART1** | **`HardwareSerial`** | **PTY Terminal POSIX** | ⏳ *Pendiente F2* |
-| **F3** | **Sockets TCP/UDP Stream** | `ISocketStream` | **LwIP Sockets BSD** | **WiFiClient S3** | **POSIX Sockets** | ⏳ *Pendiente F3* |
+| **F2** | **Salida de Audio (I2S)** | `IAudioSink` | **ES8311 I2S DMA** | **JC3248 I2S DMA** | **ALSA / PulseAudio** | ✅ **Completado** |
+| **F2** | **Micrófono (Entrada I2S)** | `IAudioSource` | **ES8311 ADC DMA** | **No-op / I2S Mic** | **Microphone Pulse** | ✅ **Completado** |
+| **F2** | **Terminal Serie / JP1** | `IUartBackend` | **`driver/uart` UART1** | **`HardwareSerial`** | **PTY Terminal POSIX** | ✅ **Completado** |
+| **F2** | **Control GPIO Digital** | `IGpioBackend` | **`driver/gpio` nativo** | **Arduino GPIO Core** | **Virtual GPIO Pin Map** | ✅ **Completado** |
+| **F3** | **Sockets TCP/UDP Stream** | `ISocketStream` | **LwIP Sockets BSD** | **WiFiClient S3** | **POSIX Sockets** | 🔄 *Siguiente paso* |
 | **F4** | **Particiones y Cartuchos** | `IFlashPartitionManager`| **`esp_partition.h`** | **Particiones Custom** | **Memoria RAM Mapeada**| ⏳ *Pendiente F4* |
 | **F4** | **Flasheador OTA** | `IOtaUpdater` | **`esp_ota_ops.h`** | **Update.h Arduino** | **Escritura a Imagen** | ⏳ *Pendiente F4* |
 | **F5** | **Syscalls SDK / App Life** | `SystemApi` | **Llamadas Directas** | **Llamadas Directas** | **Sandbox / Proceso** | ⏳ *Pendiente F5* |
 | **F6** | **CI y Simulador Linux** | CMake Desktop Tool | **ESP-IDF 5.5** | **pioarduino** | **GCC Linux x86_64** | ⏳ *Pendiente F6* |
+| **F7** | **Fantasy Consoles & Gaming** | `ICartridgeRuntime` | **LIKO-12 / TIC-80 / Core**| **LIKO-12 Lua Lite** | **Render SDL2 / Native** | 📝 *Propuesta* |
 
 ---
 
@@ -153,3 +163,16 @@ Para dar por concluida cada una de las fases, se deben cumplir tres reglas invio
 
 3. **Validación Funcional en Hardware Real:**
    - La funcionalidad refactorizada debe probarse y responder con fluidez idéntica o superior al código original de `espOS32`.
+
+---
+
+## 🌐 5. Roadmap de Ecosistema y Red Social Descentralizada (CBD-Net)
+
+| Módulo / Característica | Descripción y Enfoque Técnico | Especificación Asociada | Estado |
+| :--- | :--- | :--- | :--- |
+| **Motor Semántico de Conceptos** | Tokenización de vocabulario denso (1/2/3 bytes con 32 bancos temáticos) para reducir textos a 8-15 bytes y eliminar errores de traducción regional. | [`docs/proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md`](../proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md) | 💡 Propuesta Formal |
+| **Foros Técnicos Descentralizados** | Tableros temáticos estilo Clan GSM / Reddit (`#hardware`, `#esquemas`, `#reparacion`) con suscripción selectiva a hilos y autores. | [`docs/proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md`](../proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md) | 💡 Propuesta Formal |
+| **Sincronización por Delta (Cherry-Picking)** | Protocolo de sincronización incremental (`SINCE_ID` / Cursor) para descargar exclusivamente respuestas o posts no presentes en la caché MicroSD. | [`docs/proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md`](../proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md) | 💡 Propuesta Formal |
+| **Winks & Reacciones Vectoriales** | Animaciones de pantalla completa ThorVG/Lottie a 60 FPS con sonido local ES8311, activadas mediante tokens de radio de 1 o 2 bytes. | [`docs/proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md`](../proposals/proposal_semantic_concept_tokenization_and_airtime_optimization.md) | 💡 Propuesta Formal |
+| **Transporte Híbrido Multicapa** | Descarga rápida de assets pesados vía WiFi / FLRC 2.4 GHz y comunicación de campo de ultra bajo consumo vía LoRa / ESP-NOW. | [`docs/proposals/proposal_backpack_nfc_hotplug_hardware_modules.md`](../proposals/proposal_backpack_nfc_hotplug_hardware_modules.md) | 💡 Propuesta Formal |
+

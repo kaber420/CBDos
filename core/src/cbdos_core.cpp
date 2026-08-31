@@ -75,22 +75,7 @@ const char* getVersion() {
     return "0.2.0-CyBerDeck";
 }
 
-namespace system {
-    __attribute__((weak)) float getCpuTemperature() { return 0.0f; }
-}
-
-namespace audio {
-    __attribute__((weak)) bool init() { return true; }
-    __attribute__((weak)) bool playStream(const char*) { return true; }
-    __attribute__((weak)) bool playFile(const char*) { return true; }
-    __attribute__((weak)) void stop() {}
-    __attribute__((weak)) void pause() {}
-    __attribute__((weak)) void resume() {}
-    __attribute__((weak)) void setVolume(uint8_t) {}
-    __attribute__((weak)) uint8_t getVolume() { return 75; }
-    __attribute__((weak)) AudioStats getStats() { return AudioStats{}; }
-    __attribute__((weak)) size_t readAudio(void*, size_t, uint32_t) { return 0; }
-}
-
 } // namespace cbdos
+
+
 

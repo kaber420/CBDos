@@ -6,6 +6,7 @@
 #include "cbdos/display.hpp"
 #include "cbdos/input.hpp"
 #include "cbdos/uart.hpp"
+#include "cbdos/gpio.hpp"
 #include "cbdos/memory.hpp"
 #include "cbdos/hid.hpp"
 #include "cbdos/ducky.hpp"
@@ -190,17 +191,30 @@ static int lua_cpu_temp(lua_State* L) {
 // GPIO API
 // ─────────────────────────────────────────────────────────────────────────────
 static int lua_pin_mode(lua_State* L) {
-    (void)L;
-    return 0;
+    int pin = (int)luaL_checkinteger(L, 1);
+    int modeInt = (int)luaL_checkinteger(L, 2);
+    cbdos::gpio::PinMode mode = cbdos::gpio::PinMode::Input;
+    if (modeInt == 1) mode = cbdos::gpio::PinMode::Output;
+    else if (modeInt == 2) mode = cbdos::gpio::PinMode::InputPullUp;
+    else if (modeInt == 3) mode = cbdos::gpio::PinMode::InputPullDown;
+
+    bool ok = cbdos::gpio::setPinMode(pin, mode);
+    lua_pushboolean(L, ok);
+    return 1;
 }
 
 static int lua_digital_write(lua_State* L) {
-    (void)L;
-    return 0;
+    int pin = (int)luaL_checkinteger(L, 1);
+    int val = (int)luaL_checkinteger(L, 2);
+    bool ok = cbdos::gpio::digitalWrite(pin, val ? cbdos::gpio::PinLevel::High : cbdos::gpio::PinLevel::Low);
+    lua_pushboolean(L, ok);
+    return 1;
 }
 
 static int lua_digital_read(lua_State* L) {
-    lua_pushinteger(L, 0);
+    int pin = (int)luaL_checkinteger(L, 1);
+    cbdos::gpio::PinLevel level = cbdos::gpio::digitalRead(pin);
+    lua_pushinteger(L, (level == cbdos::gpio::PinLevel::High) ? 1 : 0);
     return 1;
 }
 

@@ -79,12 +79,34 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | **ESP Externo (JC3248W535 S3)** | **GPIO 15** | **GPIO 16** | **GPIO 0** | Manual / -1 | 115200 | `/sdcard/firmware.bin` |
 | **Personalizado / Manual** | Configurable | Configurable | Configurable | Configurable | Configurable | Embebido / MicroSD |
 
-### 📟 Terminal Serie / Monitor UART (`SerialTerminalView`)
-| Plataforma | Pin TX (CBDos -> Target) | Pin RX (CBDos <- Target) | Preset UI | Velocidades Soportadas |
-| :--- | :--- | :--- | :--- | :--- |
-| **ESP32-P4 (JC4880)** | **GPIO 32** (JP1 Pin 19) | **GPIO 28** (JP1 Pin 21) | `JP1 (TX:32 RX:28)` | 9600 - 921600 bps |
-| **ESP32-P4 (Alternativo)** | **GPIO 50** (JP1 Pin 11) | **GPIO 49** (JP1 Pin 13) | `JP1 Alt (TX:50 RX:49)` | 9600 - 921600 bps |
-| **ESP32-S3 (JC3248W535)** | **GPIO 15** | **GPIO 16** | `S3 Ext (TX:15 RX:16)` | 9600 - 921600 bps |
+### 🔌 Tabla de Conectores Físicos de la Placa (JC4880P443C)
+
+| Nº en Diagrama | Tipo de Conector / Puerto | Pines / Señales | Función en CBDos |
+| :--- | :--- | :--- | :--- |
+| **1** | Micrófono Integrado | I2S DIN: GPIO 48 | Grabación de notas de voz (`IAudioSource` / ES8311) |
+| **2** | MX 1.25 2P Speaker | Salida DAC ES8311 + PA (GPIO 11) | Altavoz principal 4Ω/8Ω (`IAudioSink`) |
+| **3** | MX 1.25 2P Batería Litio | VBAT / GND | Entrada de batería LiPo 3.7V con circuito de carga |
+| **4** | Type-C (Full-Speed USB 1) | USB D+ / D- nativo | Consola serie/JTAG, flasheo inicial y CLI en caliente |
+| **5** | Type-C (High-Speed USB 2) | USB OTG 2.0 (480 Mbps) | Host USB (Fastboot, Teclado/Ratón, USB CDC-ACM) |
+| **6** | Pin Header 2×13 2.54 (JP1) | GPIOs 52, 51, 50, 49, 35, 34, 32, 28, I2C, 3V3, 5V, GND | Expansión para Mochilas/Backpacks (NFC, LoRa) y Flasheo C6 |
+| **7** | MX 1.25 4P UART0 | TX: GPIO 38, RX: GPIO 37, 3V3, GND | Puerto serie de depuración / telemetría externa |
+| **8** | Conector Cámara CSI | MIPI CSI 2-Lanes | Interfaz de cámara de alta velocidad |
+| **9** | MX 1.25 4P UART Interface | TX / RX dedicado, VCC, GND | Segundo puerto UART físico para periféricos externos |
+| **10** | MX 1.25 4P RS485 Interface | RS485 A, B, VCC, GND | Bus diferencial industrial RS485 |
+| **11** | SH 1.0 4P I2C Interface | SDA: GPIO 7, SCL: GPIO 8, 3V3, GND | Bus I2C externo para sensores y periféricos |
+| **12** | Módulo Core JC-ESP32P4-M3 | ESP32-P4 + ESP32-C6 | SoC Dual-Core 400MHz + 32MB PSRAM + Coprocesador WiFi 6 |
+
+---
+
+### 📟 Presets de Puertos Serie UART (`SerialTerminalView`)
+
+| Plataforma | Puerto Físico | Pin TX | Pin RX | Preset UI | Velocidades |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **ESP32-P4** | **Cabecera JP1 (C6/Mochila)** | **GPIO 32** | **GPIO 28** | `JP1 (TX:32 RX:28)` | 9600 - 921600 bps |
+| **ESP32-P4** | **Cabecera JP1 (Alt 1)** | **GPIO 50** | **GPIO 49** | `JP1 Alt (TX:50 RX:49)` | 9600 - 921600 bps |
+| **ESP32-P4** | **Conector MX 1.25 UART0 (7)** | **GPIO 38** | **GPIO 37** | `MX 1.25 UART0 (TX:38 RX:37)` | 9600 - 921600 bps |
+| **ESP32-P4** | **Conector MX 1.25 UART (9)** | Configurable | Configurable | `MX 1.25 UART Aux` | 9600 - 921600 bps |
+| **ESP32-S3** | **Header Externo JC3248** | **GPIO 15** | **GPIO 16** | `S3 Ext (TX:15 RX:16)` | 9600 - 921600 bps |
 
 ---
 
