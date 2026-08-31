@@ -71,6 +71,7 @@ idf_component_register(
         "src/network/http_client.cpp"
         "src/network/network.cpp"
         "src/network/radio.cpp"
+        "src/network/socket.cpp"
         "src/time/TimeManager.cpp"
         "src/hid/HidManager.cpp"
         "src/hid/DuckyInterpreter.cpp"

@@ -11,11 +11,7 @@
 #include <cstring>
 #include <cstdio>
 #include <vector>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
+#include "cbdos/socket.hpp"
 
 static const char* TAG = "TlvBrowser";
 
@@ -280,47 +276,20 @@ void TlvBrowserView::fetchTask(void* param) {
 
     CBD_LOG_I(TAG, "Conectando a Gateway en %s:%u (path: %s)...", p->host.c_str(), p->port, p->path.c_str());
 
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
-        CBD_LOG_E(TAG, "No se pudo crear socket");
-        UIManager::showToast("Error de socket");
+    auto client = cbdos::network::createSocket(cbdos::network::SocketType::Tcp);
+    if (!client) {
+        CBD_LOG_E(TAG, "No se pudo instanciar socket client");
+        UIManager::showToast("Error interno de socket");
         delete p;
         cbdos::rtos::deleteTask(nullptr);
         return;
     }
 
-    // Timeout de 3 segundos
-    struct timeval tv;
-    tv.tv_sec = 3;
-    tv.tv_usec = 0;
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-    struct sockaddr_in dest_addr;
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(p->port);
-    dest_addr.sin_addr.s_addr = inet_addr(p->host.c_str());
-
-    if (dest_addr.sin_addr.s_addr == INADDR_NONE) {
-        struct hostent *hp = gethostbyname(p->host.c_str());
-        if (hp != NULL) {
-            memcpy(&dest_addr.sin_addr, hp->h_addr_list[0], hp->h_length);
-        } else {
-            CBD_LOG_E(TAG, "DNS fallo para %s", p->host.c_str());
-            close(sock);
-            UIManager::showToast("Error de host/DNS");
-            delete p;
-            cbdos::rtos::deleteTask(nullptr);
-            return;
-        }
-    }
-
-    if (connect(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr)) != 0) {
+    if (!client->connect(p->host, p->port, 4000)) {
         CBD_LOG_E(TAG, "Fallo al conectar con %s:%u", p->host.c_str(), p->port);
         char errBuf[64];
         snprintf(errBuf, sizeof(errBuf), "No se pudo conectar a %s:%u", p->host.c_str(), p->port);
         UIManager::showToast(errBuf);
-        close(sock);
         delete p;
         cbdos::rtos::deleteTask(nullptr);
         return;
@@ -348,19 +317,19 @@ void TlvBrowserView::fetchTask(void* param) {
     }
 
     // 2. Enviar petición
-    send(sock, packet, total_tx, 0);
-    CBD_LOG_I(TAG, "Enviados %u bytes al Gateway", (unsigned int)total_tx);
+    int sentBytes = client->send(packet, total_tx);
+    CBD_LOG_I(TAG, "Enviados %d bytes al Gateway (total_tx: %u)", sentBytes, (unsigned int)total_tx);
 
     // 3. Recibir respuesta
     std::vector<uint8_t> response_buf;
     uint8_t rx_chunk[1024];
     int r;
-    while ((r = recv(sock, rx_chunk, sizeof(rx_chunk), 0)) > 0) {
+    while ((r = client->recv(rx_chunk, sizeof(rx_chunk), 3000)) > 0) {
         response_buf.insert(response_buf.end(), rx_chunk, rx_chunk + r);
         if (response_buf.size() > 65536) break;
     }
 
-    close(sock);
+    client->close();
     CBD_LOG_I(TAG, "Recibidos %u bytes desde Gateway", (unsigned int)response_buf.size());
 
     if (!response_buf.empty()) {

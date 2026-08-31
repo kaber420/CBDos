@@ -27,6 +27,7 @@ namespace bsp {
     void initGpioBackendS3();
     void initMeshTransportS3();
     void initHttpClientS3();
+    void initSocketBackendS3();
     void initHidDriverS3();
     void initNetworkAdapterS3();
     void initRadioBackendS3();
@@ -79,13 +80,14 @@ void setup() {
     cbdos::system::sleepMs(500);
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "=== Iniciando CyBerDeck OS (CBDos v0.2.1) [Target: ESP32-S3] ===");
     
-    // Inyectar el backend de persistencia NVS, Almacenamiento, Audio, UART, GPIO, Radio, Red, Transporte de Malla, Cliente HTTP y USB HID
+    // Inyectar el backend de persistencia NVS, Almacenamiento, Audio, UART, GPIO, Radio, Red, Sockets, Transporte de Malla, Cliente HTTP y USB HID
     cbdos::bsp::initPersistenceBackend();
     cbdos::bsp::initStorageBackend();
     cbdos::bsp::initAudioBackendS3();
     cbdos::bsp::initUartBackendS3();
     cbdos::bsp::initGpioBackendS3();
     cbdos::bsp::initNetworkAdapterS3();
+    cbdos::bsp::initSocketBackendS3();
     cbdos::bsp::initRadioBackendS3();
     cbdos::bsp::initMeshTransportS3();
     cbdos::bsp::initHttpClientS3();

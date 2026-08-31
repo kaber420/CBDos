@@ -18,6 +18,7 @@ idf_component_register(
         "../hal/hal_mesh_p4.cpp"
         "../hal/hal_radio_p4.cpp"
         "../hal/hal_http_p4.cpp"
+        "../hal/hal_socket_p4.cpp"
         "../hal/hal_hid_p4.cpp"
         "../hal/EspIdfTimeProvider.cpp"
     INCLUDE_DIRS 

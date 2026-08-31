@@ -2,15 +2,11 @@
 #include "cbdos/network.hpp"
 #include "cbdos/log.hpp"
 #include "cbdos/memory.hpp"
+#include "cbdos/socket.hpp"
 #include "mp3dec.h"
 #include "aacdec.h"
 #include <cstring>
 #include <algorithm>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
 
 static const char* TAG = "AudioPlayer";
 
@@ -302,11 +298,11 @@ void AudioPlayer::streamPlaybackTask(void* param) {
 void AudioPlayer::runStreamPlayback() {
     std::string currentUrl = m_currentFile;
     int maxRedirects = 5;
-    int sock = -1;
+    std::unique_ptr<cbdos::network::ISocketStream> client;
 
     for (int r = 0; r < maxRedirects && !m_stopRequested; r++) {
         std::string host;
-        std::string port = "80";
+        uint16_t portNum = 80;
         std::string path = "/";
 
         std::string urlToParse = currentUrl;
@@ -314,7 +310,7 @@ void AudioPlayer::runStreamPlayback() {
             urlToParse = urlToParse.substr(7);
         } else if (urlToParse.rfind("https://", 0) == 0) {
             urlToParse = urlToParse.substr(8);
-            port = "443";
+            portNum = 443;
         }
 
         size_t slashIdx = urlToParse.find('/');
@@ -328,45 +324,23 @@ void AudioPlayer::runStreamPlayback() {
 
         size_t colonIdx = host.find(':');
         if (colonIdx != std::string::npos) {
-            port = host.substr(colonIdx + 1);
+            portNum = (uint16_t)std::atoi(host.substr(colonIdx + 1).c_str());
             host = host.substr(0, colonIdx);
         }
 
-        CBD_LOG_I(TAG, "[Stream] Conectando a %s:%s%s", host.c_str(), port.c_str(), path.c_str());
+        CBD_LOG_I(TAG, "[Stream] Conectando a %s:%u%s", host.c_str(), portNum, path.c_str());
 
-        struct addrinfo hints;
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-
-        struct addrinfo* res = nullptr;
-        int err = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
-        if (err != 0 || !res) {
-            CBD_LOG_E(TAG, "[Stream] getaddrinfo fallo para %s", host.c_str());
+        client = cbdos::network::createSocket(cbdos::network::SocketType::Tcp);
+        if (!client) {
+            CBD_LOG_E(TAG, "[Stream] Fallo al instanciar socket");
             break;
         }
 
-        sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        if (sock < 0) {
-            CBD_LOG_E(TAG, "[Stream] Fallo al crear socket");
-            freeaddrinfo(res);
+        if (!client->connect(host, portNum, 6000)) {
+            CBD_LOG_E(TAG, "[Stream] Fallo al conectar socket con %s:%u", host.c_str(), portNum);
+            client.reset();
             break;
         }
-
-        struct timeval tv;
-        tv.tv_sec = 6;
-        tv.tv_usec = 0;
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-        if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
-            CBD_LOG_E(TAG, "[Stream] Fallo al conectar socket con %s:%s", host.c_str(), port.c_str());
-            close(sock);
-            sock = -1;
-            freeaddrinfo(res);
-            break;
-        }
-        freeaddrinfo(res);
 
         char req[512];
         int reqLen = snprintf(req, sizeof(req),
@@ -378,20 +352,19 @@ void AudioPlayer::runStreamPlayback() {
             "Connection: close\r\n\r\n",
             path.c_str(), host.c_str());
 
-        if (send(sock, req, reqLen, 0) < 0) {
+        if (client->send((const uint8_t*)req, reqLen) < 0) {
             CBD_LOG_E(TAG, "[Stream] Error enviando HTTP GET");
-            close(sock);
-            sock = -1;
+            client.reset();
             break;
         }
 
         // Leer cabecera HTTP
         std::string headerBuf;
-        char c;
+        uint8_t c;
         while (headerBuf.find("\r\n\r\n") == std::string::npos && !m_stopRequested) {
-            int n = recv(sock, &c, 1, 0);
+            int n = client->recv(&c, 1, 3000);
             if (n <= 0) break;
-            headerBuf.push_back(c);
+            headerBuf.push_back((char)c);
             if (headerBuf.size() > 4096) break;
         }
 
@@ -406,8 +379,7 @@ void AudioPlayer::runStreamPlayback() {
                 std::string newLoc = headerBuf.substr(locPos + 10, locEnd - (locPos + 10));
                 CBD_LOG_I(TAG, "[Stream] Redirigiendo a: %s", newLoc.c_str());
                 currentUrl = newLoc;
-                close(sock);
-                sock = -1;
+                client.reset();
                 continue;
             }
         }
@@ -416,8 +388,8 @@ void AudioPlayer::runStreamPlayback() {
         break;
     }
 
-    if (sock < 0 || m_stopRequested) {
-        if (sock >= 0) close(sock);
+    if (!client || !client->isConnected() || m_stopRequested) {
+        if (client) client->close();
         m_isPlaying = false;
         m_taskHandle = nullptr;
         return;
@@ -426,7 +398,7 @@ void AudioPlayer::runStreamPlayback() {
     HMP3Decoder hMP3Decoder = MP3InitDecoder();
     if (!hMP3Decoder) {
         CBD_LOG_E(TAG, "[Stream] Fallo al inicializar decoder Helix MP3");
-        close(sock);
+        client->close();
         m_isPlaying = false;
         m_taskHandle = nullptr;
         return;
@@ -441,7 +413,7 @@ void AudioPlayer::runStreamPlayback() {
         if (inBuf) cbdos::mem::free_mem(inBuf);
         if (pcmBuf) cbdos::mem::free_mem(pcmBuf);
         MP3FreeDecoder(hMP3Decoder);
-        close(sock);
+        client->close();
         m_isPlaying = false;
         m_taskHandle = nullptr;
         return;
@@ -465,7 +437,7 @@ void AudioPlayer::runStreamPlayback() {
             }
             readPtr = inBuf;
             size_t toRead = IN_BUF_SIZE - bytesLeft;
-            int nRead = recv(sock, inBuf + bytesLeft, toRead, 0);
+            int nRead = client->recv(inBuf + bytesLeft, toRead, 5000);
             if (nRead <= 0) {
                 CBD_LOG_W(TAG, "[Stream] Socket cerrado o timeout por el servidor");
                 break;
@@ -480,7 +452,7 @@ void AudioPlayer::runStreamPlayback() {
                 bytesLeft = 3;
             }
             readPtr = inBuf;
-            taskYIELD();
+            cbdos::rtos::sleepMs(1);
             continue;
         }
 
@@ -512,11 +484,11 @@ void AudioPlayer::runStreamPlayback() {
             totalSamplesDecoded += (info.outputSamps / (info.nChans ? info.nChans : 2));
             m_currentSec = totalSamplesDecoded / (m_sampleRate ? m_sampleRate : 44100);
         } else {
-            taskYIELD();
+            cbdos::rtos::sleepMs(1);
         }
     }
 
-    close(sock);
+    client->close();
     cbdos::mem::free_mem(inBuf);
     cbdos::mem::free_mem(pcmBuf);
     MP3FreeDecoder(hMP3Decoder);
@@ -622,7 +594,7 @@ void AudioPlayer::runMp3Playback() {
                 bytesLeft = 3;
             }
             readPtr = inBuf;
-            taskYIELD();
+            cbdos::rtos::sleepMs(1);
             continue;
         }
 
@@ -665,9 +637,9 @@ void AudioPlayer::runMp3Playback() {
         } else if (err != ERR_MP3_INDATA_UNDERFLOW) {
             readPtr++;
             bytesLeft--;
-            taskYIELD();
+            cbdos::rtos::sleepMs(1);
         } else {
-            taskYIELD();
+            cbdos::rtos::sleepMs(1);
         }
     }
 
