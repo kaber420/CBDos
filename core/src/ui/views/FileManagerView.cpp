@@ -238,6 +238,17 @@ void FileManagerView::renderPathBar(lv_obj_t* parent) {
     lv_obj_set_style_text_font(m_pathLabel, &lv_font_montserrat_12, 0);
     updatePathLabel();
 
+    // Botón Modo Forense (Toggle)
+    m_btnForensic = lv_button_create(pathBar);
+    lv_obj_set_size(m_btnForensic, 32, 30);
+    DefaultTheme::applyButton(m_btnForensic, 6);
+    lv_obj_add_event_cb(m_btnForensic, btnForensicClickCb, LV_EVENT_CLICKED, this);
+    lv_obj_t* lblForen = lv_label_create(m_btnForensic);
+    lv_label_set_text(lblForen, LV_SYMBOL_EYE_OPEN);
+    lv_obj_set_style_text_font(lblForen, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblForen);
+    updateForensicButton();
+
     // Botón Refrescar
     lv_obj_t* btnRef = lv_button_create(pathBar);
     lv_obj_set_size(btnRef, 32, 30);
@@ -249,10 +260,26 @@ void FileManagerView::renderPathBar(lv_obj_t* parent) {
     lv_obj_center(lblRef);
 }
 
+void FileManagerView::updateForensicButton() {
+    if (!m_btnForensic || !lv_obj_is_valid(m_btnForensic)) return;
+
+    if (m_forensicMode) {
+        lv_obj_set_style_bg_color(m_btnForensic, lv_color_hex(0x5C2B09), 0);
+        lv_obj_set_style_border_color(m_btnForensic, lv_color_hex(0xF59E0B), 0);
+        lv_obj_set_style_border_width(m_btnForensic, 1, 0);
+    } else {
+        lv_obj_set_style_bg_color(m_btnForensic, lv_color_hex(0x1B1E29), 0);
+        lv_obj_set_style_border_width(m_btnForensic, 0, 0);
+    }
+}
+
 void FileManagerView::updatePathLabel() {
     if (!m_pathLabel || !lv_obj_is_valid(m_pathLabel)) return;
     std::string prefix = (m_currentStorage == cbdos::storage::StorageType::SdCard) ? "[SD] " : "[Flash] ";
     std::string display = prefix + m_currentPath;
+    if (m_forensicMode) {
+        display += " [REC-ON]";
+    }
     lv_label_set_text(m_pathLabel, display.c_str());
 }
 
@@ -324,7 +351,7 @@ void FileManagerView::renderFileList(lv_obj_t* parent) {
         }
     }
 
-    std::vector<cbdos::storage::FileEntry> files = cbdos::storage::listDir(queryPath.c_str());
+    std::vector<cbdos::storage::FileEntry> files = cbdos::storage::listDir(queryPath.c_str(), m_forensicMode);
 
     // Ordenar: primero directorios, luego archivos alfabéticamente
     std::sort(files.begin(), files.end(), [](const cbdos::storage::FileEntry& a, const cbdos::storage::FileEntry& b) {
@@ -336,7 +363,7 @@ void FileManagerView::renderFileList(lv_obj_t* parent) {
 
     if (files.empty()) {
         lv_obj_t* emptyLabel = lv_label_create(parent);
-        lv_label_set_text(emptyLabel, "(Carpeta vacia o sin acceso)");
+        lv_label_set_text(emptyLabel, m_forensicMode ? "(Sin archivos borrados detectados)" : "(Carpeta vacia o sin acceso)");
         lv_obj_set_style_text_color(emptyLabel, DefaultTheme::getMutedTextColor(), 0);
         lv_obj_set_style_text_font(emptyLabel, &lv_font_montserrat_12, 0);
         lv_obj_set_style_margin_top(emptyLabel, 20, 0);
@@ -355,10 +382,21 @@ void FileManagerView::renderFileList(lv_obj_t* parent) {
         lv_obj_set_style_pad_all(itemRow, 4, 0);
         lv_obj_set_style_pad_column(itemRow, 8, 0);
 
+        if (item.isDeleted) {
+            lv_obj_set_style_bg_color(itemRow, lv_color_hex(0x2E1B11), 0);
+            lv_obj_set_style_border_color(itemRow, lv_color_hex(0xF59E0B), 0);
+            lv_obj_set_style_border_width(itemRow, 1, 0);
+        }
+
         // Icono según tipo
         const char* icon = LV_SYMBOL_FILE;
         uint32_t iconColor = 0xFFFFFF;
-        getFileIconAndColor(item.name, item.isDirectory, &icon, &iconColor);
+        if (item.isDeleted) {
+            icon = LV_SYMBOL_TRASH;
+            iconColor = 0xF59E0B; // Ámbar forense
+        } else {
+            getFileIconAndColor(item.name, item.isDirectory, &icon, &iconColor);
+        }
 
         lv_obj_t* iconLbl = lv_label_create(itemRow);
         lv_label_set_text(iconLbl, icon);
@@ -377,14 +415,19 @@ void FileManagerView::renderFileList(lv_obj_t* parent) {
         DefaultTheme::disableScroll(textCont);
 
         lv_obj_t* nameLbl = lv_label_create(textCont);
-        lv_label_set_text(nameLbl, item.name.c_str());
+        std::string displayName = item.isDeleted ? ("[REC] " + item.name) : item.name;
+        lv_label_set_text(nameLbl, displayName.c_str());
         lv_label_set_long_mode(nameLbl, LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_color(nameLbl, DefaultTheme::getTextColor(), 0);
+        lv_obj_set_style_text_color(nameLbl, item.isDeleted ? lv_color_hex(0xF59E0B) : DefaultTheme::getTextColor(), 0);
         lv_obj_set_style_text_font(nameLbl, &lv_font_montserrat_12, 0);
 
         lv_obj_t* sizeLbl = lv_label_create(textCont);
         if (item.isDirectory) {
             lv_label_set_text(sizeLbl, "<Directorio>");
+        } else if (item.isDeleted) {
+            char recBuf[64];
+            snprintf(recBuf, sizeof(recBuf), "%s (Borrador / Recuperable)", formatBytes(item.size).c_str());
+            lv_label_set_text(sizeLbl, recBuf);
         } else {
             lv_label_set_text(sizeLbl, formatBytes(item.size).c_str());
         }
@@ -402,21 +445,23 @@ void FileManagerView::renderFileList(lv_obj_t* parent) {
         lv_obj_add_flag(itemRow, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(itemRow, itemClickCb, LV_EVENT_CLICKED, ctx);
 
-        // Botón Eliminar (Papelera)
-        lv_obj_t* delBtn = lv_button_create(itemRow);
-        lv_obj_set_size(delBtn, 32, 32);
-        DefaultTheme::applyButton(delBtn, 6);
-        lv_obj_set_style_bg_color(delBtn, lv_color_hex(0x3B1D22), 0);
-        lv_obj_set_style_border_color(delBtn, lv_color_hex(0xFF453A), 0);
-        lv_obj_set_style_border_width(delBtn, 1, 0);
+        if (!item.isDeleted) {
+            // Botón Eliminar (Papelera)
+            lv_obj_t* delBtn = lv_button_create(itemRow);
+            lv_obj_set_size(delBtn, 32, 32);
+            DefaultTheme::applyButton(delBtn, 6);
+            lv_obj_set_style_bg_color(delBtn, lv_color_hex(0x3B1D22), 0);
+            lv_obj_set_style_border_color(delBtn, lv_color_hex(0xFF453A), 0);
+            lv_obj_set_style_border_width(delBtn, 1, 0);
 
-        lv_obj_t* delIcon = lv_label_create(delBtn);
-        lv_label_set_text(delIcon, LV_SYMBOL_TRASH);
-        lv_obj_set_style_text_color(delIcon, lv_color_hex(0xFF453A), 0);
-        lv_obj_set_style_text_font(delIcon, &lv_font_montserrat_12, 0);
-        lv_obj_center(delIcon);
+            lv_obj_t* delIcon = lv_label_create(delBtn);
+            lv_label_set_text(delIcon, LV_SYMBOL_TRASH);
+            lv_obj_set_style_text_color(delIcon, lv_color_hex(0xFF453A), 0);
+            lv_obj_set_style_text_font(delIcon, &lv_font_montserrat_12, 0);
+            lv_obj_center(delIcon);
 
-        lv_obj_add_event_cb(delBtn, itemDeleteClickCb, LV_EVENT_CLICKED, ctx);
+            lv_obj_add_event_cb(delBtn, itemDeleteClickCb, LV_EVENT_CLICKED, ctx);
+        }
     }
 }
 
@@ -426,6 +471,16 @@ void FileManagerView::refreshCurrentView() {
     }
     updatePathLabel();
     updateStorageInfo();
+    updateForensicButton();
+}
+
+void FileManagerView::btnForensicClickCb(lv_event_t* e) {
+    FileManagerView* self = static_cast<FileManagerView*>(lv_event_get_user_data(e));
+    if (self) {
+        self->m_forensicMode = !self->m_forensicMode;
+        self->refreshCurrentView();
+        UIManager::showToast(self->m_forensicMode ? "Modo Forense: Escaneo activado" : "Modo Normal: Vista limpia");
+    }
 }
 
 void FileManagerView::unitSdClickCb(lv_event_t* e) {
@@ -480,6 +535,11 @@ void FileManagerView::itemClickCb(lv_event_t* e) {
 
     FileManagerView* self = ctx->view;
     const auto& item = ctx->fileEntry;
+
+    if (item.isDeleted) {
+        self->showRecoveryModal(item);
+        return;
+    }
 
     if (item.isDirectory) {
         if (self->m_currentPath == "/") {
@@ -663,6 +723,113 @@ void FileManagerView::showDeleteConfirmModal(const cbdos::storage::FileEntry& fi
     lv_obj_set_style_text_font(lblD, &lv_font_montserrat_12, 0);
     lv_obj_center(lblD);
     lv_obj_add_event_cb(btnDel, modalConfirmDeleteCb, LV_EVENT_CLICKED, ctx);
+}
+
+void FileManagerView::showRecoveryModal(const cbdos::storage::FileEntry& file) {
+    if (m_modalMask && lv_obj_is_valid(m_modalMask)) {
+        lv_obj_delete(m_modalMask);
+        m_modalMask = nullptr;
+    }
+
+    auto caps = cbdos::display::getCapabilities();
+    int32_t screenW = caps.width;
+    int32_t screenH = caps.height;
+
+    std::string itemFullPath = "/sdcard/" + file.name;
+
+    m_modalMask = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(m_modalMask, screenW, screenH);
+    lv_obj_set_pos(m_modalMask, 0, 0);
+    lv_obj_set_style_bg_color(m_modalMask, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(m_modalMask, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(m_modalMask, 0, 0);
+    lv_obj_set_style_pad_all(m_modalMask, 0, 0);
+
+    lv_obj_t* modal = lv_obj_create(m_modalMask);
+    lv_obj_set_width(modal, screenW >= 480 ? 380 : 280);
+    lv_obj_set_height(modal, LV_SIZE_CONTENT);
+    DefaultTheme::applyRaisedCard(modal, 16);
+    lv_obj_center(modal);
+    lv_obj_set_flex_flow(modal, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(modal, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(modal, 16, 0);
+    lv_obj_set_style_pad_row(modal, 10, 0);
+
+    lv_obj_t* title = lv_label_create(modal);
+    lv_label_set_text(title, LV_SYMBOL_EYE_OPEN " Recuperacion Forense");
+    lv_obj_set_style_text_color(title, lv_color_hex(0xF59E0B), 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
+
+    char msgBuf[192];
+    snprintf(msgBuf, sizeof(msgBuf), "Archivo eliminado detectado:\n%s\nTamano: %s\nCluster FAT: #%u",
+             file.name.c_str(), formatBytes(file.size).c_str(), (unsigned)file.startCluster);
+    lv_obj_t* msg = lv_label_create(modal);
+    lv_label_set_text(msg, msgBuf);
+    lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(msg, screenW >= 480 ? 340 : 240);
+    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(msg, DefaultTheme::getTextColor(), 0);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_12, 0);
+
+    DeleteModalContext* ctx = new DeleteModalContext{this, file, itemFullPath, m_modalMask};
+
+    // Botón 1: Backup / Extraer a Flash Interna
+    lv_obj_t* btnBackup = lv_button_create(modal);
+    lv_obj_set_size(btnBackup, screenW >= 480 ? 320 : 240, 36);
+    DefaultTheme::applyButton(btnBackup, 8);
+    lv_obj_set_style_bg_color(btnBackup, lv_color_hex(0x0284C7), 0);
+    lv_obj_t* lblB = lv_label_create(btnBackup);
+    lv_label_set_text(lblB, LV_SYMBOL_SAVE " Backup a Flash Interna");
+    lv_obj_set_style_text_font(lblB, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblB);
+    lv_obj_add_event_cb(btnBackup, [](lv_event_t* e) {
+        DeleteModalContext* pCtx = (DeleteModalContext*)lv_event_get_user_data(e);
+        if (pCtx) {
+            std::string dst = "/spiffs/" + pCtx->fileEntry.name;
+            if (cbdos::storage::recoverFile(pCtx->fullPath.c_str(), dst.c_str())) {
+                UIManager::showToast("Copiado con exito a Flash!");
+            } else {
+                UIManager::showToast("Error al volcar backup a Flash");
+            }
+            if (pCtx->view) pCtx->view->m_modalMask = nullptr;
+            if (pCtx->mask && lv_obj_is_valid(pCtx->mask)) lv_obj_delete_async(pCtx->mask);
+            delete pCtx;
+        }
+    }, LV_EVENT_CLICKED, ctx);
+
+    // Botón 2: Undelete / Restaurar en MicroSD
+    lv_obj_t* btnUndelete = lv_button_create(modal);
+    lv_obj_set_size(btnUndelete, screenW >= 480 ? 320 : 240, 36);
+    DefaultTheme::applyButton(btnUndelete, 8);
+    lv_obj_set_style_bg_color(btnUndelete, lv_color_hex(0x059669), 0);
+    lv_obj_t* lblU = lv_label_create(btnUndelete);
+    lv_label_set_text(lblU, LV_SYMBOL_REFRESH " Restaurar en MicroSD");
+    lv_obj_set_style_text_font(lblU, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblU);
+    lv_obj_add_event_cb(btnUndelete, [](lv_event_t* e) {
+        DeleteModalContext* pCtx = (DeleteModalContext*)lv_event_get_user_data(e);
+        if (pCtx) {
+            if (cbdos::storage::undeleteFile(pCtx->fullPath.c_str())) {
+                UIManager::showToast("Entrada FAT restaurada con exito!");
+                if (pCtx->view) pCtx->view->refreshCurrentView();
+            } else {
+                UIManager::showToast("Error al restaurar entrada FAT");
+            }
+            if (pCtx->view) pCtx->view->m_modalMask = nullptr;
+            if (pCtx->mask && lv_obj_is_valid(pCtx->mask)) lv_obj_delete_async(pCtx->mask);
+            delete pCtx;
+        }
+    }, LV_EVENT_CLICKED, ctx);
+
+    // Botón 3: Cerrar
+    lv_obj_t* btnClose = lv_button_create(modal);
+    lv_obj_set_size(btnClose, screenW >= 480 ? 320 : 240, 36);
+    DefaultTheme::applyButton(btnClose, 8);
+    lv_obj_t* lblCl = lv_label_create(btnClose);
+    lv_label_set_text(lblCl, "Cerrar");
+    lv_obj_set_style_text_font(lblCl, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblCl);
+    lv_obj_add_event_cb(btnClose, modalCancelCb, LV_EVENT_CLICKED, ctx);
 }
 
 } // namespace ui

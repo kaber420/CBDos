@@ -254,6 +254,18 @@ static int lua_file_exists(lua_State* L) {
     return 1;
 }
 
+static int lua_mount_sd(lua_State* L) {
+    bool ok = cbdos::storage::mountSd();
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+static int lua_format_sd(lua_State* L) {
+    bool ok = cbdos::storage::formatSd();
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
 static int lua_list_dir(lua_State* L) {
     const char* path = luaL_optstring(L, 1, "/sdcard");
     auto entries = cbdos::storage::listDir(path);
@@ -1670,6 +1682,10 @@ void LuaBridge::registerFsAPI(lua_State* L) {
     lua_setfield(L, -2, "file_exists");
     lua_pushcfunction(L, lua_list_dir);
     lua_setfield(L, -2, "list_dir");
+    lua_pushcfunction(L, lua_mount_sd);
+    lua_setfield(L, -2, "mount_sd");
+    lua_pushcfunction(L, lua_format_sd);
+    lua_setfield(L, -2, "format_sd");
     lua_setfield(L, -2, "fs");
 
     // Alias cbdos.storage
@@ -1682,6 +1698,10 @@ void LuaBridge::registerFsAPI(lua_State* L) {
     lua_setfield(L, -2, "file_exists");
     lua_pushcfunction(L, lua_list_dir);
     lua_setfield(L, -2, "list_dir");
+    lua_pushcfunction(L, lua_mount_sd);
+    lua_setfield(L, -2, "mount_sd");
+    lua_pushcfunction(L, lua_format_sd);
+    lua_setfield(L, -2, "format_sd");
     lua_setfield(L, -2, "storage");
 }
 

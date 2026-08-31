@@ -137,6 +137,21 @@ mi_cuento_interactivo.cbdstory/
 }
 ```
 
+### 4.2 Presupuesto de Almacenamiento y Eficiencia (Storage Budget)
+A diferencia de los videos tradicionales en MP4 (que pesan de 50 a 100 MB por 5 minutos y saturan el ancho de banda del microcontrolador), una historia o juego interactivo completo en el motor CBDos requiere únicamente unos pocos megabytes:
+
+| Componente del Paquete | Contenido | Peso Promedio |
+| :--- | :--- | :--- |
+| **Gráficos Vectoriales (Lottie / ThorVG)** | 8 a 15 escenas, personajes y efectos | **~300 KB – 600 KB** |
+| **Guión, Escenas y Lógica (`story.json` / Lua)** | Diálogos, grafo de decisiones y posiciones | **~30 KB – 50 KB** |
+| **Música de Fondo (BGM)** | 2 pistas ambientales en loop (MP3 @ 96 kbps) | **~1.5 MB** |
+| **Voces y Diálogos Narrados** | 20 a 30 frases grabadas en MP3 | **~1.5 MB** |
+| **Efectos de Sonido (SFX)** | 10 a 15 efectos de sonido (WAV/PCM cortos) | **~300 KB** |
+| **TOTAL POR CUENTO / JUEGO COMPLETO** | **Experiencia interactiva a 60 FPS** | 🏆 **~3.5 MB a 4.5 MB** |
+
+> [!TIP]
+> **Capacidad Masiva en MicroSD:** En una tarjeta MicroSD estándar de 8 GB a 16 GB, es posible almacenar una **biblioteca de más de 2,000 cuentos interactivos y minijuegos completos**, funcionando offline con latencia de carga inferior a 1 segundo.
+
 ---
 
 ## 📱 5. Estrategia Multiplataforma (CBDos & Android APK)
@@ -175,14 +190,15 @@ El diseño desacoplado garantiza que el mismo contenido creado por la comunidad 
 - Fomento a la lectura interactiva: los niños tocan las palabras para escuchar su pronunciación o tocan los personajes para desencadenar reacciones divertidas y sonidos.
 - Portabilidad total en hardware dedicado offline (sin distracciones de internet ni anuncios).
 
-### 6.2 Guías de Onboarding y Tutoriales Animados del Sistema
+### 6.2 Videojuegos 2D Livianos y Aventuras Gráficas Point & Click
+- **Aventuras Gráficas e Historias Ramificadas:** Diálogos interactivos con opciones múltiples, recolección de pistas e inventario de objetos en pantalla.
+- **Minijuegos Educativos y de Habilidad:** Juegos de memoria con cartas vectoriales animadas (*Memory Match*), encontrar las diferencias en escenas parallax vivas, puzzles de lógica y juegos de ritmo musical sincronizados con el reproductor de audio.
+
+### 6.3 Guías de Onboarding y Tutoriales Animados del Sistema
 - Tutorial interactivo al encender CBDos por primera vez: un asistente animado guía al usuario paso a paso señalando físicamente la pantalla para explicar la navegación táctil, configuración de Wi-Fi y uso de herramientas.
 
-### 6.3 Mascotas Virtuales y Asistentes de Escritorio
+### 6.4 Mascotas Virtuales y Asistentes de Escritorio
 - Personajes reactivos integrados como widgets o fondos de pantalla animados (Live Wallpapers) que reaccionan al estado de la batería, hora del día o eventos del sistema.
-
-### 6.4 Novelas Visuales y Aventuras Gráficas Livianas
-- Narrativas con toma de decisiones ramificadas, inventario de objetos y diálogos interactivos con música ambiental envolvente.
 
 ---
 

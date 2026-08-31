@@ -21,6 +21,7 @@ public:
     void refreshCurrentView();
 
 private:
+    bool m_forensicMode = false;
     cbdos::storage::StorageType m_currentStorage;
     std::string m_currentPath;
 
@@ -29,6 +30,7 @@ private:
     lv_obj_t* m_pathLabel = nullptr;
     lv_obj_t* m_btnUnitSD = nullptr;
     lv_obj_t* m_btnUnitFlash = nullptr;
+    lv_obj_t* m_btnForensic = nullptr;
     lv_obj_t* m_listContainer = nullptr;
     lv_obj_t* m_modalMask = nullptr;
 
@@ -39,13 +41,16 @@ private:
     void updateUnitButtons();
     void updatePathLabel();
     void updateStorageInfo();
+    void updateForensicButton();
     void showDeleteConfirmModal(const cbdos::storage::FileEntry& file);
+    void showRecoveryModal(const cbdos::storage::FileEntry& file);
 
     // Callbacks
     static void unitSdClickCb(lv_event_t* e);
     static void unitFlashClickCb(lv_event_t* e);
     static void btnUpClickCb(lv_event_t* e);
     static void btnRefreshClickCb(lv_event_t* e);
+    static void btnForensicClickCb(lv_event_t* e);
     static void itemClickCb(lv_event_t* e);
     static void itemDeleteClickCb(lv_event_t* e);
     static void modalCancelCb(lv_event_t* e);

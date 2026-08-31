@@ -34,6 +34,13 @@ bool unmountSd() {
     return false;
 }
 
+bool formatSd() {
+    if (s_backend) {
+        return s_backend->formatSd();
+    }
+    return false;
+}
+
 bool isSdMounted() {
     if (s_backend) {
         return s_backend->isSdMounted();
@@ -69,9 +76,9 @@ StorageStats getUsbStats() {
     return StorageStats{ false, 0, 0, 0, "USB Drive" };
 }
 
-std::vector<FileEntry> listDir(const char* path) {
+std::vector<FileEntry> listDir(const char* path, bool includeDeleted) {
     if (s_backend) {
-        return s_backend->listDir(path);
+        return s_backend->listDir(path, includeDeleted);
     }
     return {};
 }
@@ -114,6 +121,20 @@ bool copyFile(const char* srcPath, const char* dstPath) {
 bool makeDir(const char* path) {
     if (s_backend) {
         return s_backend->makeDir(path);
+    }
+    return false;
+}
+
+bool recoverFile(const char* srcPath, const char* dstPath) {
+    if (s_backend) {
+        return s_backend->recoverFile(srcPath, dstPath);
+    }
+    return false;
+}
+
+bool undeleteFile(const char* path) {
+    if (s_backend) {
+        return s_backend->undeleteFile(path);
     }
     return false;
 }

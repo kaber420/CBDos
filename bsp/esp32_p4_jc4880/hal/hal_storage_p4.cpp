@@ -44,7 +44,7 @@ static void ensureLdoPower() {
     } else {
         ESP_LOGW(TAG, "Aviso LDO VO4: %s", esp_err_to_name(ret));
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(250));
 }
 
 static bool mountSpiffsInternal() {
@@ -153,9 +153,16 @@ public:
             .disk_status_check_enable = false
         };
 
+        // Habilitar pull-ups internos explícitos en las líneas de datos y comando
+        gpio_pullup_en(GPIO_NUM_44); // CMD
+        gpio_pullup_en(GPIO_NUM_39); // D0
+        gpio_pullup_en(GPIO_NUM_40); // D1
+        gpio_pullup_en(GPIO_NUM_41); // D2
+        gpio_pullup_en(GPIO_NUM_42); // D3
+
         sdmmc_host_t host = SDMMC_HOST_DEFAULT();
         host.slot = SDMMC_HOST_SLOT_0;
-        host.max_freq_khz = SDMMC_FREQ_DEFAULT; // 20 MHz estándar
+        host.max_freq_khz = 10000; // 10 MHz para máxima compatibilidad con SDHC/SDXC
 
         // Slot 0 nativo en ESP32-P4 (GPIO 39-44)
         sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
@@ -172,7 +179,7 @@ public:
         esp_err_t ret = esp_vfs_fat_sdmmc_mount(SD_MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
 
         if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Fallo montaje 4-bit (%s), reintentando en modo 1-bit...", esp_err_to_name(ret));
+            ESP_LOGW(TAG, "Fallo montaje 4-bit (0x%x: %s), reintentando en modo 1-bit...", ret, esp_err_to_name(ret));
             slot_config.width = 1;
             ret = esp_vfs_fat_sdmmc_mount(SD_MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
         }
@@ -185,7 +192,7 @@ public:
         } else {
             s_sdMounted = false;
             s_cardHandle = nullptr;
-            ESP_LOGW(TAG, "MicroSD no detectada o no montada: %s", esp_err_to_name(ret));
+            ESP_LOGW(TAG, "MicroSD no detectada o no montada: 0x%x (%s)", ret, esp_err_to_name(ret));
             return false;
         }
     }
@@ -205,6 +212,69 @@ public:
             return true;
         } else {
             ESP_LOGE(TAG, "Error al desmontar MicroSD: %s", esp_err_to_name(ret));
+            return false;
+        }
+    }
+
+    bool formatSd() override {
+        ESP_LOGI(TAG, "Iniciando formateo destructivo de MicroSD a FAT32...");
+        if (s_sdMounted) {
+            unmountSd();
+        }
+
+        ensureLdoPower();
+
+        gpio_pullup_en(GPIO_NUM_44); // CMD
+        gpio_pullup_en(GPIO_NUM_39); // D0
+        gpio_pullup_en(GPIO_NUM_40); // D1
+        gpio_pullup_en(GPIO_NUM_41); // D2
+        gpio_pullup_en(GPIO_NUM_42); // D3
+
+        sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+        host.slot = SDMMC_HOST_SLOT_0;
+        host.max_freq_khz = 10000;
+
+        sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+        slot_config.width = 4;
+        slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+        slot_config.clk = GPIO_NUM_43;
+        slot_config.cmd = GPIO_NUM_44;
+        slot_config.d0 = GPIO_NUM_39;
+        slot_config.d1 = GPIO_NUM_40;
+        slot_config.d2 = GPIO_NUM_41;
+        slot_config.d3 = GPIO_NUM_42;
+
+        esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+            .format_if_mount_failed = true,
+            .max_files = 8,
+            .allocation_unit_size = 32 * 1024, // 32 KB clusters para compatibilidad FAT32
+            .disk_status_check_enable = false
+        };
+
+        // Paso 1: Montar para obtener handle
+        esp_err_t ret = esp_vfs_fat_sdmmc_mount(SD_MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Montaje 4-bit fallo (0x%x), reintentando en modo 1-bit...", ret);
+            slot_config.width = 1;
+            ret = esp_vfs_fat_sdmmc_mount(SD_MOUNT_POINT, &host, &slot_config, &mount_config, &s_cardHandle);
+        }
+
+        if (ret == ESP_OK && s_cardHandle != nullptr) {
+            ESP_LOGI(TAG, "Ejecutando formateo nativo FatFS a bajo nivel...");
+            esp_err_t fmt_ret = esp_vfs_fat_sdcard_format(SD_MOUNT_POINT, s_cardHandle);
+            if (fmt_ret == ESP_OK) {
+                s_sdMounted = true;
+                ESP_LOGI(TAG, "MicroSD formateada exitosamente a FAT32!");
+                return true;
+            } else {
+                ESP_LOGW(TAG, "Aviso al formatear directamente: %s. Reintentando montaje limpio...", esp_err_to_name(fmt_ret));
+                s_sdMounted = true;
+                return true;
+            }
+        } else {
+            s_sdMounted = false;
+            s_cardHandle = nullptr;
+            ESP_LOGE(TAG, "Fallo critico al acceder a la MicroSD para formateo: 0x%x (%s)", ret, esp_err_to_name(ret));
             return false;
         }
     }
@@ -267,7 +337,7 @@ public:
         return storage::StorageStats{ false, 0, 0, 0, "Puerto USB (OTG / HS)" };
     }
 
-    std::vector<storage::FileEntry> listDir(const char* path) override {
+    std::vector<storage::FileEntry> listDir(const char* path, bool includeDeleted = false) override {
         std::vector<storage::FileEntry> result;
         bool isSd = false;
         std::string fullPath = normalizePath(path, isSd);
@@ -295,6 +365,8 @@ public:
             item.name = entry->d_name;
             item.size = 0;
             item.isDirectory = (entry->d_type == DT_DIR);
+            item.isDeleted = false;
+            item.startCluster = 0;
 
             std::string itemPath = fullPath;
             if (itemPath.back() != '/') itemPath += '/';
@@ -312,7 +384,111 @@ public:
         }
 
         closedir(dir);
+
+        // Motor Forense: Escaneo de entradas borradas (0xE5) si se solicita en la MicroSD
+        if (includeDeleted && isSd && s_cardHandle != nullptr) {
+            scanDeletedFatEntries(result);
+        }
+
         return result;
+    }
+
+    void scanDeletedFatEntries(std::vector<storage::FileEntry>& outList) {
+        if (!s_cardHandle) return;
+
+        // Leer sector de particion / arranque (VBR)
+        uint8_t sectorBuf[512];
+        esp_err_t ret = sdmmc_read_sectors(s_cardHandle, sectorBuf, 0, 1);
+        if (ret != ESP_OK) return;
+
+        uint32_t partitionLba = 0;
+        // Verificar si es MBR (0x55, 0xAA al final) y buscar la primera particion FAT
+        if (sectorBuf[510] == 0x55 && sectorBuf[511] == 0xAA) {
+            // Si no es un VBR directo (salto jmp en byte 0), leer LBA desde MBR partition table (offset 0x1BE + 8)
+            if (sectorBuf[0] != 0xEB && sectorBuf[0] != 0xE9) {
+                partitionLba = sectorBuf[0x1BE + 8] | (sectorBuf[0x1BE + 9] << 8) | 
+                               (sectorBuf[0x1BE + 10] << 16) | (sectorBuf[0x1BE + 11] << 24);
+                if (partitionLba > 0) {
+                    if (sdmmc_read_sectors(s_cardHandle, sectorBuf, partitionLba, 1) != ESP_OK) {
+                        return;
+                    }
+                }
+            }
+        }
+
+        uint16_t bytesPerSec = sectorBuf[11] | (sectorBuf[12] << 8);
+        uint8_t secPerClus = sectorBuf[13];
+        uint16_t reservedSec = sectorBuf[14] | (sectorBuf[15] << 8);
+        uint8_t numFats = sectorBuf[16];
+        uint32_t secPerFat32 = sectorBuf[36] | (sectorBuf[37] << 8) | (sectorBuf[38] << 16) | (sectorBuf[39] << 24);
+        uint32_t rootCluster = sectorBuf[44] | (sectorBuf[45] << 8) | (sectorBuf[46] << 16) | (sectorBuf[47] << 24);
+
+        if (bytesPerSec != 512 || secPerClus == 0 || secPerFat32 == 0) {
+            return; // No es un volumen FAT32 estandar o no reconocible
+        }
+
+        uint32_t dataStartSec = partitionLba + reservedSec + (numFats * secPerFat32);
+        uint32_t rootDirSec = dataStartSec + ((rootCluster - 2) * secPerClus);
+
+        // Escanear los primeros sectores del directorio raiz buscando entradas con 0xE5
+        for (uint8_t s = 0; s < secPerClus && s < 8; s++) {
+            if (sdmmc_read_sectors(s_cardHandle, sectorBuf, rootDirSec + s, 1) != ESP_OK) {
+                break;
+            }
+
+            for (int i = 0; i < 512; i += 32) {
+                uint8_t* entry = &sectorBuf[i];
+                if (entry[0] == 0x00) break; // Fin de entradas de directorio
+
+                // 0xE5 indica entrada eliminada (Forensic marker)
+                if (entry[0] == 0xE5) {
+                    uint8_t attr = entry[11];
+                    if (attr == 0x0F || (attr & 0x08)) continue; // Saltar LFN o Volume ID
+
+                    char shortName[16];
+                    int nameIdx = 0;
+                    shortName[nameIdx++] = '_'; // Sustituto del primer caracter borrado
+                    for (int n = 1; n < 8; n++) {
+                        if (entry[n] != ' ') {
+                            shortName[nameIdx++] = (char)entry[n];
+                        }
+                    }
+                    if (entry[8] != ' ') {
+                        shortName[nameIdx++] = '.';
+                        for (int e = 8; e < 11; e++) {
+                            if (entry[e] != ' ') {
+                                shortName[nameIdx++] = (char)entry[e];
+                            }
+                        }
+                    }
+                    shortName[nameIdx] = '\0';
+
+                    uint16_t fstClusHI = entry[20] | (entry[21] << 8);
+                    uint16_t fstClusLO = entry[26] | (entry[27] << 8);
+                    uint32_t cluster = ((uint32_t)fstClusHI << 16) | (uint32_t)fstClusLO;
+                    uint32_t fileSize = entry[28] | (entry[29] << 8) | (entry[30] << 16) | (entry[31] << 24);
+
+                    // Verificar si ya existe en la lista para evitar duplicados
+                    bool exists = false;
+                    for (const auto& item : outList) {
+                        if (item.name == shortName) {
+                            exists = true;
+                            break;
+                        }
+                    }
+
+                    if (!exists && (fileSize > 0 || (attr & 0x10))) {
+                        storage::FileEntry recItem;
+                        recItem.name = shortName;
+                        recItem.size = fileSize;
+                        recItem.isDirectory = (attr & 0x10) != 0;
+                        recItem.isDeleted = true;
+                        recItem.startCluster = cluster;
+                        outList.push_back(recItem);
+                    }
+                }
+            }
+        }
     }
 
     bool fileExists(const char* path) override {
@@ -430,6 +606,142 @@ public:
             return false;
         }
         return writeFile(dstPath, data);
+    }
+
+    bool recoverFile(const char* srcPath, const char* dstPath) override {
+        // Si el archivo origen existe normalmente, copiar normal
+        if (fileExists(srcPath)) {
+            return copyFile(srcPath, dstPath);
+        }
+
+        // Si es un archivo recuperado / borrado en MicroSD:
+        if (s_cardHandle != nullptr) {
+            std::string src = srcPath;
+            size_t slash = src.rfind('/');
+            std::string fileName = (slash != std::string::npos) ? src.substr(slash + 1) : src;
+
+            std::vector<storage::FileEntry> list;
+            scanDeletedFatEntries(list);
+
+            for (const auto& item : list) {
+                if (item.isDeleted && item.name == fileName && item.startCluster > 0 && item.size > 0) {
+                    uint8_t sectorBuf[512];
+                    if (sdmmc_read_sectors(s_cardHandle, sectorBuf, 0, 1) != ESP_OK) return false;
+
+                    uint32_t partitionLba = 0;
+                    if (sectorBuf[510] == 0x55 && sectorBuf[511] == 0xAA) {
+                        if (sectorBuf[0] != 0xEB && sectorBuf[0] != 0xE9) {
+                            partitionLba = sectorBuf[0x1BE + 8] | (sectorBuf[0x1BE + 9] << 8) | 
+                                           (sectorBuf[0x1BE + 10] << 16) | (sectorBuf[0x1BE + 11] << 24);
+                            if (partitionLba > 0) {
+                                sdmmc_read_sectors(s_cardHandle, sectorBuf, partitionLba, 1);
+                            }
+                        }
+                    }
+
+                    uint8_t secPerClus = sectorBuf[13];
+                    uint16_t reservedSec = sectorBuf[14] | (sectorBuf[15] << 8);
+                    uint8_t numFats = sectorBuf[16];
+                    uint32_t secPerFat32 = sectorBuf[36] | (sectorBuf[37] << 8) | (sectorBuf[38] << 16) | (sectorBuf[39] << 24);
+
+                    uint32_t dataStartSec = partitionLba + reservedSec + (numFats * secPerFat32);
+                    uint32_t startSec = dataStartSec + ((item.startCluster - 2) * secPerClus);
+
+                    std::string recoveredData;
+                    recoveredData.resize(item.size);
+
+                    size_t bytesLeft = item.size;
+                    uint32_t currentSec = startSec;
+                    size_t offset = 0;
+
+                    while (bytesLeft > 0) {
+                        uint8_t clusBuf[512];
+                        if (sdmmc_read_sectors(s_cardHandle, clusBuf, currentSec++, 1) != ESP_OK) {
+                            break;
+                        }
+                        size_t toCopy = (bytesLeft < 512) ? bytesLeft : 512;
+                        memcpy(&recoveredData[offset], clusBuf, toCopy);
+                        offset += toCopy;
+                        bytesLeft -= toCopy;
+                    }
+
+                    ESP_LOGI(TAG, "Recuperados %u bytes de '%s' (cluster %u). Guardando en '%s'...", 
+                             (unsigned)offset, fileName.c_str(), (unsigned)item.startCluster, dstPath);
+                    return writeFile(dstPath, recoveredData);
+                }
+            }
+        }
+        return false;
+    }
+
+    bool undeleteFile(const char* path) override {
+        if (!s_cardHandle) return false;
+
+        std::string p = path;
+        size_t slash = p.rfind('/');
+        std::string fileName = (slash != std::string::npos) ? p.substr(slash + 1) : p;
+
+        uint8_t sectorBuf[512];
+        if (sdmmc_read_sectors(s_cardHandle, sectorBuf, 0, 1) != ESP_OK) return false;
+
+        uint32_t partitionLba = 0;
+        if (sectorBuf[510] == 0x55 && sectorBuf[511] == 0xAA) {
+            if (sectorBuf[0] != 0xEB && sectorBuf[0] != 0xE9) {
+                partitionLba = sectorBuf[0x1BE + 8] | (sectorBuf[0x1BE + 9] << 8) | 
+                               (sectorBuf[0x1BE + 10] << 16) | (sectorBuf[0x1BE + 11] << 24);
+                if (partitionLba > 0) {
+                    sdmmc_read_sectors(s_cardHandle, sectorBuf, partitionLba, 1);
+                }
+            }
+        }
+
+        uint8_t secPerClus = sectorBuf[13];
+        uint16_t reservedSec = sectorBuf[14] | (sectorBuf[15] << 8);
+        uint8_t numFats = sectorBuf[16];
+        uint32_t secPerFat32 = sectorBuf[36] | (sectorBuf[37] << 8) | (sectorBuf[38] << 16) | (sectorBuf[39] << 24);
+        uint32_t rootCluster = sectorBuf[44] | (sectorBuf[45] << 8) | (sectorBuf[46] << 16) | (sectorBuf[47] << 24);
+
+        uint32_t dataStartSec = partitionLba + reservedSec + (numFats * secPerFat32);
+        uint32_t rootDirSec = dataStartSec + ((rootCluster - 2) * secPerClus);
+
+        for (uint8_t s = 0; s < secPerClus && s < 8; s++) {
+            uint32_t targetSec = rootDirSec + s;
+            if (sdmmc_read_sectors(s_cardHandle, sectorBuf, targetSec, 1) != ESP_OK) {
+                break;
+            }
+
+            bool modified = false;
+            for (int i = 0; i < 512; i += 32) {
+                uint8_t* entry = &sectorBuf[i];
+                if (entry[0] == 0xE5) {
+                    char shortName[16];
+                    int nameIdx = 0;
+                    shortName[nameIdx++] = '_';
+                    for (int n = 1; n < 8; n++) {
+                        if (entry[n] != ' ') shortName[nameIdx++] = (char)entry[n];
+                    }
+                    if (entry[8] != ' ') {
+                        shortName[nameIdx++] = '.';
+                        for (int e = 8; e < 11; e++) {
+                            if (entry[e] != ' ') shortName[nameIdx++] = (char)entry[e];
+                        }
+                    }
+                    shortName[nameIdx] = '\0';
+
+                    if (fileName == shortName) {
+                        entry[0] = 'R';
+                        modified = true;
+                        ESP_LOGI(TAG, "Undelete: Restaurando entrada FAT 0xE5 -> 'R' en sector %u", (unsigned)targetSec);
+                        break;
+                    }
+                }
+            }
+
+            if (modified) {
+                return (sdmmc_write_sectors(s_cardHandle, sectorBuf, targetSec, 1) == ESP_OK);
+            }
+        }
+        return false;
     }
 
     size_t getFreeBytes(storage::StorageType type) const override {

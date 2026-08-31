@@ -16,8 +16,10 @@ public:
 
 private:
     void renderStorageUI();
+    void showFormatConfirmDialog();
     static void mount_btn_cb(lv_event_t* e);
     static void unmount_btn_cb(lv_event_t* e);
+    static void format_btn_cb(lv_event_t* e);
 
     lv_obj_t* m_sdCardStatusLabel = nullptr;
     lv_obj_t* m_sdCardBar = nullptr;

@@ -202,6 +202,11 @@ public:
         return true;
     }
 
+    bool formatSd() override {
+        unmountSd();
+        return mountSd();
+    }
+
     bool isSdMounted() const override {
         return s_sdMounted && (SD.cardType() != CARD_NONE);
     }
@@ -240,7 +245,7 @@ public:
         return storage::StorageStats{ false, 0, 0, 0, "USB Drive" };
     }
 
-    std::vector<storage::FileEntry> listDir(const char* path) override {
+    std::vector<storage::FileEntry> listDir(const char* path, bool includeDeleted = false) override {
         std::vector<storage::FileEntry> result;
         bool isSd = false;
         String cleanPath = resolvePath(path, isSd);

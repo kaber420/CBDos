@@ -41,6 +41,41 @@ void StorageConfigView::unmount_btn_cb(lv_event_t* e) {
     }
 }
 
+void StorageConfigView::format_btn_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_CLICKED) {
+        StorageConfigView* self = (StorageConfigView*)lv_event_get_user_data(e);
+        if (self) {
+            self->showFormatConfirmDialog();
+        }
+    }
+}
+
+void StorageConfigView::showFormatConfirmDialog() {
+    lv_obj_t* mbox = lv_msgbox_create(lv_screen_active());
+    lv_msgbox_add_title(mbox, "Formatear MicroSD");
+    lv_msgbox_add_text(mbox, "¿Deseas formatear la MicroSD a FAT32?\n\n¡ADVERTENCIA! Se eliminaran todos los archivos.");
+
+    lv_obj_t* btnConfirm = lv_msgbox_add_footer_button(mbox, "Formatear");
+    lv_obj_set_style_bg_color(btnConfirm, lv_color_hex(0xEF4444), 0);
+    lv_obj_add_event_cb(btnConfirm, [](lv_event_t* e) {
+        lv_obj_t* mb = (lv_obj_t*)lv_event_get_user_data(e);
+        if (mb) lv_msgbox_close(mb);
+        UIManager::showToast("Formateando a FAT32...");
+        if (cbdos::storage::formatSd()) {
+            UIManager::showToast("MicroSD formateada y montada OK!");
+        } else {
+            UIManager::showToast("Error al formatear MicroSD");
+        }
+    }, LV_EVENT_CLICKED, mbox);
+
+    lv_obj_t* btnCancel = lv_msgbox_add_footer_button(mbox, "Cancelar");
+    lv_obj_add_event_cb(btnCancel, [](lv_event_t* e) {
+        lv_obj_t* mb = (lv_obj_t*)lv_event_get_user_data(e);
+        if (mb) lv_msgbox_close(mb);
+    }, LV_EVENT_CLICKED, mbox);
+}
+
 bool StorageConfigView::onCreate(lv_obj_t* parent) {
     if (!parent) return false;
 
@@ -196,8 +231,7 @@ void StorageConfigView::renderStorageUI() {
     lv_obj_set_height(mountBtn, 42);
     DefaultTheme::applyButton(mountBtn, 10);
     lv_obj_set_style_bg_color(mountBtn, lv_color_hex(0x0078D7), 0);
-    lv_obj_set_user_data(mountBtn, this);
-    lv_obj_add_event_cb(mountBtn, mount_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(mountBtn, mount_btn_cb, LV_EVENT_CLICKED, this);
 
     lv_obj_t* mountLbl = lv_label_create(mountBtn);
     lv_label_set_text(mountLbl, LV_SYMBOL_REFRESH " Recargar");
@@ -210,13 +244,25 @@ void StorageConfigView::renderStorageUI() {
     lv_obj_set_height(unmountBtn, 42);
     DefaultTheme::applyButton(unmountBtn, 10);
     lv_obj_set_style_bg_color(unmountBtn, lv_color_hex(0x2A2E39), 0);
-    lv_obj_set_user_data(unmountBtn, this);
-    lv_obj_add_event_cb(unmountBtn, unmount_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(unmountBtn, unmount_btn_cb, LV_EVENT_CLICKED, this);
 
     lv_obj_t* unmountLbl = lv_label_create(unmountBtn);
     lv_label_set_text(unmountLbl, LV_SYMBOL_EJECT " Expulsar");
     lv_obj_center(unmountLbl);
     lv_obj_set_style_text_color(unmountLbl, lv_color_hex(0xCCCCCC), 0);
+
+    // Botón Formatear FAT32
+    lv_obj_t* formatBtn = lv_button_create(btnRow);
+    lv_obj_set_flex_grow(formatBtn, 1);
+    lv_obj_set_height(formatBtn, 42);
+    DefaultTheme::applyButton(formatBtn, 10);
+    lv_obj_set_style_bg_color(formatBtn, lv_color_hex(0x7F1D1D), 0); // Rojo oscuro sutil
+    lv_obj_add_event_cb(formatBtn, format_btn_cb, LV_EVENT_CLICKED, this);
+
+    lv_obj_t* formatLbl = lv_label_create(formatBtn);
+    lv_label_set_text(formatLbl, LV_SYMBOL_TRASH " Formato");
+    lv_obj_center(formatLbl);
+    lv_obj_set_style_text_color(formatLbl, lv_color_hex(0xFCA5A5), 0);
 
     // ─────────────────────────────────────────────────────────────
     // 3. Tarjeta: Puerto USB Host (OTG / High-Speed)

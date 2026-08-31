@@ -34,8 +34,8 @@ Este documento centraliza **toda la información de hardware, pinouts GPIO, buse
 | | **SDMMC CMD** | **GPIO 44** | SDMMC Slot 0 | Pull-up integrado |
 | | **SDMMC D0** | **GPIO 39** | SDMMC Data 0 | Velocidad estándar 20/40 MHz |
 | | **SDMMC D1** | **GPIO 40** | SDMMC Data 1 | Slot 0 exclusivo de MicroSD |
-| | **SDMMC D2** | **GPIO 41** | SDMMC Data 2 | |
-| | **SDMMC D3** | **GPIO 42** | SDMMC Data 3 | |
+| | **SDMMC D2** | **GPIO 41** | SDMMC Data 2 | Soporte nativo FAT32 y **exFAT** |
+| | **SDMMC D3** | **GPIO 42** | SDMMC Data 3 | Compatible con SDSC, SDHC y SDXC (16GB a 2TB) |
 | **Coprocesador Inalámbrico (ESP32-C6)** | **SDIO CLK** | **GPIO 18** | Bus SDIO 4-bit (Host Slot 1) | Reloj SDIO hacia C6 (20 MHz) |
 | | **SDIO CMD** | **GPIO 19** | Bus SDIO 4-bit (Slot 1) | Línea de comando SDIO |
 | | **SDIO D0** | **GPIO 14** | Bus SDIO 4-bit (Slot 1) | Línea de datos 0 |

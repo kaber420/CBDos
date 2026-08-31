@@ -60,14 +60,17 @@ void LottieTestView::scanLottieFiles() {
             }
         }
 
-        // Escanear subcarpeta /sdcard/lottie si existe
-        auto lottieFolderFiles = cbdos::storage::listDir("/sdcard/lottie");
-        for (const auto& f : lottieFolderFiles) {
-            if (!f.isDirectory && f.name.length() >= 5) {
-                std::string ext = f.name.substr(f.name.length() - 5);
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                if (ext == ".json") {
-                    m_fileList.push_back("/sdcard/lottie/" + f.name);
+        // Escanear subcarpetas conocidas
+        const char* subfolders[] = {"/sdcard/lottie", "/sdcard/luttie", "/sdcard/assets", "/sdcard/anim"};
+        for (const char* folder : subfolders) {
+            auto subFiles = cbdos::storage::listDir(folder);
+            for (const auto& f : subFiles) {
+                if (!f.isDirectory && f.name.length() >= 5) {
+                    std::string ext = f.name.substr(f.name.length() - 5);
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                    if (ext == ".json") {
+                        m_fileList.push_back(std::string(folder) + "/" + f.name);
+                    }
                 }
             }
         }
