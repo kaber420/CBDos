@@ -39,6 +39,7 @@ idf_component_register(
         "src/ui/views/CartridgeView.cpp"
         "src/ui/views/SerialTerminalView.cpp"
         "src/ui/views/UtilitiesView.cpp"
+        "src/ui/views/LottieTestView.cpp"
         "src/ui/views/TlvBrowserView.cpp"
         "src/ui/views/MeshConfigView.cpp"
         "src/ui/views/RadioConfigView.cpp"
