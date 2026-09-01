@@ -172,7 +172,19 @@ static void apply_radio_config() {
         esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
     }
     esp_wifi_set_max_tx_power(s_tx_power);
+
+    // Asegurar que el peer broadcast esté siempre registrado en el canal activo
+    if (esp_now_is_peer_exist(s_broadcast_mac)) {
+        esp_now_del_peer(s_broadcast_mac);
+    }
+    esp_now_peer_info_t peerInfo = {};
+    memcpy(peerInfo.peer_addr, s_broadcast_mac, 6);
+    peerInfo.channel = 0; // 0 = Seguir automáticamente el canal Wi-Fi activo
+    peerInfo.ifidx = WIFI_IF_STA;
+    peerInfo.encrypt = false;
+    esp_now_add_peer(&peerInfo);
 }
+
 
 // Ejecutar comandos CLI interactivos
 static void process_cli_command(const char* line) {
