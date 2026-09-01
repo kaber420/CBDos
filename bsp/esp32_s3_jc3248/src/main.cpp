@@ -192,7 +192,11 @@ void setup() {
     cbdos::system::log(cbdos::system::LogLevel::Info, TAG, "CyBerDeck OS v0.2.0 iniciado en ESP32-S3 a %d FPS!", caps.targetFps);
 }
 
+extern void cbdos_hid_s3_poll();
+
 void loop() {
+    cbdos_hid_s3_poll();
+
     if (LuaBridge::checkAndClearNeedsRefresh()) {
         lv_obj_t* scr = lv_screen_active();
         if (scr && lv_obj_is_valid(scr)) {

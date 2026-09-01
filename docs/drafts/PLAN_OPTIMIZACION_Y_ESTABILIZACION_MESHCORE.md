@@ -1,14 +1,15 @@
-# 📋 PLAN DE TRABAJO: Optimización, Arquitectura, UI y Guía Integral de MeshCore
+# 📋 ESPECIFICACIÓN TÉCNICA Y PLAN DE TRABAJO: SUBSISTEMA MESHCORE (CBDos v0.2.1)
 
-**Estado:** Borrador de Trabajo / Especificación de Arquitectura  
-**Módulos Afectados:** `core/src/apps/meshcore/`, `bsp/esp32_s3_jc3248/hal/`, `bsp/esp32_p4_jc4880/`  
-**Objetivo:** Especificar el funcionamiento técnico de MeshCore (sin internet), estructurar las fases para resolver cuellos de botella de memoria y rediseñar la interfaz táctil en pantallas de 3.5" (320x480).
+**Estado:** Borrador de Arquitectura y Plan Maestro de Implementación  
+**Módulos Afectados:** `core/src/apps/meshcore/`, `core/include/cbdos/`, `bsp/esp32_s3_jc3248/`, `bsp/esp32_p4_jc4880/`  
+**Autor:** Antigravity / CBDos Core Team  
+**Objetivo:** Definir de forma exhaustiva la arquitectura de datos, sincronización thread-safe, libreta de contactos en MessagePack, protocolo P2P con confirmación de entrega (ACK) e interfaz gráfica adaptada a pantallas de 3.5" y 4.3".
 
 ---
 
-## 📡 1. Guía Integral: ¿Cómo Funciona MeshCore en CBDos (Sin Internet)?
+## 🧭 1. Guía Integral: ¿Cómo Opera MeshCore (Sin Internet)?
 
-MeshCore es un protocolo de red en malla (*Ad-Hoc Mesh*) de capa 2/3 diseñado para operar de forma 100% autónoma sobre enlaces de radio sin enrutadores, servidores ni conexión a internet (ESP-NOW 2.4 GHz, LoRa SX1262 Sub-GHz y módems USB).
+MeshCore es un protocolo de red de malla (*Ad-Hoc Tactical Mesh*) que opera de forma totalmente descentralizada sobre capas de enlace de radio (ESP-NOW 2.4 GHz, LoRa SX1262 Sub-GHz y módems USB).
 
 ```
  ┌────────────────┐          ESP-NOW / LoRa           ┌────────────────┐
@@ -16,7 +17,7 @@ MeshCore es un protocolo de red en malla (*Ad-Hoc Mesh*) de capa 2/3 diseñado p
  │   ID: 0x1337   │                                   │   ID: 0xCAFE   │
  └───────┬────────┘                                   └────────────────┘
          │
-         │ Reenvío Multi-salto (Hops)
+         │ Reenvío Multi-salto (Managed Flooding, Max 7 Hops)
          ▼
  ┌────────────────┐
  │ NODO REPETIDOR │
@@ -24,177 +25,210 @@ MeshCore es un protocolo de red en malla (*Ad-Hoc Mesh*) de capa 2/3 diseñado p
  └────────────────┘
 ```
 
----
-
-### 1.1. Identidad de los Nodos (Short ID y Nombre)
-- **Short ID (2 Bytes):** Cada dispositivo tiene una dirección hexadecimal única (ej. `0x1337`, `0xCAFE`). No se necesita IP ni DHCP.
-- **Node Name (Cadena UTF-8):** Nombre legible del nodo (ej. `"Cyberdeck-S3"`, `"Base-Laptop"`).
-
----
-
-### 1.2. Descubrimiento de Nodos y Radar (Sin Adivinar IDs)
-1. **Emisión de Baliza (`PKT_BEACON`):** Al encender la radio, abrir la app o pulsar **"Emitir Beacon"**, el dispositivo transmite un paquete de presentación al aire (broadcast `0xFFFF`).
-2. **Captura Automática en Radar:** Cualquier nodo en el mismo canal que escuche la baliza guarda automáticamente:
-   - Short ID del emisor.
-   - Nombre legible.
-   - Intensidad de señal (RSSI en dBm).
-   - Conteo de saltos (`0` = directo en alcance visual, `1+` = a través de repetidores).
-   - Interfaz de radio por donde se escuchó.
-3. **Resultado:** Los usuarios no necesitan adivinar nada ni pasarse códigos por internet; los dispositivos cercanos aparecen solos en la pestaña **Radar**.
+### 1.1. Identidades Locales y Direccionamiento
+- **Short ID (2 Bytes / uint16_t):** Dirección hexadecimal única generada a partir de los últimos 2 bytes de la MAC de hardware o elegida por el usuario (ej: `0x1337`).
+- **Node Name (Cadena UTF-8, máx 24 bytes):** Nombre legible del nodo (ej: `"Cyberdeck-S3"`).
+- **Broadcast Address (`0xFFFF`):** Dirección especial que indica que el paquete debe ser procesado por todos los nodos en el canal.
+- **Unicast Address (`0xXXXX`):** Dirección específica para comunicación privada P2P.
 
 ---
 
-### 1.3. Estructura de las Tramas Binarias MeshCore
+### 1.2. Protocolo Binario: Estructura de Tramas (`'MC'` = 0x4D43)
 
-Todas las tramas inician con el número mágico `0x4D43` (`'MC'`).
+Todas las tramas viajan con cabecera binaria compacta para minimizar el *airtime* y consumo energético:
 
-#### A. Trama de Baliza (`PKT_BEACON` = 0x01):
+| Tipo de Trama | Código | Propósito |
+| :--- | :---: | :--- |
+| **`PKT_BEACON`** | `0x01` | Anuncio de presencia periódica y descubrimiento en radar. |
+| **`PKT_CHAT`** | `0x02` | Mensajes de texto (Broadcast a canal o Unicast P2P). |
+| **`PKT_ACK`** | `0x03` | Confirmación de recepción con telemetría de retorno. |
+| **`PKT_ROUTE`** | `0x04` | Anuncio de rutas y calidad de enlace entre nodos. |
+
+#### A. Trama `PKT_BEACON` (0x01) - Longitud: 11 + N bytes
 ```
-┌───────────┬──────────┬──────────┬──────────┬──────────┬──────────┬─────────────┬──────────────┐
-│ Magic(2B) │ Type(1B) │ Hops(1B) │ SrcId(2B)│ DstId(2B)│ Reserv(2)│ NameLen(1B) │ Nombre (N B) │
-│  0x4D43   │   0x01   │  0..7    │  0x1337  │  0xFFFF  │   0x00   │     12      │ Cyberdeck-S3 │
-└───────────┴──────────┴──────────┴──────────┴──────────┴──────────┴─────────────┴──────────────┘
+┌───────────┬──────────┬──────────┬──────────┬──────────┬──────────┬─────────────┬────────────────┐
+│ Magic(2B) │ Type(1B) │ Hops(1B) │ SrcId(2B)│ DstId(2B)│ Reserv(2)│ NameLen(1B) │ Nombre (N B)   │
+│  0x4D43   │   0x01   │  0..7    │  0x1337  │  0xFFFF  │   0x00   │     12      │ "Cyberdeck-S3" │
+└───────────┴──────────┴──────────┴──────────┴──────────┴──────────┴─────────────┴────────────────┘
 ```
 
-#### B. Trama de Mensaje de Chat (`PKT_CHAT` = 0x02):
+#### B. Trama `PKT_CHAT` (0x02) - Longitud: 16 + N bytes
 ```
-┌───────────┬──────────┬──────────┬──────────┬──────────┬───────────┬──────────┬──────────┬────────────┬─────────────┐
-│ Magic(2B) │ Type(1B) │ Hops(1B) │ SrcId(2B)│ DstId(2B)│ ChanId(2B)│ MsgId(4B)│ Flags(1B)│ TextLen(1B)│ Payload (N) │
-│  0x4D43   │   0x02   │  0..7    │  0x1337  │ 0xFFFF/ID│     0     │ 0x000001 │ Encrypt? │     14     │ Hola Mesh!  │
-└───────────┴──────────┴──────────┴──────────┴──────────┴───────────┴──────────┴──────────┴────────────┴─────────────┘
+┌───────────┬──────────┬──────────┬──────────┬──────────┬───────────┬──────────┬──────────┬────────────┬──────────────┐
+│ Magic(2B) │ Type(1B) │ Hops(1B) │ SrcId(2B)│ DstId(2B)│ ChanId(2B)│ MsgId(4B)│ Flags(1B)│ TextLen(1B)│ Payload (N)  │
+│  0x4D43   │   0x02   │  0..7    │  0x1337  │ 0xFFFF/ID│  0/Canal  │ 0x000001 │  Bitmask │     14     │ "Hola Mesh!" │
+└───────────┴──────────┴──────────┴──────────┴──────────┴───────────┴──────────┴──────────┴────────────┴──────────────┘
+```
+- **Flags (1 Byte):**
+  - `Bit 0 (0x01):` Cifrado con contraseña de canal (PSK).
+  - `Bit 1 (0x02):` Requiere confirmación de entrega (`ACK_REQUEST`).
+  - `Bit 2 (0x04):` Paquete fragmentado (Microchunk).
+
+#### C. Trama `PKT_ACK` (0x03) - Longitud: 14 bytes
+```
+┌───────────┬──────────┬──────────┬──────────┬──────────┬───────────┬──────────────┬───────────┐
+│ Magic(2B) │ Type(1B) │ Hops(1B) │ SrcId(2B)│ DstId(2B)│ MsgId(4B) │ AckedRSSI(1B)│ Reserv(1) │
+│  0x4D43   │   0x03   │  0..7    │  0xCAFE  │  0x1337  │ 0x000001  │   -45 dBm    │   0x00    │
+└───────────┴──────────┴──────────┴──────────┴──────────┴───────────┴──────────────┴───────────┘
 ```
 
 ---
 
-### 1.4. Modos de Comunicación: Broadcast vs P2P Unicast
+## 🗄️ 2. Persistencia: Libreta de Contactos en MessagePack (`contacts.msgpack`)
 
-1. **Mensaje a Canal / Broadcast (`DstId = 0xFFFF`):**
-   - El mensaje se entrega a todos los nodos en el canal seleccionado (`#general`, `#tactico`).
-2. **Mensaje Directo Privado P2P (`DstId = 0xCAFE`):**
-   - El emisor fija el `DstId` al Short ID del destinatario.
-   - Los nodos intermedios de la malla pueden reenviar el paquete si están en rango, pero **solo el nodo con ID `0xCAFE` lo abre y muestra en pantalla**.
-3. **Cifrado de Canal (PSK):**
-   - Si un canal tiene clave (`#tactico` con PIN `1234`), el payload se cifra con RC4/AES simétrico. Los nodos sin la clave solo ven texto bloqueado `🔒 [Mensaje Cifrado]`.
+### 2.1. Política de Almacenamiento
+- **NVS (Flash Key-Value):** Queda estrictamente reservada para flags mínimas de arranque del microcontrolador (Canal RF por defecto, Modo de radio activo).
+- **Almacenamiento de Archivos (Flash Interna / `IStorageBackend`):** La libreta de contactos, alias e historial se serializan en binario **MessagePack** en la partición interna de archivos (`/spiffs/meshcore/contacts.msgpack` o `/storage/meshcore/contacts.msgpack`).
+- **Autonomía Total:** Funciona de forma 100% independiente sin requerir una tarjeta MicroSD externa.
+
+### 2.2. Estructura del Esquema MessagePack
+
+El archivo `contacts.msgpack` contiene un mapa binario con metadatos de versión y la lista de registros:
+
+```json
+{
+  "version": 1,
+  "last_updated": 1725163200,
+  "contacts": [
+    {
+      "id": 51966,
+      "name": "Base-Laptop",
+      "alias": "Laptop Taller Principal",
+      "fav": true,
+      "last_seen": 1725163195,
+      "rssi": -42,
+      "hops": 0,
+      "iface": 0,
+      "notes": "Estación base conectada a antena exterior"
+    }
+  ]
+}
+```
+
+### 2.3. Estructura en C++ (`MeshContactRecord`)
+```cpp
+struct MeshContactRecord {
+    uint16_t shortId;
+    std::string announcedName;
+    std::string customAlias;
+    bool isFavorite;
+    uint32_t lastSeenEpoch;
+    int8_t lastRssi;
+    uint8_t lastHops;
+    uint8_t preferredInterface;
+    std::string notes;
+};
+```
 
 ---
 
-### 1.5. Ruteo Multi-Salto y Prevención de Bucles (*Managed Flooding*)
-1. Cuando un nodo recibe un paquete ajeno con `DstId != m_localShortId` y `Hops < 7`:
-2. Verifica si el `MsgId` ya fue visto en su tabla anti-duplicados `m_seenPacketIds`.
-3. Si ya lo vio, **lo descarta** (evita tormentas de broadcast infinitas).
-4. Si es nuevo, incrementa `Hops + 1` y lo retransmite por sus otras interfaces de radio activas.
+## 🎨 3. Especificación de UI (LVGL 9.5 en Pantallas 3.5" y 4.3")
+
+### 3.1. Rediseño de Tarjetas en Radar (Fix de Texto Encimado)
+En pantallas de 3.5 pulgadas (320x480 de ancho), colocar 4 datos en una sola línea horizontal colapsa el texto. Se especifica un layout limpio de **2 renglones verticales** por tarjeta:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 📡 [0xCAFE] Base-Laptop-Estacion-Taller-Sur                 │ ◄── Renglón 1 (Blanco / Cyan): Nombre + ID
+│ 📶 -45 dBm  •  0 saltos (Directo)  •  ESP-NOW Slot 0        │ ◄── Renglón 2 (#94A3B8): Telemetría
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Especificación de Estilos LVGL:
+- **Renglón 1 (Encabezado del Nodo):**
+  - Fuente: `montserrat_14` (Bold / Resaltado).
+  - Color: `0x00E5FF` (Cyan) si es favorito / `0xFFFFFF` (Blanco) estándar.
+  - Modo marquesina: `lv_label_set_long_mode(lbl, LV_LABEL_LONG_SCROLL_CIRCULAR)`. Si el nombre supera el ancho de pantalla, rota suavemente sin cortarse.
+- **Renglón 2 (Telemetría de Enlace):**
+  - Fuente: `montserrat_12` (Compacta).
+  - Color: `#94A3B8` (Gris azulado).
+  - Formato: `📶 %d dBm  •  %s  •  %s` (`0 saltos (Directo)` / `N saltos`).
 
 ---
 
-## 🎯 2. Objetivos del Plan de Trabajo
+### 3.2. Modal de Acciones Rápidas al Tocar un Nodo
+Al pulsar sobre cualquier tarjeta de la pestaña **Radar**, se abre una ventana modal con botones táctiles de gran tamaño:
 
-1. **Estabilidad Absoluta ante Ráfagas:** Evitar que ráfagas de paquetes saturen el heap o generen *Kernel Panics*.
-2. **Experiencia de Usuario Fluida (UI LVGL 9.5 en 3.5" y 4.3"):**
-   - Eliminar saltos de scroll y reconstrucción destructiva.
-   - Solucionar textos encimados en las tarjetas del Radar mediante layout de 2 renglones con marquesina.
-3. **Control Determinista de Radio:**
-   - Selección manual con botón explícito `[ Guardar ]`.
-   - Registro automático de peer broadcast en HAL.
-4. **Libreta de Contactos Persistente:**
-   - Guardar nodos descubiertos en almacenamiento no volátil.
-   - Click táctil en un nodo para abrir chat privado P2P.
+```
+┌──────────────────────────────────────────┐
+│      NODO [0xCAFE] Base-Laptop           │
+├──────────────────────────────────────────┤
+│  [ 💬 Iniciar Chat Privado P2P ]         │
+│  [ ⭐ Marcar como Favorito ]             │
+│  [ ✏️ Cambiar Alias Personalizado ]      │
+│  [ 📡 Enviar Ping de Alcance ]           │
+│  [ ✕ Cerrar ]                            │
+└──────────────────────────────────────────┘
+```
 
 ---
 
-## 🧩 3. Desglose de Fases de Implementación
+### 3.3. Selector de Contexto en Chat (P2P vs Canales)
+En la parte superior de la pestaña **Chat**, el desplegable de canales incluirá tanto los canales públicos como las conversaciones directas activas:
+
+```
+┌──────────────────────────────────────────┐
+│ Contexto: [ 🌐 #general               ▼] │
+│           │ 🌐 #general                  │
+│           │ 🔒 #tactico                  │
+│           │ 👤 @Base-Laptop (0xCAFE)    │
+│           │ 👤 @Repetidor-Norte (0x88AA) │
+└──────────────────────────────────────────┘
+```
+- Si se selecciona `🌐 #general`: `targetId = 0xFFFF`.
+- Si se selecciona `👤 @Base-Laptop`: `targetId = 0xCAFE` (Chat privado P2P).
+
+---
+
+## 🔄 4. Máquina de Estados de Mensajería y Confirmaciones (`PKT_ACK`)
+
+Cada mensaje saliente en la interfaz de chat cuenta con un indicador de estado visual:
+
+```
+┌───────────┐      Envío RF      ┌───────────┐     Recepción ACK     ┌─────────────┐
+│ PENDIENTE │ ─────────────────► │  ENVIADO  │ ────────────────────► │  ENTREGADO  │
+│  (Reloj)  │                    │ (1 Check) │                       │ (2 Checks)  │
+└───────────┘                    └─────┬─────┘                       └─────────────┘
+                                       │
+                                       │ Timeout (3 seg) x 3 Reintentos
+                                       ▼
+                                ┌─────────────┐
+                                │   FALLIDO   │
+                                │  (Icono ⚠️) │
+                                └─────────────┘
+```
+
+1. **Envío con Bandera ACK:** Cuando se envía a un `targetId != 0xFFFF`, el bit `ACK_REQUEST (0x02)` se activa en los flags.
+2. **Recepción del Receptor:** El nodo destino recibe `PKT_CHAT`, extrae el `MsgId` y emite de vuelta un paquete `PKT_ACK` hacia el `SrcId` con su RSSI de recepción.
+3. **Actualización en Pantalla:** El Cyberdeck emisor recibe el `PKT_ACK`, actualiza el mensaje a `isAcked = true` y dibuja el doble check `✓✓` en color Cyan.
+
+---
+
+## 🧩 5. Plan de Ejecución por Fases
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        FASES DEL PLAN DE TRABAJO                       │
+│                   CRONOGRAMA DE TRABAJO Y ENTREGABLES                  │
 ├────────────────────────────────────────────────────────────────────────┤
-│  FASE 1: Arquitectura Thread-Safe (Buzón C++ Radio ↔ UI)               │
-│  FASE 2: Optimización del Chat (Inserción Incremental sin Scroll Y=0)  │
-│  FASE 3: Control Explícito de Radios (Botón Guardar + Peer HAL)        │
-│  FASE 4: Rediseño Visual de Tarjetas Radar (Fix de Texto Encimado)     │
-│  FASE 5: Libreta de Contactos Persistente y Chat Privado P2P           │
-│  FASE 6: Límites de Memoria y Ring Buffers                             │
-│  FASE 7: Batería de Pruebas de Estrés y Validación Multi-Target        │
+│  FASE 1: Arquitectura Thread-Safe (Buzón C++ Radio ↔ UI)      [✅ LISTA]│
+│  FASE 2: Optimización del Chat (Inserción Incremental)        [✅ LISTA]│
+│  FASE 3: Control Explícito de Radios (Botón Guardar + HAL)    [✅ LISTA]│
+│  FASE 4: Rediseño Visual de Tarjetas en Radar (2 Renglones)   [PENDIENTE]│
+│  FASE 5: Libreta de Contactos MessagePack (contacts.msgpack)   [PENDIENTE]│
+│  FASE 6: Chat Directo P2P y Selector de Contextos             [PENDIENTE]│
+│  FASE 7: Protocolo de Confirmaciones PKT_ACK y Retransmisión  [PENDIENTE]│
+│  FASE 8: Validación de Estrés y Pruebas Cruzadas S3 / P4      [PENDIENTE]│
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### 🔹 FASE 1: Arquitectura Thread-Safe (Radio ↔ UI)
-- [x] **Buzón Intermedio en C++:** Cola de mensajes entrantes (`std::vector<MeshMessage>`) con `std::mutex` en `MeshCoreView`.
-- [x] **Desacoplamiento Estricto de Tareas:** La tarea Wi-Fi (Core 0) solo inserta en cola; cero llamadas a `lv_async_call()` desde interrupciones.
-- [x] **Consumo en `BaseView::onUpdate()`:** La UI vacía la cola dentro del ciclo de render en Core 1.
+## 🧪 6. Protocolo de Pruebas y Criterios de Aceptación
 
----
-
-### 🔹 FASE 2: Optimización del Chat (Chat View)
-- [x] **Inserción Incremental:** Método `onMessageReceived` que crea únicamente la nueva burbuja al fondo.
-- [x] **Eliminación de `lv_obj_clean` en recepción:** Prohibido el borrado masivo de widgets al recibir paquetes.
-- [x] **Scroll Instantáneo (`LV_ANIM_OFF`):** Reemplazo de `LV_ANIM_ON` por scroll directo sin animación.
-- [x] **Límite de Widgets en Pantalla:** Eliminar las burbujas más antiguas al superar 50 elementos.
-
----
-
-### 🔹 FASE 3: Control Explícito de Radios (Pestaña "Radios")
-- [x] **Eliminación de Auto-Aplicación Involuntaria:** Los dropdowns de Modo y Canal no disparan cambios al hacer scroll.
-- [x] **Botón Táctil `[ Guardar ]`:** Botón de ancho completo para aplicar conscientemente la configuración.
-- [x] **Sincronización de Canal en HAL:**
-  - Registro de peer `FF:FF:FF:FF:FF:FF` en `S3NetworkInterface::sendPacket`.
-  - Canal predeterminado en 13.
-  - Toast corto y limpio: `Slot 0: ESP-NOW (CH 13)`.
-
----
-
-### 🔹 FASE 4: Rediseño Visual de Tarjetas en Radar (Fix de Texto Encimado)
-- [ ] **Problema Actual:** En pantallas de 3.5" (320x480), el nombre, ID, RSSI y saltos se intentan meter en una sola fila horizontal, provocando que el texto se encime y quede ilegible.
-- [ ] **Solución de 2 Renglones por Tarjeta:**
-  ```
-  ┌─────────────────────────────────────────────────────────────┐
-  │ 📡 [0xCAFE] Base-Laptop-Estacion-Taller                    │ ◄── Renglón 1: Nombre + ID (Marquesina circular)
-  │ 📶 -45 dBm  •  0 saltos (Directo)  •  ESP-NOW Slot 0        │ ◄── Renglón 2: Telemetría (Texto secundario fijo)
-  └─────────────────────────────────────────────────────────────┘
-  ```
-- [ ] **Marquesina en Renglón 1:** Configurar `LV_LABEL_LONG_SCROLL_CIRCULAR` en el nombre para nombres largos.
-- [ ] **Telemetría en Renglón 2:** Fuente compacta `montserrat_12` en color secundario (`#94A3B8`).
-
----
-
-### 🔹 FASE 5: Libreta de Contactos en MessagePack (`contacts.msgpack`) y Chat P2P
-- [ ] **Almacenamiento Estructurado en MessagePack (MicroSD / Filesystem):**
-  - **Ubicación:** `/sdcard/apps/meshcore/contacts.msgpack` (o fallback a almacenamiento local `/data/meshcore/`).
-  - **Regla de Oro de Almacenamiento:** La NVS queda estrictamente reservada para configuración básica del sistema (Canal RF y Modo de radio). Todo dato de contactos, historial y libreta se serializa en binario compacto **MessagePack**.
-  - **Estructura binaria del contacto:**
-    ```cpp
-    struct MeshContactRecord {
-        uint16_t shortId;
-        std::string name;
-        std::string customAlias;
-        bool isFavorite;
-        uint32_t lastSeenEpoch;
-        uint8_t preferredInterface;
-    };
-    ```
-- [ ] **Click en Tarjeta para Chatear:** Al tocar una tarjeta en el Radar, abrir una conversación directa P2P (`targetId = node.shortId`).
-- [ ] **Indicador de Destinatario en Chat:** Mostrar en la barra de entrada a quién se le está enviando (ej: `Destino: [0xCAFE] Base-Laptop` o `#general`).
-- [ ] **Gestión de Contactos Guardados:** Opción en la tarjeta para añadir a "Favoritos / Guardar Contacto" y asignarle un alias personalizado.
-
----
-
-### 🔹 FASE 6: Límites de Memoria y Ring Buffers
-- [x] **Ring Buffer en `MeshCoreEngine`:**
-  - Historial en RAM (`m_messages`) limitado a 100 mensajes.
-  - Lista de nodos (`m_nodes`) limitada a 32 nodos.
-- [x] **Tabla Anti-Duplicados:** `m_seenPacketIds` ampliado a 128 elementos circulares.
-- [x] **Debouncing en Radar:** Redibujar solo en `onUpdate` si `m_nodesDirty == true`.
-
----
-
-### 🔹 FASE 7: Procedimiento de Pruebas y Criterios de Aceptación
-
-| Prueba | Procedimiento | Criterio de Éxito |
-| :--- | :--- | :--- |
-| **1. Estrés de Recepción** | Enviar 20 mensajes seguidos desde la laptop con `meshcore_container`. | Los mensajes aparecen al fondo fluidamente; 0 reinicios, 0 saltos al inicio. |
-| **2. Transmisión Saliente** | Escribir un mensaje en el Cyberdeck y pulsar Enviar. | El mensaje aparece en la terminal de la laptop en < 100 ms. |
-| **3. Legibilidad de Radar** | Abrir la pestaña Radar con nodos descubiertos. | Tarjetas de 2 renglones legibles sin texto encimado; marquesina en nombres largos. |
-| **4. Chat Directo P2P** | Tocar un nodo en Radar y enviarle un mensaje. | El paquete viaja con `DstId = node.shortId`; solo ese nodo lo procesa. |
-| **5. Persistencia tras Reinicio** | Reiniciar el Cyberdeck y abrir Radar. | Los contactos descubiertos previamente permanecen en la lista. |
-| **6. Compilación Cruzada** | `pio run -d bsp/esp32_s3_jc3248` y `idf.py build` (P4). | Ambas plataformas compilan con 0 errores y 0 warnings. |
+| ID | Prueba | Procedimiento de Validación | Criterio de Aprobación |
+| :---: | :--- | :--- | :--- |
+| **T-01** | **Legibilidad Radar 3.5"** | Descubrir 5 nodos con nombres largos. | Formato de 2 renglones legible; marquesina circular activa sin colapsos de texto. |
+| **T-02** | **Persistencia Flash** | Descubrir nodo `0xCAFE`, apagar S3, encender S3. | El nodo aparece en la lista con su alias y datos intactos desde `contacts.msgpack`. |
+| **T-03** | **Mensajería P2P** | Enviar mensaje privado a `0xCAFE`. | El paquete viaja con `DstId = 0xCAFE`; solo ese nodo abre el mensaje. |
+| **T-04** | **Confirmación ACK** | Enviar mensaje con solicitud de ACK. | El receptor devuelve `PKT_ACK`; la UI emisora marca doble check `✓✓`. |
+| **T-05** | **Ráfaga Multicanal** | Transmitir 30 mensajes rápidos desde la laptop. | 0 fugas de memoria, 0 reinicios, render fluido en pantalla. |

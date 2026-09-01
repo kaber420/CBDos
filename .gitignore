@@ -97,3 +97,9 @@ tools/tlvgl_gateway/data/
 tools/tlvgl_gateway/clients.json
 tools/tlvgl_gateway/clients.db
 
+# --- Repositorios Upstream de Referencia (Solo Lectura) ---
+tools/meshcore_upstream/
+external/
+poseidon/
+
+

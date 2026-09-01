@@ -1,13 +1,6 @@
 # Reglas del Proyecto y Guía de Desarrollo (CBDos v0.2.1)
 
-## 📂 1. Directorio del Código Fuente Original (Fuente de la Verdad Absoluta)
-- **Ruta del Proyecto Original:** `/home/kaber420/Documentos/proyectos/espOS32`
-- **REGLA DE ORO DE PORTADO:** Todas las aplicaciones, vistas, componentes de UI, algoritmos de decodificación y comportamientos deben tomar como **única fuente de la verdad** el código original ubicado en `espOS32`.
-- **PROHIBIDO REINVENTAR LA RUEDA:** Queda estrictamente prohibido improvisar código desde cero, proponer librerías alternativas no probadas o ignorar la lógica ya afinada en `espOS32` (ej: decodificación con Helix, tamaños de búfer en PSRAM, salto de metadatos ID3v2, layouts de pantalla, etc.).
-- **Flujo Obligatorio:**
-  1. Inspeccionar primero el archivo fuente correspondiente en `/home/kaber420/Documentos/proyectos/espOS32`.
-  2. Extraer la lógica y adaptarla a la arquitectura agnóstica de `cbdos/core/` (C++ y LVGL 9.5).
-  3. Verificar que no se degrade ninguna función ni rendimiento.
+
 
 ---
 

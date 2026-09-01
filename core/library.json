@@ -22,6 +22,10 @@
       "-I src/audio/libhelix/src/libhelix-aac",
       "-I src/lua",
       "-I src/lua/liblua",
+      "-I src/security/kerberos",
+      "-I src/security/kerberos/kerberos_core",
+      "-I src/security/kerberos/tinycbor",
+      "-I src/apps/kerberos",
       "-DESP32",
       "-DUSE_DEFAULT_STDLIB",
       "-DHELIX_LOGGING_ACTIVE=0"

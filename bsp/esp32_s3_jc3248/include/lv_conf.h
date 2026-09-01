@@ -56,12 +56,13 @@
 
 
 
-/* --- Image and Vector Decoders (S3 usa BINs nativos directos) --- */
-#define LV_USE_FLOAT 0
-#define LV_USE_MATRIX 0
-#define LV_USE_VECTOR_GRAPHIC 0
-#define LV_USE_THORVG 0
-#define LV_USE_THORVG_INTERNAL 0
+/* --- Image and Vector Decoders --- */
+#define LV_USE_FLOAT 1
+#define LV_USE_MATRIX 1
+#define LV_USE_VECTOR_GRAPHIC 1
+#define LV_USE_THORVG 1
+#define LV_USE_THORVG_INTERNAL 1
+#define LV_USE_LOTTIE 1
 #define LV_USE_SVG 0
 #define LV_USE_BMP 1
 #define LV_USE_TJPGD 1
