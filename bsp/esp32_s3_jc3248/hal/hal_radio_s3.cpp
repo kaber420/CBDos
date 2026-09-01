@@ -1,4 +1,6 @@
 #include "cbdos/radio.hpp"
+#include "cbdos/network.hpp"
+#include "cbdos/network_interface.hpp"
 #include "cbdos/mesh/mesh_engine.hpp"
 #include "cbdos/system.hpp"
 #include "cbdos/config_manager.hpp"
@@ -291,12 +293,111 @@ public:
     }
 };
 
+class S3NetworkInterface : public network::INetworkInterface {
+public:
+    const char* getName() const override {
+        return "S3-Radio (ESP-NOW/Wi-Fi)";
+    }
+
+    network::InterfaceType getType() const override {
+        if (m_mode == network::InterfaceMode::WifiStation || m_mode == network::InterfaceMode::WifiAccessPoint) {
+            return network::InterfaceType::IpNetwork;
+        } else if (m_mode == network::InterfaceMode::BleGattServer) {
+            return network::InterfaceType::BluetoothLe;
+        }
+        return network::InterfaceType::RadioPacket;
+    }
+
+    network::InterfaceMode getMode() const override {
+        return m_mode;
+    }
+
+    bool setMode(network::InterfaceMode mode) override {
+        m_mode = mode;
+        if (mode == network::InterfaceMode::Off) {
+            s_radio.powered = false;
+            s_radio.mode = radio::RadioMode::Off;
+        } else if (mode == network::InterfaceMode::EspNow) {
+            s_radio.powered = true;
+            s_radio.mode = radio::RadioMode::EspNow;
+        } else if (mode == network::InterfaceMode::EspNowLR) {
+            s_radio.powered = true;
+            s_radio.mode = radio::RadioMode::EspNowLR;
+        } else if (mode == network::InterfaceMode::WifiStation) {
+            s_radio.powered = true;
+            s_radio.mode = radio::RadioMode::WifiSta;
+        }
+        applyRadioModeConfig();
+        return true;
+    }
+
+    bool isReady() const override {
+        return s_radio.powered && (m_mode != network::InterfaceMode::Off);
+    }
+
+    int sendPacket(const uint8_t* buffer, size_t len) override {
+        if (!isReady() || !buffer || len == 0) return -1;
+        uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        esp_err_t err = esp_now_send(broadcastMac, buffer, len);
+        return (err == ESP_OK) ? static_cast<int>(len) : -1;
+    }
+
+    void setPacketRecvCallback(network::PacketRecvCallback cb, void* userCtx) override {
+        m_recvCb = cb;
+        m_recvCtx = userCtx;
+        if (cb) {
+            s_activeNetInterface = this;
+            esp_now_register_recv_cb(S3NetworkInterface::onEspNowRawRecv);
+        }
+    }
+
+    uint8_t getChannel() const override {
+        return s_radio.channel;
+    }
+
+    bool setChannel(uint8_t channel) override {
+        if (channel < 1 || channel > 13) return false;
+        s_radio.channel = channel;
+        if (s_radio.powered && s_radio.mode != radio::RadioMode::Off) {
+            esp_wifi_set_promiscuous(true);
+            esp_wifi_set_channel(s_radio.channel, WIFI_SECOND_CHAN_NONE);
+            esp_wifi_set_promiscuous(false);
+        }
+        return true;
+    }
+
+    bool getMacAddress(uint8_t out_mac[6]) override {
+        if (!out_mac) return false;
+        return (esp_wifi_get_mac(WIFI_IF_STA, out_mac) == ESP_OK);
+    }
+
+    static void onEspNowRawRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
+        if (!s_activeNetInterface || !s_activeNetInterface->m_recvCb || !data || len <= 0) return;
+        int8_t rssi = -50;
+        if (info && info->rx_ctrl) {
+            rssi = info->rx_ctrl->rssi;
+        }
+        s_activeNetInterface->m_recvCb(data, static_cast<size_t>(len), rssi, 0, s_activeNetInterface->m_recvCtx);
+    }
+
+private:
+    network::InterfaceMode m_mode = network::InterfaceMode::EspNow;
+    network::PacketRecvCallback m_recvCb = nullptr;
+    void* m_recvCtx = nullptr;
+    static S3NetworkInterface* s_activeNetInterface;
+};
+
+S3NetworkInterface* S3NetworkInterface::s_activeNetInterface = nullptr;
 static S3RadioBackend s_s3RadioBackend;
+static S3NetworkInterface s_s3NetInterface;
 
 void initRadioBackendS3() {
     radio::setRadioBackend(&s_s3RadioBackend);
-    Serial.println("[RADIO_S3] S3 Radio Backend inicializado e inyectado.");
+    network::NetworkInterfaceManager::getInstance().registerInterface(0, &s_s3NetInterface);
+    Serial.println("[RADIO_S3] S3 Radio Backend e INetworkInterface (Slot 0) inicializados e inyectados.");
 }
 
 } // namespace bsp
 } // namespace cbdos
+
+

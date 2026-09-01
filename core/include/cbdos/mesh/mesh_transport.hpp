@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <functional>
+#include "cbdos/network_interface.hpp"
 #include "mesh_types.hpp"
 
 namespace cbdos {
@@ -66,6 +67,64 @@ public:
      */
     virtual bool setRadioMode(RadioMode mode) { return true; }
     virtual RadioMode getRadioMode() const { return RadioMode::Auto; }
+};
+
+/**
+ * @brief Adaptador puente entre INetworkInterface y la interfaz IMeshTransport
+ */
+class NetworkInterfaceTransportAdapter : public IMeshTransport {
+public:
+    explicit NetworkInterfaceTransportAdapter(network::INetworkInterface* iface)
+        : m_iface(iface) {}
+
+    bool init(uint8_t channel = 1) override {
+        if (!m_iface) return false;
+        m_iface->setChannel(channel);
+        return m_iface->setMode(network::InterfaceMode::EspNow);
+    }
+
+    void stop() override {
+        if (m_iface) m_iface->setMode(network::InterfaceMode::Off);
+    }
+
+    bool isReady() const override {
+        return m_iface && m_iface->isReady();
+    }
+
+    bool sendRaw(const uint8_t* dest_mac, const uint8_t* data, size_t len) override {
+        if (!m_iface) return false;
+        return m_iface->sendPacket(data, len) > 0;
+    }
+
+    void setRecvCallback(MeshRawRecvCallback cb) override {
+        m_cb = cb;
+        if (m_iface) {
+            m_iface->setPacketRecvCallback([](const uint8_t* payload, size_t len, int rssi, int snr, void* userCtx) {
+                auto* self = static_cast<NetworkInterfaceTransportAdapter*>(userCtx);
+                if (self && self->m_cb) {
+                    uint8_t zero_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+                    self->m_cb(zero_mac, payload, len, static_cast<int8_t>(rssi));
+                }
+            }, this);
+        }
+    }
+
+    bool getMacAddress(uint8_t out_mac[6]) override {
+        if (m_iface) return m_iface->getMacAddress(out_mac);
+        return false;
+    }
+
+    uint8_t getChannel() override {
+        return m_iface ? m_iface->getChannel() : 1;
+    }
+
+    bool setChannel(uint8_t channel) override {
+        return m_iface ? m_iface->setChannel(channel) : false;
+    }
+
+private:
+    network::INetworkInterface* m_iface = nullptr;
+    MeshRawRecvCallback m_cb = nullptr;
 };
 
 } // namespace mesh

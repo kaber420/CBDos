@@ -12,6 +12,7 @@
       "-I src/ui/components",
       "-I src/ui/views",
       "-I src/ui/views/utilities",
+      "-I src/apps/meshcore",
       "-I src/tlv",
       "-I src/mesh",
       "-I src/audio",

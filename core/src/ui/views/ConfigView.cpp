@@ -1,7 +1,6 @@
 #include "ConfigView.hpp"
 #include "PowerConfigView.hpp"
-#include "RadioConfigView.hpp"
-#include "WiFiConfigView.hpp"
+#include "NetworkManagerView.hpp"
 #include "WallpaperConfigView.hpp"
 #include "StorageConfigView.hpp"
 #include "TimeConfigView.hpp"
@@ -91,10 +90,8 @@ void ConfigView::btn_event_cb(lv_event_t * e) {
     
     if (code == LV_EVENT_CLICKED) {
         int id = (int)(intptr_t)lv_obj_get_user_data(btn);
-        if (id == 9) {
-            UIManager::getInstance().pushView(std::make_shared<RadioConfigView>());
-        } else if (id == 1) {
-            UIManager::getInstance().pushView(std::make_shared<WiFiConfigView>());
+        if (id == 1) {
+            UIManager::getInstance().pushView(std::make_shared<NetworkManagerView>());
         } else if (id == 2) {
             UIManager::getInstance().pushView(std::make_shared<StorageConfigView>());
         } else if (id == 3) {
@@ -133,8 +130,7 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
 
     OptionItem options[] = {
         {"Sistema y Energia", "Apagado, reinicio, standby y auto-suspension", 4},
-        {"Radio Integrada (2.4 GHz)", "Wi-Fi, ESP-NOW, Long Range y Canales", 9},
-        {"WiFi", "Red local y parametros IP", 1},
+        {"Redes e Interfaces", "Wi-Fi, ESP-NOW, LoRa y Ranuras de Hardware", 1},
         {"Fecha y Hora", "Zona horaria, horario de verano y NTP", 3},
         {"Almacenamiento", "Gestion de MicroSD, Flash y USB", 2},
         {"Fondo de Pantalla", "Elegir wallpaper de SD o Flash", 5},
@@ -142,6 +138,7 @@ bool ConfigView::onCreate(lv_obj_t* parent) {
         {"Acerca de CBDos", "v0.2.1, Licencia GPLv3 y Repo", 8},
         {"Resetear NVS", "Manten presionado 3s para borrar", 7}
     };
+
 
     for (size_t i = 0; i < sizeof(options) / sizeof(options[0]); i++) {
         lv_obj_t* card = lv_button_create(m_container);

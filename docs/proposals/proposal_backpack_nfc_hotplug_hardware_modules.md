@@ -185,3 +185,44 @@ private:
 * [ ] **Fase B (Driver NFC Reader):** Implementar tarea de sondeo de etiquetas NTAG/Mifare en el BSP (PN532 / ST25R3911B / RC522).
 * [ ] **Fase C (Drivers Modulares):** Implementar fábricas para SX1280 (FLRC), SX1262 (LoRa) y CardKB.
 * [ ] **Fase D (Integración UI & Lua):** Notificaciones Toast dinámicas y vinculación con scripts Lua descargados en MicroSD.
+
+---
+
+## 🧩 7. Extensión Multi-Módulo por Mochila (Máximo 2-3 Módulos) y Bus I2C Compartido
+
+Para mantener el diseño pragmático, modular y libre de sobre-ingeniería, una mochila física albergará como máximo **2 (o excepcionalmente 3) módulos combinados** (ej. **Módulo LoRa SX1262 por SPI/UART + Sensor Ambiental/Teclado por I2C**, o **Radio Sub-GHz + GPS**):
+
+### 7.1. Esquema Pragmático del Descriptor (NFC Tag Payload)
+```json
+{
+  "magic": "CBD_BP",
+  "v": 2,
+  "id": "bp_tactical_lora_sensors",
+  "name": "Mochila Táctica (LoRa + Sensores)",
+  "devices": [
+    {
+      "id": "radio_lora",
+      "type": "sx1262",
+      "bus": "spi",
+      "pins": { "sck": 50, "mosi": 52, "miso": 51, "cs": 49, "rst": 35, "dio1": 34, "busy": 32 }
+    },
+    {
+      "id": "env_sensor",
+      "type": "bme680_i2c",
+      "bus": "i2c",
+      "i2c_addr": "0x76",
+      "pins": { "sda": 7, "scl": 8 }
+    }
+  ],
+  "launch": {
+    "app": "meshcore_sensors.luapp",
+    "toast": "Mochila Conectada: LoRa 915MHz + Sensor BME680"
+  }
+}
+```
+
+### 7.2. Principio de Conexión y Asignación de Buses:
+1. **Bus I2C Nativo Compartido:** Los dispositivos secundarios (sensores ambientales, teclados CardKB, chips criptográficos o expansores) se conectan al bus **I2C (`GPIO 7` / `GPIO 8`)**, compartiendo las 2 líneas mediante sus direcciones de hardware 7-bit (`0x76`, `0x5F`, `0x48`, etc.) sin ocupar pines de selección adicionales.
+2. **Periférico Principal de Alta Velocidad (SPI o UART):** El módulo principal de radio o telemetría (SX1262, CC1101 o GPS) utiliza los pines dedicados del header JP1 (`GPIO 52, 51, 50, 49, 35, 34, 32, 28`).
+3. **Carga y Orquestación Directa:** El orquestador `BackpackManager` inicializa los dos dispositivos e inyecta sus APIs correspondientes a las vistas UI o scripts Lua.
+4. **Desconexión Segura (*Hot-Unplug*):** Al desacoplar la mochila, se liberan los drivers y los pines vuelven a reposo seguro en alta impedancia.

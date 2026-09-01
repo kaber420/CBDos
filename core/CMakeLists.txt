@@ -43,6 +43,7 @@ idf_component_register(
         "src/ui/views/TlvBrowserView.cpp"
         "src/ui/views/MeshConfigView.cpp"
         "src/ui/views/RadioConfigView.cpp"
+        "src/ui/views/NetworkManagerView.cpp"
         "src/ui/views/utilities/CalculatorApp.cpp"
         "src/ui/views/utilities/StopwatchApp.cpp"
         "src/ui/views/utilities/PomodoroApp.cpp"
@@ -72,6 +73,7 @@ idf_component_register(
         "src/network/network.cpp"
         "src/network/radio.cpp"
         "src/network/socket.cpp"
+        "src/network/network_interface.cpp"
         "src/time/TimeManager.cpp"
         "src/hid/HidManager.cpp"
         "src/hid/DuckyInterpreter.cpp"
@@ -79,6 +81,8 @@ idf_component_register(
         "src/lua/LuaBridge.cpp"
         "src/lua/LuaRunner.cpp"
         "src/lua/LuappManager.cpp"
+        "src/apps/meshcore/MeshCoreEngine.cpp"
+        "src/apps/meshcore/MeshCoreView.cpp"
         ${HELIX_SRCS}
         ${LUA_SRCS}
     INCLUDE_DIRS 
@@ -88,6 +92,7 @@ idf_component_register(
         "src/ui/components"
         "src/ui/views"
         "src/ui/views/utilities"
+        "src/apps/meshcore"
         "src/tlv"
         "src/mesh"
         "src/cartridge"

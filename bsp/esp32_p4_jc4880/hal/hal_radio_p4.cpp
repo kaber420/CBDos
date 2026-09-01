@@ -1,5 +1,6 @@
 #include "cbdos/radio.hpp"
 #include "cbdos/network.hpp"
+#include "cbdos/network_interface.hpp"
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -143,11 +144,90 @@ public:
     }
 };
 
+class P4NetworkInterface : public network::INetworkInterface {
+public:
+    const char* getName() const override {
+        return "C6-Radio (ESP-NOW/Wi-Fi)";
+    }
+
+    network::InterfaceType getType() const override {
+        if (m_mode == network::InterfaceMode::WifiStation || m_mode == network::InterfaceMode::WifiAccessPoint) {
+            return network::InterfaceType::IpNetwork;
+        } else if (m_mode == network::InterfaceMode::BleGattServer) {
+            return network::InterfaceType::BluetoothLe;
+        }
+        return network::InterfaceType::RadioPacket;
+    }
+
+    network::InterfaceMode getMode() const override {
+        return m_mode;
+    }
+
+    bool setMode(network::InterfaceMode mode) override {
+        m_mode = mode;
+        if (mode == network::InterfaceMode::Off) {
+            s_radioP4.powered = false;
+            s_radioP4.mode = radio::RadioMode::Off;
+        } else if (mode == network::InterfaceMode::EspNow) {
+            s_radioP4.powered = true;
+            s_radioP4.mode = radio::RadioMode::EspNow;
+        } else if (mode == network::InterfaceMode::EspNowLR) {
+            s_radioP4.powered = true;
+            s_radioP4.mode = radio::RadioMode::EspNowLR;
+        } else if (mode == network::InterfaceMode::WifiStation) {
+            s_radioP4.powered = true;
+            s_radioP4.mode = radio::RadioMode::WifiSta;
+        }
+        ESP_LOGI(TAG_RADIO_P4, "P4NetworkInterface modo establecido a: %d", (int)mode);
+        return true;
+    }
+
+    bool isReady() const override {
+        return s_radioP4.powered && (m_mode != network::InterfaceMode::Off);
+    }
+
+    int sendPacket(const uint8_t* buffer, size_t len) override {
+        if (!isReady() || !buffer || len == 0) return -1;
+        ESP_LOGD(TAG_RADIO_P4, "P4NetworkInterface transmitiendo %u bytes", (unsigned)len);
+        return static_cast<int>(len);
+    }
+
+    void setPacketRecvCallback(network::PacketRecvCallback cb, void* userCtx) override {
+        m_recvCb = cb;
+        m_recvCtx = userCtx;
+    }
+
+    uint8_t getChannel() const override {
+        return s_radioP4.channel;
+    }
+
+    bool setChannel(uint8_t channel) override {
+        if (channel < 1 || channel > 13) return false;
+        s_radioP4.channel = channel;
+        return true;
+    }
+
+    bool getMacAddress(uint8_t out_mac[6]) override {
+        if (!out_mac) return false;
+        // MAC base simulada o leída de eFuse
+        out_mac[0] = 0x24; out_mac[1] = 0xDC; out_mac[2] = 0xC3;
+        out_mac[3] = 0x4A; out_mac[4] = 0x12; out_mac[5] = 0xF0;
+        return true;
+    }
+
+private:
+    network::InterfaceMode m_mode = network::InterfaceMode::EspNow;
+    network::PacketRecvCallback m_recvCb = nullptr;
+    void* m_recvCtx = nullptr;
+};
+
 static P4RadioBackend s_p4RadioBackend;
+static P4NetworkInterface s_p4NetInterface;
 
 void initRadioBackendP4() {
     radio::setRadioBackend(&s_p4RadioBackend);
-    ESP_LOGI(TAG_RADIO_P4, "P4 Radio Backend inicializado e inyectado.");
+    network::NetworkInterfaceManager::getInstance().registerInterface(0, &s_p4NetInterface);
+    ESP_LOGI(TAG_RADIO_P4, "P4 Radio Backend e INetworkInterface (Slot 0) inicializados e inyectados.");
 }
 
 } // namespace bsp

@@ -1,4 +1,4 @@
-# 🌐 Protocolo de Enrutamiento Jerárquico Dinámico y Pseudo-BGP (CBDos & Reticulum)
+# 🌐 Protocolo de Enrutamiento Jerárquico Dinámico y Pseudo-BGP para CBDos (MeshCore / Pseudo-IP)
 
 ## 1. Visión General del Sistema y Filosofía de Red
 
@@ -9,7 +9,7 @@ Este protocolo implementa un modelo de **enrutamiento jerárquico de longitud va
    - **Cero cómputo de rutas:** Los nodos de campo y transceptores USB no mantienen tablas de rutas, ni conocen la topología global, ni calculan caminos.
    - Solo reciben datos por antena/USB y los escupen al aire o al host en tramas ultracompactas de **3 bytes** de cabecera local.
 2. **Gateways Inteligentes (ESP32-P4 / SBCs ARM64 Linux):**
-   - Son los **únicos responsables** de mantener las tablas de rutas (BGP/OSPF jerárquico), resolver identidades de Reticulum (UUIDs) a direcciones topológicas, y mutar dinámicamente el tamaño de la cabecera:
+   - Son los **únicos responsables** de mantener las tablas de rutas (BGP/OSPF jerárquico), resolver identidades criptográficas (UUIDs / Claves Públicas) a direcciones topológicas, y mutar dinámicamente el tamaño de la cabecera:
      - **Encapsulado (Agregar 2B/4B/6B):** Cuando un paquete sale de su PoP, Zona o ASN hacia el exterior.
      - **Desencapsulado (Quitar bytes):** Cuando un paquete llega a su destino local, entregando a la antena final solo la cabecera mínima de 3 bytes para ahorrar tiempo de aire (Airtime) y batería.
 
@@ -21,12 +21,12 @@ Para responder a la arquitectura de red sin fricciones, el sistema opera con una
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ 1. IDENTIDAD GLOBAL INMUTABLE (Quién es el Nodo - No cambia nunca)                     │
-│    • Clave Pública / UUID Reticulum (16 Bytes)                                         │
+│ 1. IDENTIDAD GLOBAL INMUTABLE (Quién es el Nodo - Hardware MAC de Fábrica)             │
 │    • EUI-48 / MAC Física de Fábrica (6 Bytes) -> ej. 24:DC:C3:4A:12:F0                │
+│    • UUID de Nodo / IPv4 Mesh (4 Bytes)       -> ej. 10.1.18.240 o MAC[2..5]          │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ 2. PSEUDO-IP LINK-LOCAL (En el PoP Local - Airtime ultra-reducido)                     │
-│    • Short Node ID: MAC[4..5] (2 Bytes) -> ej. 0x12F0                                  │
+│    • Short Node ID: MAC[4..5] (2 Bytes)       -> ej. 0x12F0                            │
 │    • Pseudo-IP Local: 10.[PoP_Local].[MAC_High].[MAC_Low] (Ámbito del PoP)             │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ 3. DIRECCIÓN GLOBAL RUTEABLE (Dónde está en la Federación Mundial - Cambia al viajar)  │
@@ -42,9 +42,9 @@ Para responder a la arquitectura de red sin fricciones, el sistema opera con una
    - Es la que usan los Gateways P4/SBCs para enrutar el paquete a través de enlaces de larga distancia (LoRa, microondas, fibra o VPN).
    - **Ventaja de agregación:** Los routers centrales BGP solo enrutan por `ASN` y `Zone`; no necesitan conocer las millones de IPs individuales de los nodos de campo (*Cero saturación de tablas BGP*).
 
-2. **La Identidad Global del Nodo es: `UUID Reticulum / MAC`:**
-   - Permite que si un nodo se desplaza físicamente de una ciudad a otra (del `PoP 0x0012` al `PoP 0x0099`), su identidad criptográfica no cambie.
-   - El nodo se conecta al nuevo PoP, obtiene una nueva **Dirección Ruteable** local (`10.0x0099.x.y`), y el Gateway emite una actualización BGP/Reticulum asociando su UUID a su nueva ubicación.
+2. **La Identidad Global del Nodo es su `MAC Física (6B) / UUID IPv4 (4B)`:**
+   - Permite que si un nodo se desplaza físicamente de una ciudad a otra (del `PoP 0x0012` al `PoP 0x0099`), su identidad de hardware permanezca invariable.
+   - El nodo se conecta al nuevo PoP, obtiene un nuevo **Short ID / Dirección Ruteable** local (`10.0x0099.x.y`), y el Gateway emite una actualización BGP/MeshCore asociando su MAC/UUID a su nueva ubicación.
 
 3. **La Pseudo-IP `10.0.0.0/8` como Capa de Compatibilidad de Aplicaciones:**
    - Dentro de cada ASN/Zona, `10.PoP.MAC_High.MAC_Low` permite abrir un túnel SSH, un socket UDP, un ping ICMP o una terminal web en CBDos directamente usando sockets estándar sin modificar el código de Linux/FreeRTOS.
@@ -76,7 +76,7 @@ El primer byte (**Byte de Control**) define el nivel de anidamiento y la longitu
 ```text
 Nivel 0: Salto Local (Mismo PoP / Mismo Enlace de Radio Directo)
 ┌──────────────┬───────────────────┬────────────────────────────────┬─────────────────┐
-│ Control (1B) │ Short Node ID (2B)│     Payload Crudo (RNS/Data)   │ CRC16 / FCS (2B)│
+│ Control (1B) │ Short Node ID (2B)│   Payload Crudo (MeshCore/Data)  │ CRC16 / FCS (2B)│
 └──────────────┴───────────────────┴────────────────────────────────┴─────────────────┘
 ==> Cabecera mínima: 3 Bytes (Máximo ahorro de Airtime)
 
@@ -105,7 +105,7 @@ Nivel 3: Inter-ASN / Federaciones BGP Globales
 | :--- | :--- | :--- | :--- |
 | **[7:6]** | **Scope / Alcance** | `00`: Local (PoP) <br> `01`: Inter-PoP <br> `10`: Inter-Zona <br> `11`: Inter-ASN (BGP) | Determina cuántos bytes de cabecera siguen inmediatamente al `Short Node ID`. |
 | **[5:4]** | **QoS / Prioridad** | `00`: Baja (Telemetría de fondo) <br> `01`: Normal (Chat/Stream) <br> `10`: Alta (Control/Mando) <br> `11`: Urgente / Alarma | El Gateway P4/SBC selecciona qué antena física usar (FLRC, LoRa o 802.15.4). |
-| **[3:2]** | **Flags de Transporte** | `01`: Requiere ACK de Gateway <br> `10`: Paquete Fragmentado <br> `11`: Reticulum Native Frame | Metadatos de control para el router P4. |
+| **[3:2]** | **Flags de Transporte** | `01`: Requiere ACK de Gateway <br> `10`: Paquete Fragmentado <br> `11`: MeshCore Native Frame | Metadatos de control para el router P4. |
 | **[1:0]** | **Versión Protocolo** | `00`: Versión 1.0 | Compatibilidad futura. |
 
 ---
@@ -125,7 +125,7 @@ Nivel 3: Inter-ASN / Federaciones BGP Globales
  │           GATEWAY LOCAL: ESP32-P4 / SBC ARM64 (PoP 0x0012)             │
  │                                                                        │
  │  1. Recibe trama de 3 bytes por USB.                                   │
- │  2. Consulta Tabla de Enrutamiento BGP / RNS:                          │
+ │  2. Consulta Tabla de Enrutamiento BGP / MeshCore:                      │
  │     • Destino final: Nodo en ASN 0x0005, Zona 0x0002, PoP 0x0088.      │
  │  3. ENCAPSULADO DINÁMICO:                                              │
  │     • Reescribe Byte de Control a Scope = Inter-ASN (`11`).            │
@@ -158,19 +158,20 @@ Nivel 3: Inter-ASN / Federaciones BGP Globales
 
 ---
 
-## 5. Integración con Reticulum (Mapeo UUID ➔ Topología Jerárquica)
+## 5. Mapeo de Identidad a Topología Jerárquica (Pseudo-ARP / Node-ARP)
 
-1. **Capa Criptográfica de Identidad (Reticulum L3/L4):**
-   - Reticulum utiliza **Destinations Hashes de 16 Bytes (128 bits)** generados a partir de claves públicas asimétricas Ed25519.
-2. **Tabla de Resolución Topológica en Gateways (RNS-ARP):**
-   - Los Gateways (P4/SBCs) mantienen una tabla en RAM/PSRAM que asocia los UUIDs de Reticulum activos con su ubicación topológica en la malla:
+1. **Identidad Nativa de Nodo en CBDos:**
+   - **MAC Física (6 Bytes):** Identificador universal de fábrica del transceptor.
+   - **UUID / Dirección IPv4 Mesh (4 Bytes):** Formato `10.Zona.PoP.Nodo` (32 bits) o `MAC[2..5]`.
+2. **Tabla de Resolución Topológica en Gateways (Pseudo-ARP):**
+   - Los Gateways (P4/SBCs) mantienen una tabla en RAM/PSRAM que asocia los nodos activos con su ubicación topológica en la malla:
      ```text
-     ┌────────────────────────────────────┬──────────────────────────────────────┐
-     │ Reticulum Destination Hash (16B)   │ Dirección Topológica (ASN:Zone:PoP:ID)│
-     ├────────────────────────────────────┼──────────────────────────────────────┤
-     │ 3e4a91bc8f01...d720 (Alice)        │ 0x0001 : 0x0003 : 0x0012 : 0x004A    │
-     │ 78df10ca2299...aa11 (Sensor BGP)   │ 0x0005 : 0x0002 : 0x0088 : 0x0001    │
-     └────────────────────────────────────┴──────────────────────────────────────┘
+     ┌──────────────────────┬──────────────────────┬──────────────────────────────────────┐
+     │ MAC Física (6 Bytes) │ UUID / IPv4 (4 Bytes)│ Dirección Topológica (ASN:Zone:PoP:ID)│
+     ├──────────────────────┼──────────────────────┼──────────────────────────────────────┤
+     │ 24:DC:C3:4A:12:F0    │ 10.1.18.240          │ 0x0001 : 0x0003 : 0x0012 : 0x004A    │
+     │ 30:AE:A4:05:88:01    │ 10.5.2.1             │ 0x0005 : 0x0002 : 0x0088 : 0x0001    │
+     └──────────────────────┴──────────────────────┴──────────────────────────────────────┘
      ```
 3. **Mapeo Pseudo-IP (`10.0.0.0/8`):**
    - Si se requiere compatibilidad con herramientas IP convencionales (Ping, SSH, sockets BSD):
@@ -192,7 +193,7 @@ Para que los nodos ESP32-C3 satélites operen de forma **Zero-Config (Plug & Pla
 - Si el Gateway P4 o algún nodo existente en el PoP responde indicando colisión:
   - El Gateway P4 le asigna dinámicamente un ID libre en el PoP (mediante un mensaje rápido de asignación de 4 bytes) o el nodo aplica un hash pseudoaleatorio $CRC16(\text{MAC} + \text{Seed})$.
 - El Gateway P4 actualiza de inmediato su **Tabla Pseudo-ARP**:
-  `[Short ID Local (2B)] ⟷ [UUID Reticulum (16B)] ⟷ [MAC Física (6B)]`.
+  `[Short ID Local (2B)] ⟷ [UUID IPv4 (4B)] ⟷ [MAC Física (6B)]`.
 
 ### 6.3. Modos de Direccionamiento hacia el Gateway (Pros y Contras)
 
@@ -259,7 +260,7 @@ Combina la robustez del Anycast en el arranque con la eficiencia del Unicast dur
 ## 7. Resolución de Movilidad y Servidores de Ubicación (Pseudo-DDNS / LISP Map-Server / DHT)
 
 ### 7.1. El Desafío de la Movilidad
-Cuando un usuario/nodo con **Identidad Fija** (UUID Reticulum o Pseudo-IP global fija `10.MAC_High.MAC_Mid.MAC_Low`) se traslada físicamente a otra Zona o ASN:
+Cuando un usuario/nodo con **Identidad Fija** (MAC física o IPv4 Mesh fija `10.Zona.PoP.Nodo`) se traslada físicamente a otra Zona o ASN:
 - Su dirección ruteable cambia (ej. de `0x0001:0x0002:0x0012:0x12F0` a `0x0005:0x0001:0x0088:0x12F0`).
 - **Problema:** Los routers de campo y nodos satélites no pueden almacenar millones de entradas dinámicas de cada persona que se mueve en el mundo porque saturaría la RAM y el ancho de banda de radio.
 
@@ -277,7 +278,7 @@ Para resolver este problema con cero saturación de radio, se implementa una cap
                                └─────────────────────────▲──────────────────────────────┘
                                                          │
                      1. Registro al entrar a nuevo PoP   │  2. Consulta de Ubicación
-                        "Alice (UUID/10.x.y.z) está      │     "¿Dónde está Bob (UUID_Bob)?"
+                        "Alice (MAC/10.x.y.z) está       │     "¿Dónde está Bob (MAC_Bob)?"
                          ahora en ASN:5, Zone:1, PoP:88" │     Respuesta: "Está en ASN:2, Zone:4, PoP:15"
                                                          │
                      ┌───────────────────────────────────┴───────────────────────────────────┐
@@ -292,7 +293,7 @@ Para resolver este problema con cero saturación de radio, se implementa una cap
            (Trama 3B │ Local)                                                      (Trama 3B │ Local)
                      ▼                                                                       ▼
              [ ALICE (Nodo C3) ]                                                     [ BOB (Nodo C3) ]
-             UUID: 0x3E4A...D720                                                     UUID: 0x78DF...AA11
+             MAC: 24:DC:C3:4A:12:F0                                                  MAC: 30:AE:A4:05:88:01
 ```
 
 ---
@@ -301,17 +302,17 @@ Para resolver este problema con cero saturación de radio, se implementa una cap
 
 #### Paso 1: Registro en Caliente al Llegar a un Nuevo PoP (Update)
 1. Alice llega a una nueva ciudad y su nodo C3 se asocia al Gateway P4 del `PoP 0x0088`.
-2. El Gateway P4 detecta el UUID de Alice y envía un paquete ligero de registro a su Map-Server asignado:
-   `[MAP_REGISTER | UUID: 0x3E4A... | IP_Fija: 10.24.154.128 | Location: ASN=5, Zone=1, PoP=88, ShortID=0x12F0]`
+2. El Gateway P4 detecta la MAC de Alice y envía un paquete ligero de registro a su Map-Server asignado:
+   `[MAP_REGISTER | MAC: 24:DC:C3:4A:12:F0 | IP_Fija: 10.1.18.240 | Location: ASN=5, Zone=1, PoP=88, ShortID=0x12F0]`
 3. El Map-Server actualiza su entrada con un tiempo de expiración (TTL ej. 2 horas).
 
 #### Paso 2: Consulta de Ubicación por Demanda (Map-Request)
-1. Bob (en otro ASN) quiere enviarle un mensaje o abrir un túnel SSH hacia la IP fija o UUID de Alice.
+1. Bob (en otro ASN) quiere enviarle un mensaje o abrir un socket hacia la IP fija o MAC de Alice.
 2. El Gateway P4 de Bob no tiene a Alice en su caché local:
    - Envía un paquete ultra-compacto al Map-Server más cercano:
-     `[MAP_REQUEST | Target_UUID: 0x3E4A...]`
+     `[MAP_REQUEST | Target_MAC: 24:DC:C3:4A:12:F0]`
 3. El Map-Server responde al Gateway de Bob:
-   `[MAP_REPLY | Target_UUID: 0x3E4A... | Route: ASN:5, Zone:1, PoP:88, ShortID:0x12F0 | TTL: 3600s]`
+   `[MAP_REPLY | Target_MAC: 24:DC:C3:4A:12:F0 | Route: ASN:5, Zone:1, PoP:88, ShortID:0x12F0 | TTL: 3600s]`
 
 #### Paso 3: Comunicación Directa Ruteada (Data Flow)
 1. El Gateway de Bob almacena la ruta en su **Caché de Enrutamiento (Fast-Path Table)** en PSRAM.
@@ -326,7 +327,7 @@ Para resolver este problema con cero saturación de radio, se implementa una cap
 | :--- | :--- | :--- | :--- |
 | **Red Offline / Local Mesh** | **Distributed Hash Table (DHT Kademlia)** | Embebido en la PSRAM de los ESP32-P4 / SBCs. | Comunidades aisladas sin internet ni servidores centrales. |
 | **Red Federada / Híbrida** | **LISP Map-Server / Pseudo-DDNS** | Microservicio en C++/Go corriendo en VPS, Raspberry Pi o Gateways P4 de cabecera. | Redes amplias con enlaces de radio punto a punto + túneles IP. |
-| **Red Reticulum Pura** | **Announces con Path Propagation** | Paquetes de anuncio nativos de Reticulum con Rate-Limiting. | Interoperabilidad 100% nativa con el ecosistema RNS mundial. |
+| **Red de Malla Pura (MeshCore)** | **Announcements con Path Propagation** | Paquetes de baliza nativos de MeshCore con Rate-Limiting. | Enrutamiento reactivo/proactivo en redes ad-hoc aisladas. |
 
 ---
 
