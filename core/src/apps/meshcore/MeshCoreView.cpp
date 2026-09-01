@@ -30,32 +30,21 @@ bool MeshCoreView::onCreate(lv_obj_t* parent) {
 
     createTabViews(m_container);
 
-    // Callbacks del motor a la UI
+    // Callbacks del motor a la UI (Totalmente desacoplados: solo encolan en memoria C++, cero llamadas a LVGL desde la radio)
     MeshCoreEngine::getInstance().setMessageCallback([this](const MeshMessage& msg) {
-        lv_async_call([](void* user_data) {
-            auto* view = static_cast<MeshCoreView*>(user_data);
-            if (view && view->m_msgList && lv_obj_is_valid(view->m_msgList)) {
-                view->refreshMessages();
-            }
-        }, this);
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        if (m_incomingMsgQueue.size() >= 50) {
+            m_incomingMsgQueue.erase(m_incomingMsgQueue.begin());
+        }
+        m_incomingMsgQueue.push_back(msg);
     });
 
-    MeshCoreEngine::getInstance().setNodeCallback([this](const MeshNode& node) {
-        lv_async_call([](void* user_data) {
-            auto* view = static_cast<MeshCoreView*>(user_data);
-            if (view && view->m_nodesList && lv_obj_is_valid(view->m_nodesList)) {
-                view->refreshNodes();
-            }
-        }, this);
+    MeshCoreEngine::getInstance().setNodeCallback([this](const MeshNode& /*node*/) {
+        m_nodesDirty = true;
     });
 
     MeshCoreEngine::getInstance().setStatusCallback([this]() {
-        lv_async_call([](void* user_data) {
-            auto* view = static_cast<MeshCoreView*>(user_data);
-            if (view && view->m_lblIfaceStatus && lv_obj_is_valid(view->m_lblIfaceStatus)) {
-                view->refreshInterfacesState();
-            }
-        }, this);
+        m_statusDirty = true;
     });
 
     refreshMessages();
@@ -70,8 +59,40 @@ void MeshCoreView::onDestroy() {
     MeshCoreEngine::getInstance().setNodeCallback(nullptr);
     MeshCoreEngine::getInstance().setStatusCallback(nullptr);
 
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_incomingMsgQueue.clear();
+    }
+
     UIManager::closeKeyboard();
     BaseView::onDestroy();
+}
+
+void MeshCoreView::onUpdate() {
+    // 1. Procesar mensajes recibidos de forma segura en el hilo de la UI
+    std::vector<MeshMessage> msgsToProcess;
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        if (!m_incomingMsgQueue.empty()) {
+            msgsToProcess.swap(m_incomingMsgQueue);
+        }
+    }
+
+    for (const auto& msg : msgsToProcess) {
+        onMessageReceived(msg);
+    }
+
+    // 2. Refresco diferido del radar de nodos solo si hubo cambios
+    if (m_nodesDirty) {
+        m_nodesDirty = false;
+        refreshNodes();
+    }
+
+    // 3. Refresco diferido de estado de radios
+    if (m_statusDirty) {
+        m_statusDirty = false;
+        refreshInterfacesState();
+    }
 }
 
 void MeshCoreView::createTabViews(lv_obj_t* parent) {
@@ -294,9 +315,6 @@ void MeshCoreView::buildInterfacesTab(lv_obj_t* parent) {
             else if (curMode == cbdos::network::InterfaceMode::WifiStation) lv_dropdown_set_selected(ddMode, 2);
             else lv_dropdown_set_selected(ddMode, 3);
 
-            lv_obj_set_user_data(ddMode, (void*)(uintptr_t)slot);
-            lv_obj_add_event_cb(ddMode, interfaceModeDropdownCb, LV_EVENT_VALUE_CHANGED, this);
-
             // Dropdown de Canal
             lv_obj_t* ddChannel = lv_dropdown_create(rowControls);
             lv_obj_set_size(ddChannel, LV_PCT(48), 36);
@@ -305,10 +323,34 @@ void MeshCoreView::buildInterfacesTab(lv_obj_t* parent) {
             if (ch >= 1 && ch <= 13) {
                 lv_dropdown_set_selected(ddChannel, ch - 1);
             }
-            lv_obj_set_user_data(ddChannel, (void*)(uintptr_t)slot);
-            lv_obj_add_event_cb(ddChannel, interfaceChannelDropdownCb, LV_EVENT_VALUE_CHANGED, this);
 
-            // Fila 3: MAC Address
+            // Fila 3: Botón Aplicar Configuración (Sin cambios accidentales automáticos)
+            struct SlotApplyContext {
+                uint8_t slot;
+                lv_obj_t* ddMode;
+                lv_obj_t* ddChannel;
+                MeshCoreView* view;
+            };
+            auto* applyCtx = new SlotApplyContext{slot, ddMode, ddChannel, this};
+
+            lv_obj_t* btnApply = lv_button_create(card);
+            lv_obj_set_size(btnApply, LV_PCT(100), 36);
+            lv_obj_set_style_bg_color(btnApply, lv_color_hex(0x1F293D), 0);
+            lv_obj_set_style_border_color(btnApply, lv_color_hex(0x00E5FF), 0);
+            lv_obj_set_style_border_width(btnApply, 1, 0);
+            lv_obj_set_style_radius(btnApply, 6, 0);
+            lv_obj_add_event_cb(btnApply, interfaceApplyClickedCb, LV_EVENT_CLICKED, applyCtx);
+            lv_obj_add_event_cb(btnApply, [](lv_event_t* ev) {
+                auto* c = static_cast<SlotApplyContext*>(lv_event_get_user_data(ev));
+                delete c;
+            }, LV_EVENT_DELETE, applyCtx);
+
+            lv_obj_t* lblApply = lv_label_create(btnApply);
+            lv_label_set_text(lblApply, LV_SYMBOL_SAVE " Guardar");
+            lv_obj_set_style_text_color(lblApply, lv_color_hex(0x00E5FF), 0);
+            lv_obj_center(lblApply);
+
+            // Fila 4: MAC Address
             uint8_t mac[6] = {0};
             if (iface->getMacAddress(mac)) {
                 lv_obj_t* lblMac = lv_label_create(card);
@@ -355,7 +397,26 @@ void MeshCoreView::refreshMessages() {
     for (const auto& msg : msgs) {
         addMessageBubble(msg);
     }
-    lv_obj_scroll_to_y(m_msgList, LV_COORD_MAX, LV_ANIM_ON);
+    lv_obj_scroll_to_y(m_msgList, LV_COORD_MAX, LV_ANIM_OFF);
+}
+
+void MeshCoreView::onMessageReceived(const apps::meshcore::MeshMessage& msg) {
+    if (!m_msgList || !lv_obj_is_valid(m_msgList)) return;
+
+    uint16_t activeCh = MeshCoreEngine::getInstance().getActiveChannelId();
+    if (msg.channelId == activeCh) {
+        addMessageBubble(msg);
+
+        // Limitar a un máximo de 50 burbujas en pantalla para no saturar memoria en MCUs
+        if (lv_obj_get_child_count(m_msgList) > 50) {
+            lv_obj_t* oldest = lv_obj_get_child(m_msgList, 0);
+            if (oldest) {
+                lv_obj_delete(oldest);
+            }
+        }
+
+        lv_obj_scroll_to_y(m_msgList, LV_COORD_MAX, LV_ANIM_OFF);
+    }
 }
 
 void MeshCoreView::addMessageBubble(const MeshMessage& msg) {
@@ -458,7 +519,6 @@ void MeshCoreView::sendButtonClickedCb(lv_event_t* e) {
 
     MeshCoreEngine::getInstance().sendMessage(0xFFFF, txt);
     lv_textarea_set_text(view->m_taInput, "");
-    view->refreshMessages();
 }
 
 void MeshCoreView::beaconButtonClickedCb(lv_event_t* e) {
@@ -578,42 +638,50 @@ void MeshCoreView::interfaceSwitchChangedCb(lv_event_t* e) {
     view->refreshInterfacesState();
 }
 
-void MeshCoreView::interfaceModeDropdownCb(lv_event_t* e) {
-    auto* dd = (lv_obj_t*)lv_event_get_target(e);
-    auto* view = static_cast<MeshCoreView*>(lv_event_get_user_data(e));
-    if (!dd || !view) return;
+void MeshCoreView::interfaceApplyClickedCb(lv_event_t* e) {
+    struct SlotApplyContext {
+        uint8_t slot;
+        lv_obj_t* ddMode;
+        lv_obj_t* ddChannel;
+        MeshCoreView* view;
+    };
+    auto* ctx = static_cast<SlotApplyContext*>(lv_event_get_user_data(e));
+    if (!ctx || !ctx->ddMode || !ctx->ddChannel || !ctx->view) return;
 
-    uint8_t slot = static_cast<uint8_t>((uintptr_t)lv_obj_get_user_data(dd));
-    uint16_t sel = lv_dropdown_get_selected(dd);
+    auto* iface = cbdos::network::NetworkInterfaceManager::getInstance().getInterface(ctx->slot);
+    if (!iface) return;
 
-    auto* iface = cbdos::network::NetworkInterfaceManager::getInstance().getInterface(slot);
-    if (iface) {
-        cbdos::network::InterfaceMode mode = cbdos::network::InterfaceMode::Off;
-        if (sel == 0) mode = cbdos::network::InterfaceMode::EspNow;
-        else if (sel == 1) mode = cbdos::network::InterfaceMode::EspNowLR;
-        else if (sel == 2) mode = cbdos::network::InterfaceMode::WifiStation;
-        else mode = cbdos::network::InterfaceMode::Off;
+    uint16_t modeSel = lv_dropdown_get_selected(ctx->ddMode);
+    uint16_t chanSel = lv_dropdown_get_selected(ctx->ddChannel);
+    uint8_t channel = static_cast<uint8_t>(chanSel + 1);
 
-        iface->setMode(mode);
-        MeshCoreEngine::getInstance().setInterfaceEnabled(static_cast<MeshInterfaceId>(slot), mode != cbdos::network::InterfaceMode::Off);
-        view->refreshInterfacesState();
-        UIManager::showToast("Modo de Radio actualizado");
-    }
-}
+    cbdos::network::InterfaceMode mode = cbdos::network::InterfaceMode::Off;
+    const char* modeName = "Apagado";
+    if (modeSel == 0) { mode = cbdos::network::InterfaceMode::EspNow; modeName = "ESP-NOW"; }
+    else if (modeSel == 1) { mode = cbdos::network::InterfaceMode::EspNowLR; modeName = "ESP-NOW LR"; }
+    else if (modeSel == 2) { mode = cbdos::network::InterfaceMode::WifiStation; modeName = "Wi-Fi STA"; }
 
-void MeshCoreView::interfaceChannelDropdownCb(lv_event_t* e) {
-    auto* dd = (lv_obj_t*)lv_event_get_target(e);
-    if (!dd) return;
+    // 1. Aplicar canal
+    iface->setChannel(channel);
 
-    uint8_t slot = static_cast<uint8_t>((uintptr_t)lv_obj_get_user_data(dd));
-    uint16_t sel = lv_dropdown_get_selected(dd);
-    uint8_t channel = static_cast<uint8_t>(sel + 1);
+    // 2. Aplicar modo operativo
+    iface->setMode(mode);
 
-    auto* iface = cbdos::network::NetworkInterfaceManager::getInstance().getInterface(slot);
-    if (iface) {
-        iface->setChannel(channel);
-        UIManager::showToast("Canal de Radio cambiado");
-    }
+    // 3. Sincronizar con el motor MeshCore
+    bool enabled = (mode != cbdos::network::InterfaceMode::Off);
+    MeshCoreEngine::getInstance().setInterfaceEnabled(static_cast<MeshInterfaceId>(ctx->slot), enabled);
+
+    auto cfg = MeshCoreEngine::getInstance().getInterfaceConfig(static_cast<MeshInterfaceId>(ctx->slot));
+    cfg.channel = channel;
+    cfg.enabled = enabled;
+    MeshCoreEngine::getInstance().setInterfaceConfig(cfg);
+
+    // 4. Actualizar estado visual
+    ctx->view->refreshInterfacesState();
+
+    char toastBuf[64];
+    snprintf(toastBuf, sizeof(toastBuf), "Slot %u: %s (CH %u)", ctx->slot, modeName, channel);
+    UIManager::showToast(toastBuf);
 }
 
 void MeshCoreView::inputFocusedCb(lv_event_t* e) {

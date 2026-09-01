@@ -21,7 +21,7 @@ namespace {
 struct RadioStateS3 {
     bool powered = true;
     radio::RadioMode mode = radio::RadioMode::EspNow;
-    uint8_t channel = 1;
+    uint8_t channel = 13;
     int8_t txPower = 20;
 
     bool wifiScanning = false;
@@ -338,6 +338,15 @@ public:
     int sendPacket(const uint8_t* buffer, size_t len) override {
         if (!isReady() || !buffer || len == 0) return -1;
         uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        if (!esp_now_is_peer_exist(broadcastMac)) {
+            esp_now_peer_info_t peerInfo = {};
+            memset(&peerInfo, 0, sizeof(peerInfo));
+            memcpy(peerInfo.peer_addr, broadcastMac, 6);
+            peerInfo.channel = 0; // 0 = Sigue dinámicamente el canal Wi-Fi activo
+            peerInfo.ifidx = WIFI_IF_STA;
+            peerInfo.encrypt = false;
+            esp_now_add_peer(&peerInfo);
+        }
         esp_err_t err = esp_now_send(broadcastMac, buffer, len);
         return (err == ESP_OK) ? static_cast<int>(len) : -1;
     }

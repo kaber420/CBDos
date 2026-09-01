@@ -218,6 +218,10 @@ void MeshCoreEngine::updateNode(uint16_t shortId, const std::string& name, NodeT
         }
     }
 
+    if (m_nodes.size() >= 32) {
+        m_nodes.erase(m_nodes.begin());
+    }
+
     MeshNode newNode;
     newNode.shortId = shortId;
     newNode.name = name.empty() ? ("Nodo " + std::to_string(shortId)) : name;
@@ -265,7 +269,7 @@ std::string MeshCoreEngine::decryptPayload(const std::string& cipherText, const 
 
 bool MeshCoreEngine::isPacketSeen(uint32_t msgId) {
     if (msgId == 0) return false;
-    for (size_t i = 0; i < 64; ++i) {
+    for (size_t i = 0; i < 128; ++i) {
         if (m_seenPacketIds[i] == msgId) return true;
     }
     return false;
@@ -274,7 +278,7 @@ bool MeshCoreEngine::isPacketSeen(uint32_t msgId) {
 void MeshCoreEngine::markPacketSeen(uint32_t msgId) {
     if (msgId == 0) return;
     m_seenPacketIds[m_seenIdx] = msgId;
-    m_seenIdx = (m_seenIdx + 1) % 64;
+    m_seenIdx = (m_seenIdx + 1) % 128;
 }
 
 void MeshCoreEngine::forwardPacket(MeshInterfaceId incomingIface, const uint8_t* data, size_t len) {
@@ -417,6 +421,9 @@ bool MeshCoreEngine::sendMessage(uint16_t targetId, uint16_t channelId, const st
         msg.isOutgoing = true;
         msg.isAcked = false;
         msg.isEncrypted = isEnc;
+        if (m_messages.size() >= 100) {
+            m_messages.erase(m_messages.begin());
+        }
         m_messages.push_back(msg);
 
         markPacketSeen(msgId);
@@ -596,6 +603,9 @@ void MeshCoreEngine::handleRawPacket(MeshInterfaceId iface, const uint8_t* data,
 
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
+                if (m_messages.size() >= 100) {
+                    m_messages.erase(m_messages.begin());
+                }
                 m_messages.push_back(msg);
             }
 

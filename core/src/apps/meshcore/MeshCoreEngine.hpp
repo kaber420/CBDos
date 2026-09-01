@@ -100,7 +100,7 @@ private:
     std::vector<MeshMessage> m_messages;
     std::vector<MeshChannel> m_channels;
 
-    uint32_t m_seenPacketIds[64] = {0};
+    uint32_t m_seenPacketIds[128] = {0};
     size_t m_seenIdx = 0;
 
     mutable std::mutex m_mutex;
