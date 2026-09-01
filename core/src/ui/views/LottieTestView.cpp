@@ -1,5 +1,6 @@
 #include "LottieTestView.hpp"
 #include "../../assets/lottie_sample.h"
+#include "../../assets/mascot_robot_assets.h"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 #include "cbdos/storage.hpp"
@@ -18,8 +19,12 @@ LottieTestView::LottieTestView()
       m_infoLabel(nullptr),
       m_fileLabel(nullptr),
       m_animCard(nullptr),
+      m_navRow(nullptr),
+      m_statsCard(nullptr),
+      m_btnBack(nullptr),
       m_drawBuf(nullptr),
       m_currentFileIndex(0),
+      m_isFullscreen(false),
       m_lastTime(0),
       m_frameCount(0) {
 }
@@ -38,6 +43,9 @@ void LottieTestView::onDestroy() {
     m_infoLabel = nullptr;
     m_fileLabel = nullptr;
     m_animCard = nullptr;
+    m_navRow = nullptr;
+    m_statsCard = nullptr;
+    m_btnBack = nullptr;
     m_fileList.clear();
     m_currentJsonData.clear();
     BaseView::onDestroy();
@@ -45,7 +53,11 @@ void LottieTestView::onDestroy() {
 
 void LottieTestView::scanLottieFiles() {
     m_fileList.clear();
+    m_fileList.push_back("__EMBEDDED_NEUMORPHIC_UI__");
     m_fileList.push_back("__EMBEDDED_STAR__");
+    m_fileList.push_back("__EMBEDDED_ROBOT_IDLE__");
+    m_fileList.push_back("__EMBEDDED_ROBOT_DANCE__");
+    m_fileList.push_back("__EMBEDDED_ROBOT_WAVE__");
 
     // Escanear directorio raíz de la MicroSD (/sdcard)
     if (cbdos::storage::isSdMounted()) {
@@ -106,29 +118,35 @@ bool LottieTestView::onCreate(lv_obj_t* parent) {
     m_animCard = lv_obj_create(m_container);
     lv_obj_set_size(m_animCard, 280, 280);
     DefaultTheme::applySunkenCard(m_animCard, 16);
-    lv_obj_set_style_pad_all(m_animCard, 10, 0);
+    lv_obj_set_style_pad_all(m_animCard, 6, 0);
     lv_obj_set_style_border_color(m_animCard, DefaultTheme::getPrimaryAccent(), 0);
     lv_obj_set_style_border_width(m_animCard, 1, 0);
     lv_obj_set_style_border_opa(m_animCard, LV_OPA_60, 0);
-    lv_obj_set_style_margin_top(m_animCard, 6, 0);
+    lv_obj_set_style_margin_top(m_animCard, 4, 0);
     DefaultTheme::disableScroll(m_animCard);
 
-    // 3. Barra de Control de Navegación (< Anterior | Recargar | Siguiente >)
-    lv_obj_t* navRow = lv_obj_create(m_container);
-    lv_obj_set_size(navRow, 380, 44);
-    lv_obj_set_style_bg_opa(navRow, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(navRow, 0, 0);
-    lv_obj_set_style_pad_all(navRow, 0, 0);
-    lv_obj_set_style_margin_top(navRow, 8, 0);
-    lv_obj_set_flex_flow(navRow, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(navRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    // Evento para alternar pantalla completa al pulsar en la tarjeta de animación
+    lv_obj_add_event_cb(m_animCard, [](lv_event_t* e) {
+        auto* v = static_cast<LottieTestView*>(lv_event_get_user_data(e));
+        if (v) v->toggleFullscreen();
+    }, LV_EVENT_CLICKED, this);
+
+    // 3. Barra de Control de Navegación (< Anterior | Fullscreen | Siguiente >)
+    m_navRow = lv_obj_create(m_container);
+    lv_obj_set_size(m_navRow, 420, 44);
+    lv_obj_set_style_bg_opa(m_navRow, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(m_navRow, 0, 0);
+    lv_obj_set_style_pad_all(m_navRow, 0, 0);
+    lv_obj_set_style_margin_top(m_navRow, 8, 0);
+    lv_obj_set_flex_flow(m_navRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(m_navRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     // Botón Anterior
-    lv_obj_t* btnPrev = lv_button_create(navRow);
-    lv_obj_set_size(btnPrev, 110, 40);
+    lv_obj_t* btnPrev = lv_button_create(m_navRow);
+    lv_obj_set_size(btnPrev, 95, 40);
     DefaultTheme::applyButton(btnPrev);
     lv_obj_t* lblPrev = lv_label_create(btnPrev);
-    lv_label_set_text(lblPrev, LV_SYMBOL_PREV " Anterior");
+    lv_label_set_text(lblPrev, LV_SYMBOL_PREV " Ant");
     lv_obj_set_style_text_font(lblPrev, &lv_font_montserrat_12, 0);
     lv_obj_center(lblPrev);
     lv_obj_add_event_cb(btnPrev, [](lv_event_t* e) {
@@ -136,12 +154,27 @@ bool LottieTestView::onCreate(lv_obj_t* parent) {
         if (v) v->prevLottie();
     }, LV_EVENT_CLICKED, this);
 
+    // Botón Pantalla Completa
+    lv_obj_t* btnFull = lv_button_create(m_navRow);
+    lv_obj_set_size(btnFull, 110, 40);
+    DefaultTheme::applyButton(btnFull);
+    lv_obj_set_style_bg_color(btnFull, lv_color_hex(0x00e5ff), 0);
+    lv_obj_set_style_bg_opa(btnFull, LV_OPA_30, 0);
+    lv_obj_t* lblFull = lv_label_create(btnFull);
+    lv_label_set_text(lblFull, LV_SYMBOL_IMAGE " Full");
+    lv_obj_set_style_text_font(lblFull, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblFull);
+    lv_obj_add_event_cb(btnFull, [](lv_event_t* e) {
+        auto* v = static_cast<LottieTestView*>(lv_event_get_user_data(e));
+        if (v) v->toggleFullscreen();
+    }, LV_EVENT_CLICKED, this);
+
     // Botón Recargar SD
-    lv_obj_t* btnReload = lv_button_create(navRow);
-    lv_obj_set_size(btnReload, 110, 40);
+    lv_obj_t* btnReload = lv_button_create(m_navRow);
+    lv_obj_set_size(btnReload, 95, 40);
     DefaultTheme::applyButton(btnReload);
     lv_obj_t* lblReload = lv_label_create(btnReload);
-    lv_label_set_text(lblReload, LV_SYMBOL_REFRESH " Escanear");
+    lv_label_set_text(lblReload, LV_SYMBOL_REFRESH);
     lv_obj_set_style_text_font(lblReload, &lv_font_montserrat_12, 0);
     lv_obj_center(lblReload);
     lv_obj_add_event_cb(btnReload, [](lv_event_t* e) {
@@ -150,8 +183,8 @@ bool LottieTestView::onCreate(lv_obj_t* parent) {
     }, LV_EVENT_CLICKED, this);
 
     // Botón Siguiente
-    lv_obj_t* btnNext = lv_button_create(navRow);
-    lv_obj_set_size(btnNext, 110, 40);
+    lv_obj_t* btnNext = lv_button_create(m_navRow);
+    lv_obj_set_size(btnNext, 95, 40);
     DefaultTheme::applyButton(btnNext);
     lv_obj_t* lblNext = lv_label_create(btnNext);
     lv_label_set_text(lblNext, "Sig " LV_SYMBOL_NEXT);
@@ -163,35 +196,35 @@ bool LottieTestView::onCreate(lv_obj_t* parent) {
     }, LV_EVENT_CLICKED, this);
 
     // 4. Panel de Métricas de Rendimiento
-    lv_obj_t* statsCard = lv_obj_create(m_container);
-    lv_obj_set_width(statsCard, 380);
-    lv_obj_set_height(statsCard, LV_SIZE_CONTENT);
-    DefaultTheme::applyRaisedCard(statsCard, 12);
-    lv_obj_set_style_pad_all(statsCard, 8, 0);
-    lv_obj_set_style_margin_top(statsCard, 8, 0);
-    lv_obj_set_flex_flow(statsCard, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(statsCard, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    m_statsCard = lv_obj_create(m_container);
+    lv_obj_set_width(m_statsCard, 400);
+    lv_obj_set_height(m_statsCard, LV_SIZE_CONTENT);
+    DefaultTheme::applyRaisedCard(m_statsCard, 12);
+    lv_obj_set_style_pad_all(m_statsCard, 8, 0);
+    lv_obj_set_style_margin_top(m_statsCard, 8, 0);
+    lv_obj_set_flex_flow(m_statsCard, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(m_statsCard, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    m_fpsLabel = lv_label_create(statsCard);
+    m_fpsLabel = lv_label_create(m_statsCard);
     lv_obj_set_style_text_font(m_fpsLabel, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(m_fpsLabel, DefaultTheme::getPrimaryAccent(), 0);
     lv_label_set_text(m_fpsLabel, "FPS: Calculando...");
 
-    m_infoLabel = lv_label_create(statsCard);
+    m_infoLabel = lv_label_create(m_statsCard);
     lv_obj_set_style_text_font(m_infoLabel, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(m_infoLabel, DefaultTheme::getMutedTextColor(), 0);
-    lv_label_set_text(m_infoLabel, "Canvas: 240x240 ARGB8888 (PSRAM)");
+    lv_label_set_text(m_infoLabel, "Canvas: 260x260 ARGB8888 (PSRAM)");
 
     // 5. Botón de Salir
-    lv_obj_t* btnBack = lv_button_create(m_container);
-    lv_obj_set_size(btnBack, 160, 38);
-    lv_obj_set_style_margin_top(btnBack, 8, 0);
-    DefaultTheme::applyButton(btnBack);
-    lv_obj_t* btnLbl = lv_label_create(btnBack);
+    m_btnBack = lv_button_create(m_container);
+    lv_obj_set_size(m_btnBack, 160, 38);
+    lv_obj_set_style_margin_top(m_btnBack, 8, 0);
+    DefaultTheme::applyButton(m_btnBack);
+    lv_obj_t* btnLbl = lv_label_create(m_btnBack);
     lv_label_set_text(btnLbl, LV_SYMBOL_LEFT " Volver");
     lv_obj_set_style_text_font(btnLbl, &lv_font_montserrat_12, 0);
     lv_obj_center(btnLbl);
-    lv_obj_add_event_cb(btnBack, [](lv_event_t* e) {
+    lv_obj_add_event_cb(m_btnBack, [](lv_event_t* e) {
         UIManager::getInstance().popView();
     }, LV_EVENT_CLICKED, nullptr);
 
@@ -202,6 +235,41 @@ bool LottieTestView::onCreate(lv_obj_t* parent) {
     m_lastTime = lv_tick_get();
     m_frameCount = 0;
     return true;
+}
+
+void LottieTestView::toggleFullscreen() {
+    m_isFullscreen = !m_isFullscreen;
+
+    if (m_isFullscreen) {
+        // Modo Pantalla Completa: ocultar barras y controles
+        if (m_fileLabel) lv_obj_add_flag(m_fileLabel, LV_OBJ_FLAG_HIDDEN);
+        if (m_navRow) lv_obj_add_flag(m_navRow, LV_OBJ_FLAG_HIDDEN);
+        if (m_statsCard) lv_obj_add_flag(m_statsCard, LV_OBJ_FLAG_HIDDEN);
+        if (m_btnBack) lv_obj_add_flag(m_btnBack, LV_OBJ_FLAG_HIDDEN);
+
+        // Expandir contenedor de animación a pantalla completa
+        if (m_animCard) {
+            lv_obj_set_size(m_animCard, LV_PCT(100), LV_PCT(96));
+            lv_obj_set_style_border_width(m_animCard, 0, 0);
+            lv_obj_set_style_bg_opa(m_animCard, LV_OPA_TRANSP, 0);
+        }
+    } else {
+        // Modo Normal: restaurar controles
+        if (m_fileLabel) lv_obj_remove_flag(m_fileLabel, LV_OBJ_FLAG_HIDDEN);
+        if (m_navRow) lv_obj_remove_flag(m_navRow, LV_OBJ_FLAG_HIDDEN);
+        if (m_statsCard) lv_obj_remove_flag(m_statsCard, LV_OBJ_FLAG_HIDDEN);
+        if (m_btnBack) lv_obj_remove_flag(m_btnBack, LV_OBJ_FLAG_HIDDEN);
+
+        // Restaurar tamaño de tarjeta
+        if (m_animCard) {
+            lv_obj_set_size(m_animCard, 280, 280);
+            lv_obj_set_style_border_width(m_animCard, 1, 0);
+            lv_obj_set_style_bg_opa(m_animCard, LV_OPA_COVER, 0);
+        }
+    }
+
+    // Recargar animación con la resolución correspondiente
+    loadCurrentLottie();
 }
 
 void LottieTestView::loadCurrentLottie() {
@@ -230,8 +298,9 @@ void LottieTestView::loadCurrentLottie() {
     char labelBuf[128];
 
 #if LV_USE_LOTTIE
-    const int32_t animW = 240;
-    const int32_t animH = 240;
+    // Alta Resolución: 440x440 en pantalla completa, 260x260 en modo ventana
+    const int32_t animW = m_isFullscreen ? 440 : 260;
+    const int32_t animH = m_isFullscreen ? 440 : 260;
 
     m_lottieObj = lv_lottie_create(m_animCard);
     lv_obj_center(m_lottieObj);
@@ -240,9 +309,25 @@ void LottieTestView::loadCurrentLottie() {
     if (m_drawBuf) {
         lv_lottie_set_draw_buf(m_lottieObj, m_drawBuf);
 
-        if (currentPath == "__EMBEDDED_STAR__") {
+        if (currentPath == "__EMBEDDED_NEUMORPHIC_UI__") {
+            lv_lottie_set_src_data(m_lottieObj, cbdos::assets::LOTTIE_CBDOS_NEUMORPHIC_UI_JSON, cbdos::assets::LOTTIE_CBDOS_NEUMORPHIC_UI_JSON_SIZE);
+            snprintf(labelBuf, sizeof(labelBuf), "[%zu/%zu] CBDos: Panel Neumórfico", 
+                     m_currentFileIndex + 1, m_fileList.size());
+        } else if (currentPath == "__EMBEDDED_STAR__") {
             lv_lottie_set_src_data(m_lottieObj, LOTTIE_TEST_JSON, LOTTIE_TEST_JSON_SIZE);
             snprintf(labelBuf, sizeof(labelBuf), "[%zu/%zu] Estrella Demo (Embebida)", 
+                     m_currentFileIndex + 1, m_fileList.size());
+        } else if (currentPath == "__EMBEDDED_ROBOT_IDLE__") {
+            lv_lottie_set_src_data(m_lottieObj, cbdos::assets::LOTTIE_BITBOT_IDLE_JSON, cbdos::assets::LOTTIE_BITBOT_IDLE_JSON_SIZE);
+            snprintf(labelBuf, sizeof(labelBuf), "[%zu/%zu] BitBot: IDLE (Flotando)", 
+                     m_currentFileIndex + 1, m_fileList.size());
+        } else if (currentPath == "__EMBEDDED_ROBOT_DANCE__") {
+            lv_lottie_set_src_data(m_lottieObj, cbdos::assets::LOTTIE_BITBOT_DANCE_JSON, cbdos::assets::LOTTIE_BITBOT_DANCE_JSON_SIZE);
+            snprintf(labelBuf, sizeof(labelBuf), "[%zu/%zu] BitBot: DANCE (Baile)", 
+                     m_currentFileIndex + 1, m_fileList.size());
+        } else if (currentPath == "__EMBEDDED_ROBOT_WAVE__") {
+            lv_lottie_set_src_data(m_lottieObj, cbdos::assets::LOTTIE_BITBOT_WAVE_JSON, cbdos::assets::LOTTIE_BITBOT_WAVE_JSON_SIZE);
+            snprintf(labelBuf, sizeof(labelBuf), "[%zu/%zu] BitBot: WAVE (Saludo)", 
                      m_currentFileIndex + 1, m_fileList.size());
         } else {
             m_currentJsonData = cbdos::storage::readFile(currentPath.c_str());
@@ -261,6 +346,13 @@ void LottieTestView::loadCurrentLottie() {
                 snprintf(labelBuf, sizeof(labelBuf), "Error al leer: %s", currentPath.c_str());
             }
         }
+    }
+
+    if (m_infoLabel && lv_obj_is_valid(m_infoLabel)) {
+        char infoBuf[64];
+        snprintf(infoBuf, sizeof(infoBuf), "Canvas: %dx%d ARGB8888 (%s)", 
+                 (int)animW, (int)animH, m_isFullscreen ? "Fullscreen" : "PSRAM");
+        lv_label_set_text(m_infoLabel, infoBuf);
     }
 #else
     snprintf(labelBuf, sizeof(labelBuf), "LV_USE_LOTTIE no habilitado");

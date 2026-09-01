@@ -55,15 +55,12 @@ bool MusicPlayerView::onCreate(lv_obj_t* parent) {
     lv_obj_set_flex_flow(m_playerCard, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(m_playerCard, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_all(m_playerCard, 16, 0);
-    lv_obj_set_style_pad_row(m_playerCard, 14, 0);
+    lv_obj_set_style_pad_row(m_playerCard, 10, 0);
     lv_obj_add_flag(m_playerCard, LV_OBJ_FLAG_HIDDEN);
     DefaultTheme::disableScroll(m_playerCard);
 
-    // Icono grande de música
-    m_mainIconLabel = lv_label_create(m_playerCard);
-    lv_label_set_text(m_mainIconLabel, LV_SYMBOL_AUDIO);
-    lv_obj_set_style_text_font(m_mainIconLabel, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(m_mainIconLabel, DefaultTheme::getPrimaryAccent(), 0);
+    // Mascota Robot interactiva ("BitBot") en lugar del icono estático
+    m_mascot.create(m_playerCard);
 
     // Título de la canción (con scroll circular)
     m_titleLabel = lv_label_create(m_playerCard);
@@ -76,7 +73,7 @@ bool MusicPlayerView::onCreate(lv_obj_t* parent) {
 
     // Estado / Formato
     m_statusLabel = lv_label_create(m_playerCard);
-    lv_label_set_text(m_statusLabel, "Listo");
+    lv_label_set_text(m_statusLabel, "Toca a BitBot para saludar");
     lv_obj_set_style_text_font(m_statusLabel, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(m_statusLabel, DefaultTheme::getMutedTextColor(), 0);
 
@@ -135,6 +132,7 @@ void MusicPlayerView::onDestroy() {
         lv_timer_delete(m_updateTimer);
         m_updateTimer = nullptr;
     }
+    m_mascot.destroy();
     UIManager::getInstance().getHeaderBar().clearRightAction();
     UIManager::getInstance().getHeaderBar().showWifi(true);
     BaseView::onDestroy();
@@ -244,11 +242,12 @@ void MusicPlayerView::startTrack(int index) {
     m_currentTrackIndex = index;
 
     lv_label_set_text(m_titleLabel, m_playlist[index].name.c_str());
-    lv_label_set_text(m_statusLabel, "Reproduciendo desde SD...");
+    lv_label_set_text(m_statusLabel, "Reproduciendo...");
     lv_label_set_text(m_playBtnLabel, LV_SYMBOL_PAUSE);
 
     cbdos::audio::playFile(m_playlist[index].path.c_str());
     m_isPlaying = true;
+    m_mascot.setState(MascotState::DANCING);
 }
 
 void MusicPlayerView::trackClickCb(lv_event_t* e) {
@@ -270,11 +269,13 @@ void MusicPlayerView::playPauseCb(lv_event_t* e) {
         cbdos::audio::pause();
         lv_label_set_text(self->m_playBtnLabel, LV_SYMBOL_PLAY);
         lv_label_set_text(self->m_statusLabel, "En Pausa");
+        self->m_mascot.setState(MascotState::IDLE);
     } else {
         if (self->m_currentTrackIndex >= 0) {
             cbdos::audio::resume();
             lv_label_set_text(self->m_playBtnLabel, LV_SYMBOL_PAUSE);
             lv_label_set_text(self->m_statusLabel, "Reproduciendo...");
+            self->m_mascot.setState(MascotState::DANCING);
         } else if (!self->m_playlist.empty()) {
             self->startTrack(0);
         }
@@ -302,6 +303,16 @@ void MusicPlayerView::updateTimerCb(lv_timer_t* timer) {
     auto stats = cbdos::audio::getStats();
     if (self->m_playBtnLabel) {
         lv_label_set_text(self->m_playBtnLabel, stats.isPlaying ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
+    }
+
+    if (stats.isPlaying) {
+        if (self->m_mascot.getState() == MascotState::IDLE) {
+            self->m_mascot.setState(MascotState::DANCING);
+        }
+    } else {
+        if (self->m_mascot.getState() == MascotState::DANCING) {
+            self->m_mascot.setState(MascotState::IDLE);
+        }
     }
 }
 

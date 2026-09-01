@@ -21,6 +21,7 @@ public:
     void nextLottie();
     void prevLottie();
     void rescanFiles();
+    void toggleFullscreen();
 
 private:
     void scanLottieFiles();
@@ -30,12 +31,16 @@ private:
     lv_obj_t* m_infoLabel;
     lv_obj_t* m_fileLabel;
     lv_obj_t* m_animCard;
+    lv_obj_t* m_navRow;
+    lv_obj_t* m_statsCard;
+    lv_obj_t* m_btnBack;
     lv_draw_buf_t* m_drawBuf;
 
     std::vector<std::string> m_fileList;
     size_t m_currentFileIndex;
     std::string m_currentJsonData;
 
+    bool m_isFullscreen;
     uint32_t m_lastTime;
     uint32_t m_frameCount;
 };

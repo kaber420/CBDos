@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BaseView.hpp"
+#include "../mascot/RobotMascotWidget.hpp"
 #include <vector>
 #include <string>
 
@@ -38,9 +39,9 @@ private:
     lv_obj_t* m_listContainer = nullptr;
     lv_obj_t* m_playerCard = nullptr;
 
+    RobotMascotWidget m_mascot;
     lv_obj_t* m_titleLabel = nullptr;
     lv_obj_t* m_statusLabel = nullptr;
-    lv_obj_t* m_mainIconLabel = nullptr;
     lv_obj_t* m_playBtn = nullptr;
     lv_obj_t* m_playBtnLabel = nullptr;
 
