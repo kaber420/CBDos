@@ -80,8 +80,37 @@
 | **Lua Script Engine** | Intérprete Lua embebido para micro-apps y Direct 2D GFX | ✅ 90% | ⏳ | ✅ |
 | **USB HID / BadUSB Engine** | Teclado + Ratón compuesto, DuckyScript (`.dd`) y Lua reactivo con feedback de LEDs | ✅ | ✅ | ✅ |
 | **USB Host CDC / Módems & Radios** | Periféricos Plug & Play por puerto USB-C (Módems CDC, ESP-NOW Bridge, LoRa, Serial) sin soldaduras | ✅ | ➖ | ✅ |
+| **Backpack Manager (NFC & GPIO Dinámico)** | Detección de mochilas modulares por NFC y reconfiguración en caliente de pines GPIO/I2C/SPI | ✅ 90% | ⏳ | ✅ |
 
 *Leyenda: ✅ Operativo · 🟡 Integración de driver en curso · 🔄 Portando desde espOS32 · 📋 Planificado · ⏳ Pendiente · ➖ No aplica*
+
+---
+
+## 🎒 Backpack Manager — Mochilas Modulares con Auto-Detección por NFC
+
+CBDos incluye un subsistema de hardware modular denominado **Backpack Manager** que permite acoplar "mochilas" o cartuchos físicos de expansión en la parte trasera del Cyberdeck con detección inteligente instantánea:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│               MOCHILA / CARTUCHO MODULAR DE EXPANSIÓN                   │
+│   [ Circuito: LoRa SX1262 / Sub-GHz CC1101 / Sensores / Batería ]      │
+│   🏷️ Tag NFC (NTAG213) con ID de Hardware, Mapa de Pines y Lua App     │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Acoplamiento Magnético / Físico
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                      CYBERDECK ESP32-P4 (CBDos)                        │
+│   1. Lector NFC detecta el Tag en <15 ms y extrae el descriptor.       │
+│   2. Dynamic PinMux Engine reconfigura pines SPI, I2C, UART en JP1.    │
+│   3. Sistema lanza notificación visual y ejecuta la Lua App asociada.  │
+│   4. Al desacoplar, libera recursos y pone los GPIOs en estado seguro. │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+- 🏷️ **Auto-Identificación por NFC (Plug & Play Físico):** Al acercar y fijar una mochila modular (LoRa, Sub-GHz CC1101, GPS, estación meteorológica, osciloscopio o batería inteligente), el lector NFC lee el descriptor de hardware embebido.
+- ⚡ **Dynamic PinMux (Reconfiguración de Pines al Vuelo):** El sistema asigna automáticamente los pines de la cabecera **JP1 (2×13 pines)** a las funciones necesarias (SPI MOSI/MISO/SCK/CS, buses I2C SDA/SCL, interrupciones IRQ o UART) según lo que especifique la etiqueta NFC.
+- 🚀 **Auto-Lanzamiento de Aplicaciones Lua:** Abre instantáneamente la interfaz gráfica y controladores de la mochila desde la MicroSD (`/sdcard/apps/*.lua`) con una animación táctil en pantalla.
+- 🛡️ **Hot-Swap Seguro:** Al retirar la mochila, CBDos desconecta el bus, limpia la memoria y coloca los pines en alta impedancia (Hi-Z) para evitar cortocircuitos.
 
 ---
 
@@ -245,6 +274,8 @@ idf.py build
 | [`docs/hardware/pinouts_and_ports.md`](docs/hardware/pinouts_and_ports.md) | Referencia completa de GPIO, buses I2C, I2S y pines JP1 |
 | [`docs/hardware/usb_c_field_flasher_milestone.md`](docs/hardware/usb_c_field_flasher_milestone.md) | Hito de flasheo autónomo USB-C en campo con Auto-Bootloader |
 | [`docs/architecture/hal_and_core_architecture.md`](docs/architecture/hal_and_core_architecture.md) | Arquitectura agnóstica de `core/`, Ley de Pureza y contratos HAL |
+| [`docs/architecture/lua_app_ecosystem_and_runtime_architecture.md`](docs/architecture/lua_app_ecosystem_and_runtime_architecture.md) | Ecosistema de Lua Apps, runtime sandboxed y APIs comunitarias |
+| [`docs/architecture/backpack_manager_and_dynamic_gpio_nfc_spec.md`](docs/architecture/backpack_manager_and_dynamic_gpio_nfc_spec.md) | Backpack Manager, auto-detección NFC y reconfiguración dinámica de GPIOs en JP1 |
 | [`docs/architecture/multi_radio_hub_router_design.md`](docs/architecture/multi_radio_hub_router_design.md) | Estación Base y Router Multi-Antena con Hub USB y C3s |
 | [`docs/architecture/modular_lua_bridge_architecture.md`](docs/architecture/modular_lua_bridge_architecture.md) | Arquitectura modular de bindings Lua por dominios |
 | [`docs/network/plan_espnow_usb_bridge.md`](docs/network/plan_espnow_usb_bridge.md) | Firmware del módem USB ESP-NOW y protocolo de enmarcado |

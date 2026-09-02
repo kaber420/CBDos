@@ -29,6 +29,8 @@ docs/
 
 ### 2. 🏛️ [Arquitectura y HAL (`docs/architecture/`)](architecture/)
 * **[Arquitectura Agnóstica y HAL](architecture/hal_and_core_architecture.md):** Filosofía de desacoplamiento, Ley de Pureza de `core/`, contratos C++ y tabla maestra de módulos HAL.
+* **[Ecosistema de Lua Apps y Runtime Sandboxed](architecture/lua_app_ecosystem_and_runtime_architecture.md):** Especificación del runtime de Lua, aislamiento en PSRAM, APIs unificadas (`ui`, `hid`, `usb`, `radio`, `sys`) y modelo de extensibilidad sin compilar.
+* **[Backpack Manager y Auto-Detección NFC](architecture/backpack_manager_and_dynamic_gpio_nfc_spec.md):** Arquitectura de mochilas modulares de hardware, auto-identificación por NFC y reconfiguración dinámica de pines GPIO/I2C/SPI en JP1.
 * **[Estación Base y Router Multi-Radio Modular](architecture/multi_radio_hub_router_design.md):** Arquitectura de Hub USB táctico con múltiples dongles ESP32-C3 (ESP-NOW, LoRa 915 MHz y SX1280 FLRC) con infografías de hardware.
 * **[Modularización de LuaBridge](architecture/modular_lua_bridge_architecture.md):** Arquitectura modular de bindings de Lua dividida por dominios (Kernel, Audio, GFX, FS, Net, Mesh).
 * **[Diagnóstico y Solución de GFX 2D en P4](architecture/lua_gfx_p4_mipi_dpi_flicker_diagnosis.md):** Análisis de parpadeo DMA ping-pong y sincronización de caché L2 en displays MIPI-DPI.
