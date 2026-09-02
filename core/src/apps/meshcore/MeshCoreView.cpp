@@ -518,6 +518,7 @@ void MeshCoreView::sendButtonClickedCb(lv_event_t* e) {
     if (!txt || txt[0] == '\0') return;
 
     MeshCoreEngine::getInstance().sendMessage(0xFFFF, txt);
+    view->refreshMessages();
     lv_textarea_set_text(view->m_taInput, "");
 }
 

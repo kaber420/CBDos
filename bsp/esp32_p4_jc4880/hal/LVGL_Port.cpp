@@ -1,6 +1,7 @@
 #include "LVGL_Port.h"
 #include "DisplayHAL.h"
 #include "TouchHAL.h"
+#include "cbdos/ui.hpp"
 #include "../../core/src/lua/LuaBridge.hpp"
 #include "misc/cache/instance/lv_image_cache.h"
 #include <esp_log.h>
@@ -93,6 +94,7 @@ void LVGL_Port::lvglTask(void* arg) {
         }
         if (self->lock(10)) {
             lv_timer_handler();
+            cbdos::ui::update();
             self->unlock();
         }
         vTaskDelay(pdMS_TO_TICKS(2));
