@@ -21,7 +21,7 @@ namespace {
 struct RadioStateS3 {
     bool powered = true;
     radio::RadioMode mode = radio::RadioMode::EspNow;
-    uint8_t channel = 13;
+    uint8_t channel = 1;
     int8_t txPower = 20;
 
     bool wifiScanning = false;

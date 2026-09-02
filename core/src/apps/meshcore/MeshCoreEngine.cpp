@@ -49,6 +49,23 @@ bool MeshCoreEngine::init() {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_running) return true;
 
+    // Obtener identidad única basada en la MAC del hardware
+    uint8_t mac[6] = {0};
+    for (size_t i = 0; i < static_cast<size_t>(MeshInterfaceId::MaxInterfaces); ++i) {
+        auto* iface = cbdos::network::NetworkInterfaceManager::getInstance().getInterface(i);
+        if (iface && iface->getMacAddress(mac)) {
+            if (m_localShortId == 0x1337 || m_localShortId == 0) {
+                m_localShortId = (static_cast<uint16_t>(mac[4]) << 8) | static_cast<uint16_t>(mac[5]);
+            }
+            if (m_localName == "Cyberdeck" || m_localName.empty()) {
+                char nameBuf[32];
+                snprintf(nameBuf, sizeof(nameBuf), "CBDos-%02X%02X", mac[4], mac[5]);
+                m_localName = nameBuf;
+            }
+            break;
+        }
+    }
+
     CBD_LOG_I(TAG, "Iniciando motor MeshCore (Identity: 0x%04X, Name: %s)...", m_localShortId, m_localName.c_str());
 
     // Sincronizar y enganchar interfaces reales con NetworkInterfaceManager

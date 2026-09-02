@@ -87,8 +87,8 @@ private:
     void forwardPacket(MeshInterfaceId incomingIface, const uint8_t* data, size_t len);
 
     bool m_running = false;
-    uint16_t m_localShortId = 0x1337;
-    std::string m_localName = "Cyberdeck";
+    uint16_t m_localShortId = 0;
+    std::string m_localName = "";
     uint32_t m_nextMsgId = 1;
     uint16_t m_activeChannelId = 0; // 0 = #general
     uint16_t m_nextChannelId = 1;
