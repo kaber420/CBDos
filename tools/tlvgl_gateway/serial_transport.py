@@ -22,6 +22,7 @@ RADIO_CMD_SET_MODE    = 0x02
 RADIO_CMD_SET_CHAN    = 0x03
 RADIO_CMD_SET_POWER   = 0x04
 RADIO_CMD_SCAN_PEERS  = 0x05
+RADIO_CMD_SET_ALIAS   = 0x06
 
 MAX_PAYLOAD      = 250
 
@@ -40,7 +41,7 @@ def crc8_calc(data: bytes) -> int:
 
 
 class SerialEspNowTransport:
-    def __init__(self, port: str = "/dev/ttyACM1", baudrate: int = 115200, on_packet_cb=None):
+    def __init__(self, port: str = "/dev/ttyACM0", baudrate: int = 115200, on_packet_cb=None):
         self.port = port
         self.baudrate = baudrate
         self.on_packet_cb = on_packet_cb
@@ -49,6 +50,10 @@ class SerialEspNowTransport:
         self.thread = None
         self._ctrl_response_event = threading.Event()
         self._last_ctrl_response = None
+        self.alias = "Desconocido"
+        self.mac = ""
+        self.channel = 1
+        self.mode = "Normal"
 
     def start(self):
         try:
@@ -102,20 +107,35 @@ class SerialEspNowTransport:
             return False
 
     def get_radio_status(self):
-        """Consulta el estado del hardware de radio (MAC, modo, canal, potencia)."""
+        """Consulta el estado del hardware de radio (MAC, modo, canal, potencia, alias)."""
         resp = self.send_ctrl_cmd(RADIO_CMD_GET_STATUS)
         if resp and len(resp) >= 8 and resp[1] == 0x00:
             mac_str = ":".join(f"{b:02X}" for b in resp[2:8])
             mode_str = "LR" if (len(resp) >= 9 and resp[8] == 0x02) else "Normal"
             chan = resp[9] if len(resp) >= 10 else 1
             pwr = resp[10] if len(resp) >= 11 else 84
+            alias_str = resp[11:].decode("utf-8", errors="ignore") if len(resp) > 11 else "PoP"
+            self.mac = mac_str
+            self.mode = mode_str
+            self.channel = chan
+            self.alias = alias_str
             return {
+                "alias": alias_str,
                 "mac": mac_str,
                 "mode": mode_str,
                 "channel": chan,
                 "power_dbm": pwr * 0.25
             }
         return None
+
+    def set_node_alias(self, alias: str) -> bool:
+        """Asigna un nuevo alias de nodo persistente en NVS (ej. 'PoP1a')."""
+        resp = self.send_ctrl_cmd(RADIO_CMD_SET_ALIAS, alias.encode("utf-8"))
+        if resp and len(resp) >= 2 and resp[1] == 0x00:
+            self.alias = alias
+            print(f"🏷️ [Control Radio] Alias actualizado a '{alias}' en {self.port}")
+            return True
+        return False
 
     def stop(self):
         self.running = False
@@ -219,3 +239,85 @@ class SerialEspNowTransport:
                 if self.running:
                     print(f"⚠️ Error en lectura serial del Dongle: {e}")
                     time.sleep(0.5)
+
+
+def scan_all_dongles(baudrate: int = 115200) -> list:
+    """Escanea todos los puertos USB/Serial disponibles para descubrir módems ESP32-C3 activos."""
+    import glob
+    candidates = sorted(glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*"))
+    discovered = []
+
+    for port in candidates:
+        try:
+            ser = serial.Serial(port, baudrate, timeout=0.3)
+            # Enviar GET_STATUS
+            payload = bytes([RADIO_CMD_GET_STATUS])
+            hdr = bytes([FRAME_MAGIC_0, FRAME_MAGIC_1, DIR_CTRL_CMD, 0x00, len(payload)])
+            crc = bytes([crc8_calc(payload)])
+            ser.write(hdr + payload + crc)
+            ser.flush()
+
+            # Esperar respuesta
+            time.sleep(0.2)
+            raw = ser.read(64)
+            ser.close()
+
+            if len(raw) >= 12 and raw[0] == FRAME_MAGIC_0 and raw[1] == FRAME_MAGIC_1 and raw[2] == DIR_CTRL_RESP:
+                payload_len = (raw[3] << 8) | raw[4]
+                resp_payload = raw[5:5+payload_len]
+                if len(resp_payload) >= 11 and resp_payload[0] == RADIO_CMD_GET_STATUS and resp_payload[1] == 0x00:
+                    mac = ":".join(f"{b:02X}" for b in resp_payload[2:8])
+                    mode = "LR" if resp_payload[8] == 2 else "Normal"
+                    chan = resp_payload[9]
+                    pwr = resp_payload[10] * 0.25
+                    alias = resp_payload[11:].decode("utf-8", errors="ignore") if len(resp_payload) > 11 else "PoP"
+                    discovered.append({
+                        "port": port,
+                        "alias": alias,
+                        "mac": mac,
+                        "mode": mode,
+                        "channel": chan,
+                        "power_dbm": pwr
+                    })
+        except Exception:
+            continue
+
+    return discovered
+
+
+class MultiDongleManager:
+    """Administrador multi-módem para soportar múltiples ESP32-C3 simultáneos en PC."""
+    def __init__(self, on_packet_cb=None):
+        self.on_packet_cb = on_packet_cb
+        self.dongles = {} # alias -> SerialEspNowTransport
+
+    def auto_discover_and_start(self) -> int:
+        """Descubre automáticamente todos los módems C3 conectados e inicia sus transportes."""
+        found = scan_all_dongles()
+        for info in found:
+            port = info["port"]
+            alias = info["alias"]
+            transport = SerialEspNowTransport(port=port, on_packet_cb=self.on_packet_cb)
+            if transport.start():
+                status = transport.get_radio_status()
+                if status:
+                    print(f"🛰️ [MultiMódem] '{status['alias']}' conectado en {port} | MAC: {status['mac']} | Ch: {status['channel']}")
+                    self.dongles[status["alias"]] = transport
+        return len(self.dongles)
+
+    def broadcast_packet(self, payload: bytes, msg_id: int = 1):
+        """Emite el paquete a través de todos los módems C3 conectados en paralelo."""
+        for dongle in self.dongles.values():
+            dongle.send_packet(payload, msg_id)
+
+    def send_via_dongle(self, alias: str, payload: bytes, msg_id: int = 1) -> bool:
+        """Emite a través de un módem específico (ej. 'PoP1a')."""
+        if alias in self.dongles:
+            self.dongles[alias].send_packet(payload, msg_id)
+            return True
+        return False
+
+    def stop_all(self):
+        for dongle in self.dongles.values():
+            dongle.stop()
+        self.dongles.clear()

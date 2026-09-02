@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esp_loader.h"
+#include <esp_loader_io.h>
 #include <stdint.h>
 #include <stdbool.h>
 

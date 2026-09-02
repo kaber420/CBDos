@@ -2,11 +2,14 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#include <Preferences.h>
 #include "packet_framing.h"
 
 #define LED_PIN 8 // LED integrado en ESP32-C3 SuperMini
 #define DEFAULT_WIFI_CHANNEL 1
 #define MAX_PEERS_TABLE 16
+
+static char s_node_alias[32] = "PoP1a";
 
 struct PeerRecord {
     uint8_t mac[6];
@@ -197,6 +200,7 @@ static void process_cli_command(const char* line) {
         Serial.println("======================================================");
         Serial.println("Comandos disponibles:");
         Serial.println("  status             - Muestra estado de radio y estadisticas");
+        Serial.println("  node <alias>       - Asigna nombre de nodo persistente (ej. PoP1a)");
         Serial.println("  peers              - Muestra tabla de nodos descubiertos");
         Serial.println("  mode [normal|lr]   - Cambia entre Normal y Long Range (LR)");
         Serial.println("  channel <1-13>     - Cambia canal Wi-Fi");
@@ -210,6 +214,7 @@ static void process_cli_command(const char* line) {
         uint8_t mac[6];
         esp_wifi_get_mac(WIFI_IF_STA, mac);
         Serial.println("\r\n--- ESTADO DEL DONGLE GATEWAY ---");
+        Serial.printf("Nodo Alias:      %s\r\n", s_node_alias);
         Serial.printf("Modo Radio:      %s\r\n", s_is_lr_mode ? "ESP-NOW LONG RANGE (LR) 🚀" : "ESP-NOW ESTÁNDAR (802.11 b/g/n) ⚡");
         Serial.printf("Canal Activo:    Canal %u (2412 + %d MHz)\r\n", s_channel, (s_channel - 1) * 5);
         Serial.printf("Potencia TX:     %.2f dBm (%u/84)\r\n", s_tx_power * 0.25f, s_tx_power);
@@ -277,6 +282,21 @@ static void process_cli_command(const char* line) {
             s_sniffer_active = false;
             Serial.println("🔇 Sniffer de trafico en vivo: DESACTIVADO");
         }
+    } else if (strncmp(line, "node", 4) == 0 || strncmp(line, "alias", 5) == 0) {
+        const char* p = line;
+        while (*p && *p != ' ') p++;
+        while (*p == ' ') p++;
+        if (*p != '\0') {
+            strncpy(s_node_alias, p, sizeof(s_node_alias) - 1);
+            s_node_alias[sizeof(s_node_alias) - 1] = '\0';
+            Preferences prefs;
+            prefs.begin("c3_bridge", false);
+            prefs.putString("alias", s_node_alias);
+            prefs.end();
+            Serial.printf("✅ Nombre de nodo guardado en NVS: '%s'\r\n", s_node_alias);
+        } else {
+            Serial.printf("Nodo actual: '%s'. Usa: 'node <nuevo_alias>'\r\n", s_node_alias);
+        }
     } else if (strcmp(line, "ping") == 0) {
         uint8_t ping_pkt[4] = {0x01, 0x00, 0x00, 0xFE}; // Trama de sondeo ligera
         esp_now_send(s_broadcast_mac, ping_pkt, sizeof(ping_pkt));
@@ -328,13 +348,31 @@ static void process_ctrl_command(const uint8_t* payload, size_t len) {
         case RADIO_CMD_GET_STATUS: {
             uint8_t mac[6];
             esp_wifi_get_mac(WIFI_IF_STA, mac);
-            uint8_t resp_data[10];
+            uint8_t resp_data[10 + 32];
             memcpy(resp_data, mac, 6);
             resp_data[6] = s_is_lr_mode ? 0x02 : 0x01; // Modo
             resp_data[7] = s_channel;                   // Canal
             resp_data[8] = s_tx_power;                  // Potencia
             resp_data[9] = (uint8_t)(s_peer_count & 0xFF);
-            send_ctrl_response(cmd, RADIO_STATUS_OK, resp_data, sizeof(resp_data));
+            size_t alias_len = strlen(s_node_alias);
+            if (alias_len > 31) alias_len = 31;
+            memcpy(resp_data + 10, s_node_alias, alias_len);
+            send_ctrl_response(cmd, RADIO_STATUS_OK, resp_data, 10 + alias_len);
+            break;
+        }
+        case RADIO_CMD_SET_ALIAS: {
+            if (len >= 2) {
+                size_t copy_len = (len - 1) < 31 ? (len - 1) : 31;
+                memcpy(s_node_alias, payload + 1, copy_len);
+                s_node_alias[copy_len] = '\0';
+                Preferences prefs;
+                prefs.begin("c3_bridge", false);
+                prefs.putString("alias", s_node_alias);
+                prefs.end();
+                send_ctrl_response(cmd, RADIO_STATUS_OK, (const uint8_t*)s_node_alias, strlen(s_node_alias));
+            } else {
+                send_ctrl_response(cmd, RADIO_STATUS_ERR, nullptr, 0);
+            }
             break;
         }
         case RADIO_CMD_SET_MODE: {
@@ -387,6 +425,13 @@ void setup() {
         delay(10);
     }
 
+    Preferences prefs;
+    prefs.begin("c3_bridge", true);
+    String saved_alias = prefs.getString("alias", "PoP1a");
+    strncpy(s_node_alias, saved_alias.c_str(), sizeof(s_node_alias) - 1);
+    s_node_alias[sizeof(s_node_alias) - 1] = '\0';
+    prefs.end();
+
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
 
@@ -412,9 +457,10 @@ void setup() {
     esp_wifi_get_mac(WIFI_IF_STA, mac);
 
     Serial.println("\r\n======================================================");
-    Serial.println("       🛰️ CBDos ESP-NOW Gateway Modem v0.1.2");
+    Serial.println("       🛰️ CBDos ESP-NOW Gateway Modem v0.1.3");
     Serial.println("======================================================");
     Serial.printf("Target:       ESP32-C3 (USB-Serial/JTAG)\r\n");
+    Serial.printf("Nodo Alias:   %s\r\n", s_node_alias);
     Serial.printf("MAC Propia:   %02X:%02X:%02X:%02X:%02X:%02X\r\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     Serial.printf("Radio:        Canal %u | Potencia: %.1fdBm | Modo: %s\r\n", 
                   s_channel, s_tx_power * 0.25f, s_is_lr_mode ? "LONG RANGE (LR)" : "NORMAL");

@@ -18,6 +18,7 @@
 #define RADIO_CMD_SET_CHAN    0x03 // Payload: Canal 1..13
 #define RADIO_CMD_SET_POWER   0x04 // Payload: Potencia 1..84
 #define RADIO_CMD_SCAN_PEERS  0x05
+#define RADIO_CMD_SET_ALIAS   0x06 // Payload: String Alias (ej. "PoP1a")
 
 // Códigos de estado / resultado
 #define RADIO_STATUS_OK       0x00

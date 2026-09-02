@@ -29,10 +29,18 @@ static void usb_host_lib_task(void* arg) {
 }
 
 static bool cdc_rx_callback(const uint8_t *data, size_t data_len, void *user_arg) {
+    ESP_LOGI(TAG, "cdc_rx_callback recibido %d bytes", (int)data_len);
     if (s_rx_buf && data && data_len > 0) {
-        size_t to_copy = (data_len > 1024) ? 1024 : data_len;
-        memcpy(s_rx_buf, data, to_copy);
-        s_rx_data_len = to_copy;
+        if (s_rx_data_len + data_len <= 1024) {
+            memcpy(s_rx_buf + s_rx_data_len, data, data_len);
+            s_rx_data_len += data_len;
+        } else {
+            size_t fit = 1024 - s_rx_data_len;
+            if (fit > 0) {
+                memcpy(s_rx_buf + s_rx_data_len, data, fit);
+                s_rx_data_len = 1024;
+            }
+        }
         if (s_rx_sem) {
             xSemaphoreGive(s_rx_sem);
         }
@@ -54,6 +62,9 @@ static void cdc_event_callback(const cdc_acm_host_dev_event_data_t *event, void 
 }
 
 esp_loader_error_t loader_port_usb_cdc_init(uint32_t timeout_ms) {
+    if (s_usb_active && s_cdc_dev != NULL) {
+        return ESP_LOADER_SUCCESS;
+    }
     s_rx_data_len = 0;
     if (!s_rx_sem) {
         s_rx_sem = xSemaphoreCreateBinary();
@@ -113,7 +124,8 @@ esp_loader_error_t loader_port_usb_cdc_init(uint32_t timeout_ms) {
     }
 
     s_usb_active = true;
-    ESP_LOGI(TAG, "¡Dispositivo ESP32 USB-Serial/JTAG conectado exitosamente!");
+    cdc_acm_host_set_control_line_state(s_cdc_dev, true, false);
+    ESP_LOGI(TAG, "¡Dispositivo ESP32 USB-Serial/JTAG conectado exitosamente (DTR=ON)!");
     return ESP_LOADER_SUCCESS;
 }
 
@@ -146,6 +158,7 @@ extern "C" {
 esp_loader_error_t loader_port_write(const uint8_t *data, uint16_t size, uint32_t timeout) {
     if (s_usb_active && s_cdc_dev) {
         esp_err_t err = cdc_acm_host_data_tx_blocking(s_cdc_dev, data, size, timeout);
+        ESP_LOGI(TAG, "loader_port_write TX size=%d err=%d", (int)size, (int)err);
         if (err == ESP_ERR_TIMEOUT) return ESP_LOADER_ERROR_TIMEOUT;
         if (err != ESP_OK) return ESP_LOADER_ERROR_FAIL;
         return ESP_LOADER_SUCCESS;
@@ -180,7 +193,7 @@ esp_loader_error_t loader_port_read(uint8_t *data, uint16_t size, uint32_t timeo
 
             int64_t elapsed = esp_timer_get_time() - start_time;
             if (elapsed >= timeout_us) {
-                return ESP_LOADER_ERROR_TIMEOUT;
+                return (bytes_read > 0) ? ESP_LOADER_SUCCESS : ESP_LOADER_ERROR_TIMEOUT;
             }
 
             uint32_t remaining_ms = (uint32_t)((timeout_us - elapsed) / 1000);

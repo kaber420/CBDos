@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 from gateway_router import GatewayRouter
-from serial_transport import SerialEspNowTransport
+from serial_transport import SerialEspNowTransport, MultiDongleManager, scan_all_dongles
 import mesh_proto as MESH
 
 DEFAULT_PORT = 8080
@@ -77,7 +77,7 @@ class TLVGLServer:
                 pass
 
 
-def on_espnow_packet_received(data: bytes, transport: SerialEspNowTransport, server: TLVGLServer, src_mac: bytes = b"", rssi: int = 0):
+def on_espnow_packet_received(data: bytes, transport, server: TLVGLServer, src_mac: bytes = b"", rssi: int = 0):
     """Callback cuando el Dongle USB captura un paquete del aire vía ESP-NOW."""
     if len(data) < 2:
         return
@@ -89,18 +89,24 @@ def on_espnow_packet_received(data: bytes, transport: SerialEspNowTransport, ser
     total_chunks = chunk_info & 0x0F
     payload = data[2:] if (total_chunks > 0 and chunk_idx < total_chunks) else data
 
-    resp = server.process_mesh_packet(payload, src_mac=src_mac, rssi=rssi)
-    if resp:
-        transport.send_packet(resp, msg_id=msg_id)
+    alias_name = getattr(transport, "alias", "Dongle")
+    if server.router.debug:
+        mac_fmt = ":".join(f"{b:02X}" for b in src_mac) if src_mac else "desconocida"
+        print(f"📥 [ESP-NOW {alias_name}] MicroChunk {chunk_idx+1}/{total_chunks} (MsgID=0x{msg_id:02X}) de MAC={mac_fmt} RSSI={rssi}dBm | {len(payload)}B")
 
+    # Procesar con el motor Gateway-Router
+    resp_packet = server.process_mesh_packet(payload, src_mac=src_mac, rssi=rssi)
 
-import os
+    if resp_packet and len(resp_packet) > 0:
+        transport.send_packet(resp_packet, msg_id=msg_id)
+        if server.router.debug:
+            print(f"📤 [ESP-NOW {alias_name}] Respuesta enviada ({len(resp_packet)} bytes) hacia radio")
 
 
 def load_config_file(conf_path: Path) -> dict:
-    """Carga variables simples clave=valor desde gateway.conf."""
+    """Lee un archivo de configuración clave=valor sencillo."""
     conf = {}
-    if conf_path.is_file():
+    if conf_path.exists():
         try:
             with open(conf_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -134,7 +140,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Servidor Gateway-Router TLVGL para CBDos")
     parser.add_argument("--port", type=int, default=default_port, help=f"Puerto TCP (default: {default_port})")
-    parser.add_argument("--serial", type=str, default=default_serial, help="Puerto Serial del Dongle USB ESP-NOW (ej: /dev/ttyACM0)")
+    parser.add_argument("--serial", type=str, default=default_serial, help="Puerto Serial específico (o dejar vacío para auto-descubrimiento multi-dongle)")
     parser.add_argument("--radio-mode", type=str, default=default_radio_mode, choices=["normal", "lr"], help="Modo de radio del Dongle (normal / lr)")
     parser.add_argument("--content-dir", type=str, default=default_content, help="Directorio de contenido HTML")
     parser.add_argument("--services", type=str, default=",".join(services_list), help="Servicios activos separados por coma (routing, hosting, proxy)")
@@ -146,27 +152,36 @@ if __name__ == '__main__':
     server.router.debug = args.debug
     server.router.configure_services(active_services)
 
-    serial_transport = None
+    dongle_mgr = MultiDongleManager(
+        on_packet_cb=lambda data, tr, mac, rssi: on_espnow_packet_received(data, tr, server, src_mac=mac, rssi=rssi)
+    )
 
     if args.serial:
-        serial_transport = SerialEspNowTransport(
+        # Puerto específico
+        tr = SerialEspNowTransport(
             port=args.serial,
             on_packet_cb=lambda data, tr, mac, rssi: on_espnow_packet_received(data, tr, server, src_mac=mac, rssi=rssi)
         )
-        if serial_transport.start():
-            # Configurar modo de radio (normal / lr)
-            time.sleep(0.1)
-            serial_transport.set_radio_mode(args.radio_mode)
+        if tr.start():
+            status = tr.get_radio_status()
+            alias = status["alias"] if status else "Dongle1"
+            dongle_mgr.dongles[alias] = tr
+            tr.set_radio_mode(args.radio_mode)
+    else:
+        # Auto-descubrimiento multi-módem
+        count = dongle_mgr.auto_discover_and_start()
+        if count == 0:
+            print("ℹ️ No se detectaron dongles USB automáticamente. Ejecutando solo en modo TCP.")
 
-    async def broadcast_worker(router: GatewayRouter, transport: Optional[SerialEspNowTransport]):
+    async def broadcast_worker(router: GatewayRouter, mgr: MultiDongleManager):
         """Emite periódicamente el Micro-Broadcast PoP (Hora Epoch + Hash Portada + Status) cada 60s."""
         while True:
             try:
-                if transport and transport.running:
+                if mgr.dongles:
                     pkt = router.get_pop_broadcast_packet()
-                    transport.send_packet(pkt, msg_id=0xAA)
+                    mgr.broadcast_packet(pkt, msg_id=0xAA)
                     if router.debug:
-                        print(f"📡 [PoP Broadcast] Emitido micro-frame (7B) por ESP-NOW: Epoch={int(time.time())} Hash=0x{router.routing_svc.cover_hash:04X} Status=0x{router.routing_svc.status_code:02X}")
+                        print(f"📡 [PoP Broadcast] Emitido micro-frame (7B) por ESP-NOW a través de {len(mgr.dongles)} módems: Epoch={int(time.time())}")
             except Exception as e:
                 print(f"⚠️ Error en broadcast_worker: {e}")
             await asyncio.sleep(60)
@@ -176,12 +191,12 @@ if __name__ == '__main__':
         mode_str = "🟢 MODO DESARROLLO (Telemetría Detallada)" if args.debug else "⚪ MODO PRODUCCIÓN (Logs Compactos)"
         print(f"🚀 Gateway-Router TLVGL activo en TCP puerto {args.port} | {mode_str}")
         print(f"🧩 Servicios cargados: {', '.join(active_services)}")
-        if args.serial:
-            print(f"📻 Puente Dongle USB ESP-NOW activo en {args.serial}")
+        if dongle_mgr.dongles:
+            print(f"📻 Módems USB activos ({len(dongle_mgr.dongles)}): {', '.join(dongle_mgr.dongles.keys())}")
         print(f"📁 Directorio de contenido: {args.content_dir}")
 
         # Iniciar emisor periódico de 60 segundos
-        asyncio.create_task(broadcast_worker(server.router, serial_transport))
+        asyncio.create_task(broadcast_worker(server.router, dongle_mgr))
 
         async with srv:
             await srv.serve_forever()
@@ -190,6 +205,4 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nServidor detenido.")
-        if serial_transport:
-            serial_transport.stop()
-
+        dongle_mgr.stop_all()

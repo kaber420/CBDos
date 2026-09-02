@@ -191,6 +191,8 @@ extern "C" uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
 #if ENABLE_CBDOS_SERIAL_DEBUG_CLI
 #include "cbdos/ducky.hpp"
 #include "../../../core/src/lua/LuaEngine.hpp"
+#include "usb_cdc_loader_port.hpp"
+#include <esp_loader_io.h>
 #include <driver/usb_serial_jtag.h>
 
 static void serial_interactive_cli_task(void* arg) {
@@ -226,6 +228,105 @@ static void serial_interactive_cli_task(void* arg) {
                             vTaskDelay(pdMS_TO_TICKS(5));
                         }
                         printf("[SERIAL_CLI_OUT] Ducky ejecutado OK.\n");
+                    } else if (line_buf == "c3: status" || line_buf == "radio: probe" || line_buf == "c3: probe") {
+                        printf("[SERIAL_CLI_OUT] 🔍 Sondeando módem ESP32-C3 en puerto USB OTG High-Speed...\n");
+                        esp_loader_error_t err = loader_port_usb_cdc_init(1500);
+                        if (err != ESP_LOADER_SUCCESS) {
+                            printf("[SERIAL_CLI_ERR] ❌ No se detectó dispositivo USB en el puerto OTG (err=%d)\n", err);
+                        } else {
+                            // 1. Drenar buffer previo
+                            uint8_t trash[128];
+                            while (loader_port_read(trash, sizeof(trash), 10) == ESP_LOADER_SUCCESS);
+
+                            // 2. Enviar trama binaria GET_STATUS: 0xAA 0x55 0x03 0x00 0x01 0x01 0xA2
+                            uint8_t get_status_frame[] = { 0xAA, 0x55, 0x03, 0x00, 0x01, 0x01, 0xA2 };
+                            loader_port_write(get_status_frame, sizeof(get_status_frame), 500);
+                            
+                            // 3. Buscar magic bytes 0xAA 0x55
+                            bool synced = false;
+                            uint8_t b = 0;
+                            int tries = 0;
+                            while (tries++ < 50) {
+                                if (loader_port_read(&b, 1, 50) == ESP_LOADER_SUCCESS && b == 0xAA) {
+                                    if (loader_port_read(&b, 1, 50) == ESP_LOADER_SUCCESS && b == 0x55) {
+                                        synced = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (synced) {
+                                uint8_t dir = 0, len_h = 0, len_l = 0;
+                                loader_port_read(&dir, 1, 50);
+                                loader_port_read(&len_h, 1, 50);
+                                loader_port_read(&len_l, 1, 50);
+                                uint16_t plen = (len_h << 8) | len_l;
+                                if (plen > 0 && plen < 128) {
+                                    uint8_t p[128] = {0};
+                                    loader_port_read(p, plen, 200);
+                                    uint8_t crc = 0;
+                                    loader_port_read(&crc, 1, 50);
+
+                                    if (dir == 0x04 && plen >= 11 && p[0] == 0x01 && p[1] == 0x00) {
+                                        char mac_str[24];
+                                        snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", p[2], p[3], p[4], p[5], p[6], p[7]);
+                                        const char* mode_str = (p[8] == 2) ? "Long Range (LR) 🚀" : "Normal (802.11 b/g/n) ⚡";
+                                        uint8_t chan = p[9];
+                                        float pwr = p[10] * 0.25f;
+                                        uint8_t peers = p[11];
+                                        char alias_str[32] = {0};
+                                        if (plen > 11) {
+                                            size_t alen = plen - 11;
+                                            if (alen > 31) alen = 31;
+                                            memcpy(alias_str, p + 11, alen);
+                                            alias_str[alen] = '\0';
+                                        } else {
+                                            strcpy(alias_str, "N/A");
+                                        }
+                                        printf("\n======================================================\n");
+                                        printf("  🛰️ [P4 USB Host] ESP32-C3 MÓDEM DE RADIO ENLACE OK!\n");
+                                        printf("======================================================\n");
+                                        printf("  Nodo Alias:     %s\n", alias_str);
+                                        printf("  MAC Hardware:   %s\n", mac_str);
+                                        printf("  Modo Radio:     %s\n", mode_str);
+                                        printf("  Canal Activo:   Canal %u\n", chan);
+                                        printf("  Potencia TX:    %.2f dBm\n", pwr);
+                                        printf("  Peers en Aire:  %u\n", peers);
+                                        printf("======================================================\n\n");
+                                    } else {
+                                        printf("[SERIAL_CLI_ERR] Formato de payload no reconocido (dir=0x%02X len=%u)\n", dir, plen);
+                                    }
+                                }
+                            } else {
+                                printf("[SERIAL_CLI_ERR] ⚠️ Timeout esperando sincronización de trama 0xAA 0x55 del C3\n");
+                            }
+                        }
+                    } else if (line_buf == "c3: ping") {
+                        printf("[SERIAL_CLI_OUT] 📡 Emitiendo paquete de radio ESP-NOW al aire a través del C3...\n");
+                        // Trama de paquete de radio: DIR_PC_TO_DONGLE (0x01)
+                        uint8_t ping_data[] = { 0x01, 0x00, 0xAA, 0x55, 'P', '4', '_', 'R', 'A', 'D', 'I', 'O' };
+                        // Magic (2B) + DIR (1B) + Len (2B) + Payload + CRC8 (1B)
+                        uint8_t tx_frame[32];
+                        tx_frame[0] = 0xAA;
+                        tx_frame[1] = 0x55;
+                        tx_frame[2] = 0x01; // DIR_PC_TO_DONGLE
+                        tx_frame[3] = 0x00;
+                        tx_frame[4] = sizeof(ping_data);
+                        memcpy(tx_frame + 5, ping_data, sizeof(ping_data));
+                        // Calcular CRC8
+                        uint8_t crc = 0;
+                        for (size_t i = 0; i < sizeof(ping_data); i++) {
+                            uint8_t extract = ping_data[i];
+                            for (uint8_t t = 8; t; t--) {
+                                uint8_t sum = (crc ^ extract) & 0x01;
+                                crc >>= 1;
+                                if (sum) crc ^= 0x8C;
+                                extract >>= 1;
+                            }
+                        }
+                        tx_frame[5 + sizeof(ping_data)] = crc;
+                        loader_port_write(tx_frame, 6 + sizeof(ping_data), 500);
+                        printf("[SERIAL_CLI_OUT] ✅ Trama enviada al C3 para emisión por radio ESP-NOW!\n");
                     } else {
                         std::string outRes;
                         bool ok = ::LuaEngine::getInstance().executeString(line_buf, &outRes);
