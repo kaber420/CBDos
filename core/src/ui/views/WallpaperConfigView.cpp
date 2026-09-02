@@ -189,7 +189,28 @@ bool WallpaperConfigView::onCreate(lv_obj_t* parent) {
     lv_label_set_text(lblSynth, "Animado: Synthwave 80s Grid");
     lv_obj_set_style_text_color(lblSynth, DefaultTheme::getTextColor(), 0);
 
-    // 2. Botón Fondo Predeterminado de Fábrica
+    // 7. Botón Fondo Animado: Matrix Code Rain
+    lv_obj_t* animMatrixCard = lv_button_create(m_container);
+    lv_obj_set_width(animMatrixCard, lv_pct(100));
+    lv_obj_set_height(animMatrixCard, 54);
+    DefaultTheme::applyButton(animMatrixCard, 14);
+    lv_obj_set_user_data(animMatrixCard, (void*)"animated_matrix");
+    lv_obj_add_event_cb(animMatrixCard, animated_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_flex_flow(animMatrixCard, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(animMatrixCard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(animMatrixCard, 16, 0);
+
+    lv_obj_t* iconMatrix = lv_label_create(animMatrixCard);
+    lv_label_set_text(iconMatrix, LV_SYMBOL_SETTINGS);
+    lv_obj_set_style_text_color(iconMatrix, lv_color_hex(0x00ff41), 0);
+    lv_obj_set_style_margin_right(iconMatrix, 12, 0);
+
+    lv_obj_t* lblMatrix = lv_label_create(animMatrixCard);
+    lv_label_set_text(lblMatrix, "Animado: Matrix Code Rain");
+    lv_obj_set_style_text_color(lblMatrix, DefaultTheme::getTextColor(), 0);
+
+    // 8. Botón Fondo Predeterminado de Fábrica
     lv_obj_t* defaultCard = lv_button_create(m_container);
     lv_obj_set_width(defaultCard, lv_pct(100));
     lv_obj_set_height(defaultCard, 54);

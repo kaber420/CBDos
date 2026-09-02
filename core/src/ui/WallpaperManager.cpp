@@ -126,6 +126,9 @@ void WallpaperManager::applyWallpaper(lv_obj_t* parent) {
     } else if (currentPath == "animated_synthwave") {
         cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::Synthwave80s);
         cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
+    } else if (currentPath == "animated_matrix") {
+        cbdos::ui::AnimatedWallpaper::getInstance().setStyle(cbdos::ui::AnimatedWallpaper::Style::MatrixRain);
+        cbdos::ui::AnimatedWallpaper::getInstance().init(parent);
     } else if (hasCustomWallpaper && customBuffer) {
         cbdos::ui::AnimatedWallpaper::getInstance().destroy();
         lv_obj_set_style_bg_image_src(parent, &customDsc, 0);

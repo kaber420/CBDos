@@ -8,16 +8,37 @@ namespace ui {
 
 static const char* TAG = "AnimatedWallpaper";
 
+static const char MATRIX_GLYPHS[] = "0123456789ABCDEFHIJKLMNOPQRSTUVWXYZ*#@$%&+-=<>?:/";
+static const size_t MATRIX_GLYPH_COUNT = sizeof(MATRIX_GLYPHS) - 1;
+
+static inline char getRandomMatrixChar() {
+    return MATRIX_GLYPHS[rand() % MATRIX_GLYPH_COUNT];
+}
+
 AnimatedWallpaper::AnimatedWallpaper()
     : m_canvasObj(nullptr),
       m_timer(nullptr),
       m_running(false),
       m_tick(0),
-      m_style(Style::Constellation) {
+      m_style(Style::Constellation),
+      m_matrixInitialized(false) {
 }
 
 AnimatedWallpaper::~AnimatedWallpaper() {
     destroy();
+}
+
+void AnimatedWallpaper::initMatrix() {
+    for (int i = 0; i < MATRIX_COL_MAX; i++) {
+        m_matrixCols[i].y = (float)(-(rand() % 400));
+        m_matrixCols[i].speed = 3.5f + (float)(rand() % 50) / 10.0f; // 3.5 a 8.5 px/frame
+        m_matrixCols[i].length = 8 + (rand() % (MATRIX_TRAIL_MAX - 8));
+        m_matrixCols[i].mutateCounter = rand() % 6;
+        for (int j = 0; j < MATRIX_TRAIL_MAX; j++) {
+            m_matrixCols[i].chars[j] = getRandomMatrixChar();
+        }
+    }
+    m_matrixInitialized = true;
 }
 
 void AnimatedWallpaper::init(lv_obj_t* parent) {
@@ -117,6 +138,49 @@ void AnimatedWallpaper::updatePhysics() {
             isTouchPressed = true;
             lv_indev_get_point(indev, &touchPoint);
         }
+    }
+
+    if (m_style == Style::MatrixRain) {
+        if (!m_matrixInitialized) {
+            initMatrix();
+        }
+        int colStep = (width <= 320) ? 14 : 18;
+        int maxCols = width / colStep;
+        if (maxCols > MATRIX_COL_MAX) maxCols = MATRIX_COL_MAX;
+
+        for (int i = 0; i < maxCols; i++) {
+            m_matrixCols[i].y += m_matrixCols[i].speed;
+
+            // Mutar caracteres periódicamente para simular desencriptación en vivo
+            m_matrixCols[i].mutateCounter++;
+            if (m_matrixCols[i].mutateCounter >= 3) {
+                m_matrixCols[i].mutateCounter = 0;
+                int idx = rand() % m_matrixCols[i].length;
+                m_matrixCols[i].chars[idx] = getRandomMatrixChar();
+            }
+
+            // Aceleración y mutación al contacto táctil
+            if (isTouchPressed) {
+                int colX = i * colStep + (colStep / 2);
+                int distTouchX = abs(touchPoint.x - colX);
+                if (distTouchX < 50) {
+                    m_matrixCols[i].y += 5.0f;
+                    m_matrixCols[i].chars[0] = getRandomMatrixChar();
+                }
+            }
+
+            // Reiniciar columna al sobrepasar el borde inferior
+            int charHeight = (width <= 320) ? 14 : 16;
+            if (m_matrixCols[i].y - (m_matrixCols[i].length * charHeight) > height) {
+                m_matrixCols[i].y = (float)(-(rand() % 160));
+                m_matrixCols[i].speed = 3.5f + (float)(rand() % 50) / 10.0f;
+                m_matrixCols[i].length = 8 + (rand() % (MATRIX_TRAIL_MAX - 8));
+                for (int j = 0; j < MATRIX_TRAIL_MAX; j++) {
+                    m_matrixCols[i].chars[j] = getRandomMatrixChar();
+                }
+            }
+        }
+        return;
     }
 
     for (int i = 0; i < PARTICLE_COUNT; i++) {
@@ -649,7 +713,7 @@ void AnimatedWallpaper::draw(lv_layer_t* layer) {
             grid_dsc.p2.x = width; grid_dsc.p2.y = (int32_t)lineY;
             lv_draw_line(layer, &grid_dsc);
         }
-    } else {
+    } else if (m_style == Style::Constellation) {
         // Estilo: Constelación Neón (Partículas + Nodos Flotantes)
         // 1. Dibujar Líneas de Constelación entre Nodos Cercanos (radio optimizado 95px)
         lv_draw_line_dsc_t conn_dsc;
@@ -696,6 +760,59 @@ void AnimatedWallpaper::draw(lv_layer_t* layer) {
                 (int16_t)(m_particles[i].y + currentRadius)
             };
             lv_draw_rect(layer, &orb_dsc, &orb_area);
+        }
+    } else if (m_style == Style::MatrixRain) {
+        // Estilo: Lluvia Digital Matrix / Arte ASCII a 60 FPS
+        int colStep = (width <= 320) ? 14 : 18;
+        int charHeight = (width <= 320) ? 14 : 16;
+        int maxCols = width / colStep;
+        if (maxCols > MATRIX_COL_MAX) maxCols = MATRIX_COL_MAX;
+
+        const lv_font_t* font = (width <= 320) ? &lv_font_montserrat_12 : &lv_font_montserrat_14;
+
+        lv_draw_label_dsc_t label_dsc;
+        lv_draw_label_dsc_init(&label_dsc);
+        label_dsc.font = font;
+
+        for (int i = 0; i < maxCols; i++) {
+            int colX = i * colStep + 2;
+            float headY = m_matrixCols[i].y;
+            int len = m_matrixCols[i].length;
+
+            for (int j = 0; j < len; j++) {
+                int glyphY = (int)(headY - (j * charHeight));
+                if (glyphY < -charHeight || glyphY > height + charHeight) continue;
+
+                char singleChar[2] = { m_matrixCols[i].chars[j], '\0' };
+                label_dsc.text = singleChar;
+
+                if (j == 0) {
+                    // Caracter Cabeza: Blanco brillante con tinte verde neón
+                    label_dsc.color = lv_color_hex(0xeaffea);
+                    label_dsc.opa = LV_OPA_COVER;
+                } else if (j < 3) {
+                    // Cuerpo superior: Verde fósforo brillante
+                    label_dsc.color = lv_color_hex(0x00ff41);
+                    label_dsc.opa = LV_OPA_90;
+                } else if (j < len / 2) {
+                    // Cuerpo medio: Verde matriz
+                    label_dsc.color = lv_color_hex(0x00b82b);
+                    label_dsc.opa = LV_OPA_70;
+                } else {
+                    // Cola desvanecida: Verde oscuro con transparencia
+                    label_dsc.color = lv_color_hex(0x004d13);
+                    float fade = 1.0f - ((float)j / (float)len);
+                    label_dsc.opa = (lv_opa_t)(fade * 160.0f + 30.0f);
+                }
+
+                lv_area_t char_area = {
+                    (int16_t)colX,
+                    (int16_t)glyphY,
+                    (int16_t)(colX + colStep),
+                    (int16_t)(glyphY + charHeight)
+                };
+                lv_draw_label(layer, &label_dsc, &char_area);
+            }
         }
     }
 }

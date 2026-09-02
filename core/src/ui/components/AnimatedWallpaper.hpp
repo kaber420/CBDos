@@ -31,7 +31,8 @@ public:
         ComicDrive = 2,
         Fireflies = 3,
         TouchSwarm = 4,
-        Synthwave80s = 5
+        Synthwave80s = 5,
+        MatrixRain = 6
     };
 
     void init(lv_obj_t* parent);
@@ -51,6 +52,7 @@ private:
 
     void draw(lv_layer_t* layer);
     void updatePhysics();
+    void initMatrix();
 
     lv_obj_t* m_canvasObj;
     lv_timer_t* m_timer;
@@ -60,6 +62,18 @@ private:
     
     static const int PARTICLE_COUNT = 16;
     Particle m_particles[PARTICLE_COUNT];
+
+    static const int MATRIX_COL_MAX = 32;
+    static const int MATRIX_TRAIL_MAX = 24;
+    struct MatrixColumn {
+        float y;
+        float speed;
+        int length;
+        int mutateCounter;
+        char chars[MATRIX_TRAIL_MAX];
+    };
+    MatrixColumn m_matrixCols[MATRIX_COL_MAX];
+    bool m_matrixInitialized;
 };
 
 } // namespace ui
