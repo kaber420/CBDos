@@ -79,8 +79,23 @@
 | **System Info Monitor** | Monitor de RAM, Heap, FPS y temperatura en tiempo real | ⏳ | ⏳ | ⏳ |
 | **Lua Script Engine** | Intérprete Lua embebido para micro-apps y Direct 2D GFX | ✅ 90% | ⏳ | ✅ |
 | **USB HID / BadUSB Engine** | Teclado + Ratón compuesto, DuckyScript (`.dd`) y Lua reactivo con feedback de LEDs | ✅ | ✅ | ✅ |
+| **USB Host CDC / Módems & Radios** | Periféricos Plug & Play por puerto USB-C (Módems CDC, ESP-NOW Bridge, LoRa, Serial) sin soldaduras | ✅ | ➖ | ✅ |
 
 *Leyenda: ✅ Operativo · 🟡 Integración de driver en curso · 🔄 Portando desde espOS32 · 📋 Planificado · ⏳ Pendiente · ➖ No aplica*
+
+---
+
+## 📡 Soporte USB Host CDC — Módems y Periféricos Plug & Play por USB-C
+
+CBDos incorpora soporte nativo para **USB Host CDC-ACM en ESP32-P4**, permitiendo conectar periféricos externos y dispositivos de comunicaciones directamente a través del **puerto USB-C**:
+
+- 🔌 **Plug & Play Real (Cero Soldaduras ni Cableado):** Conexión instantánea utilizando únicamente un cable USB-C estándar. Sin necesidad de soldar pines GPIO, usar protoboards ni cableados complejos.
+- 📶 **Módems, Radios y Periféricos CDC Soportados:**
+  - **Dongles y Puentes de Radio (ESP32-C3 / S3 / C6):** Puentes ESP-NOW USB Bridge, transceptores LoRa USB, módulos sub-GHz y nodos 802.15.4.
+  - **Módems Celulares y TNC:** Módems LTE / GSM / 4G y TNCs para packet radio.
+  - **Dispositivos Serie / USB-Serial/JTAG:** Comunicación bidireccional inmediata con microcontroladores y sensores externos.
+- ⚡ **Auto-Alimentación VBUS Integrada:** El ESP32-P4 suministra alimentación de 5V hacia el dispositivo conectado directamente por el conector USB-C.
+- 🚀 **Integración con el Stack de Red y MeshCore:** Detección en caliente, streaming de datos a alta velocidad y ruteo de paquetes descentralizados sin latencia.
 
 ---
 
@@ -105,9 +120,16 @@ CBDos incorpora un motor de emulación **USB HID nativo compuesto (Teclado + Rat
 
 ---
 
-## 🔌 Programador de Campo Autónomo (Universal Flasher en CBDos)
+## 🔌 Programador de Campo Autónomo (Standalone Field Programmer)
 
-El **ESP32-P4** con CBDos opera como un **Programador de Campo Totalmente Autónomo y Desatendido (Standalone Field Programmer)**, permitiendo programar otros microcontroladores directamente desde la pantalla táctil sin necesidad de una laptop:
+### 🤔 ¿Qué es un *Standalone Field Programmer*?
+Un **Programador de Campo Autónomo (Standalone Field Programmer)** es una herramienta portátil e independiente capaz de flashear, actualizar o reprogramar microcontroladores y dispositivos IoT **directamente en el lugar donde están instalados (en el campo / in-situ)**:
+- 🚫 **Sin PC ni Laptop:** No requiere computadoras, drivers, Python ni terminales de comandos (`esptool.py`).
+- 📱 **Interfaz Visual Táctil:** Todo el proceso (detección de chip, selección de binario, borrado y flasheo) se realiza desde la pantalla táctil de 4.3" en la app **Flasher**.
+- 🗂️ **Firmwares en MicroSD:** Almacena bibliotecas completas de firmwares y binarios (`/sdcard/cartridges/*.bin`) para desplegarlos en cualquier momento.
+- ⚡ **Alimentación y Control Autónomo:** Alimenta al dispositivo destino mediante el puerto USB-C (5V VBUS) y gestiona los estados de Reset y Bootloader automáticamente.
+
+---
 
 ### 1. ⚡ Flasheo Directo por Puerto USB 2.0 High-Speed (Cable USB-C a USB-C)
 - **Controlador USB High-Speed:** Utiliza el puerto USB OTG High-Speed dedicado del ESP32-P4 con soporte de entrega de energía (5V VBUS hacia el target).
@@ -226,6 +248,7 @@ idf.py build
 | [`docs/architecture/multi_radio_hub_router_design.md`](docs/architecture/multi_radio_hub_router_design.md) | Estación Base y Router Multi-Antena con Hub USB y C3s |
 | [`docs/architecture/modular_lua_bridge_architecture.md`](docs/architecture/modular_lua_bridge_architecture.md) | Arquitectura modular de bindings Lua por dominios |
 | [`docs/network/plan_espnow_usb_bridge.md`](docs/network/plan_espnow_usb_bridge.md) | Firmware del módem USB ESP-NOW y protocolo de enmarcado |
+| [`docs/network/especificacion_enlace_modem_usb_y_meshcore.md`](docs/network/especificacion_enlace_modem_usb_y_meshcore.md) | Especificación de enlace módem USB CDC-ACM y MeshCore |
 | [`docs/api/core_apis_reference.md`](docs/api/core_apis_reference.md) | Referencia completa de APIs públicas del SDK |
 | [`docs/api/how_to_create_an_app.md`](docs/api/how_to_create_an_app.md) | Guía de creación de aplicaciones nativas en C++ y LVGL 9.5 |
 | [`tools/c6_flasher_bridge/README.md`](tools/c6_flasher_bridge/README.md) | Guía completa de flasheo del coprocesador C6 |
