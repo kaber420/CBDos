@@ -23,11 +23,23 @@ MeshCoreEngine& MeshCoreEngine::getInstance() {
     return instance;
 }
 
+void MeshCoreEngine::onPacketRecvTrampoline(const uint8_t* payload, size_t len, int rssi, int snr, void* userCtx) {
+    auto* ctx = static_cast<SlotRecvContext*>(userCtx);
+    if (ctx && ctx->engine) {
+        ctx->engine->handleRawPacket(ctx->ifaceId, payload, len, static_cast<int8_t>(rssi));
+    }
+}
+
 MeshCoreEngine::MeshCoreEngine() {
     // Configuración inicial de ranuras
     m_interfaces[0] = {MeshInterfaceId::Interface1_Internal, "Radio 1 (ESP-NOW)", MeshInterfaceType::EspNow, true, 1, 2400.0f, 0};
     m_interfaces[1] = {MeshInterfaceId::Interface2_Backpack, "Radio 2 (LoRa Mochila)", MeshInterfaceType::SX1262_LoRa, false, 1, 915.0f, 0};
-    m_interfaces[2] = {MeshInterfaceId::Interface3_USB,      "Radio 3 (USB Módem)", MeshInterfaceType::USB_CDC, false, 0, 0.0f, 115200};
+    m_interfaces[2] = {MeshInterfaceId::Interface3_USB,      "Radio 3 (USB Módem)", MeshInterfaceType::USB_CDC, true, 1, 2400.0f, 115200};
+
+    for (size_t i = 0; i < static_cast<size_t>(MeshInterfaceId::MaxInterfaces); ++i) {
+        m_slotCtx[i].engine = this;
+        m_slotCtx[i].ifaceId = static_cast<MeshInterfaceId>(i);
+    }
 
     // Canal público predeterminado
     m_channels.push_back({0, "#general", false, ""});
@@ -45,14 +57,11 @@ bool MeshCoreEngine::init() {
         if (iface) {
             m_interfaces[i].name = iface->getName();
             m_interfaces[i].channel = iface->getChannel();
-            if (m_interfaces[i].enabled) {
+            // Si el hardware está listo o marcado como activo, enganchar recepción
+            if (iface->isReady() || m_interfaces[i].enabled) {
+                m_interfaces[i].enabled = true;
                 iface->setMode(cbdos::network::InterfaceMode::EspNow);
-                iface->setPacketRecvCallback([](const uint8_t* payload, size_t len, int rssi, int snr, void* userCtx) {
-                    auto* engine = static_cast<MeshCoreEngine*>(userCtx);
-                    if (engine) {
-                        engine->handleRawPacket(MeshInterfaceId::Interface1_Internal, payload, len, static_cast<int8_t>(rssi));
-                    }
-                }, this);
+                iface->setPacketRecvCallback(onPacketRecvTrampoline, &m_slotCtx[i]);
             }
         }
     }
@@ -108,12 +117,7 @@ void MeshCoreEngine::setInterfaceEnabled(MeshInterfaceId id, bool enable) {
         if (iface) {
             if (enable) {
                 iface->setMode(cbdos::network::InterfaceMode::EspNow);
-                iface->setPacketRecvCallback([](const uint8_t* payload, size_t len, int rssi, int snr, void* userCtx) {
-                    auto* engine = static_cast<MeshCoreEngine*>(userCtx);
-                    if (engine) {
-                        engine->handleRawPacket(MeshInterfaceId::Interface1_Internal, payload, len, static_cast<int8_t>(rssi));
-                    }
-                }, this);
+                iface->setPacketRecvCallback(onPacketRecvTrampoline, &m_slotCtx[idx]);
             } else {
                 iface->setMode(cbdos::network::InterfaceMode::Off);
             }

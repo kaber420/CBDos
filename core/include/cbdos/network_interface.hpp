@@ -50,6 +50,8 @@ public:
     virtual uint8_t getChannel() const { return 1; }
     virtual bool setChannel(uint8_t channel) { return true; }
     virtual bool getMacAddress(uint8_t out_mac[6]) { return false; }
+    virtual const char* getAlias() const { return nullptr; }
+    virtual int8_t getTxPower() const { return 20; }
 };
 
 #define MAX_NETWORK_SLOTS 4

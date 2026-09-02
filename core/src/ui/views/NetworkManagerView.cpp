@@ -248,22 +248,50 @@ void NetworkManagerView::buildSlot1Backpack(lv_obj_t* parent) {
 }
 
 void NetworkManagerView::buildSlot2Usb(lv_obj_t* parent) {
-    auto* iface2 = cbdos::network::NetworkInterfaceManager::getInstance().getInterface(2);
-    bool isModemActive = iface2 && iface2->isReady();
-
-    // Solo renderizar si está activo en modo módem
-    if (!isModemActive) return;
-
     m_cardUsb = lv_obj_create(parent);
     lv_obj_set_width(m_cardUsb, lv_pct(100));
     lv_obj_set_height(m_cardUsb, LV_SIZE_CONTENT);
     DefaultTheme::applyRaisedCard(m_cardUsb, 14);
     lv_obj_set_flex_flow(m_cardUsb, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(m_cardUsb, 12, 0);
+    lv_obj_set_style_pad_row(m_cardUsb, 8, 0);
 
-    lv_obj_t* lblTitle = lv_label_create(m_cardUsb);
-    lv_label_set_text(lblTitle, LV_SYMBOL_USB " Slot 2: Enlace USB Módem (Activo)");
-    lv_obj_set_style_text_color(lblTitle, lv_color_hex(0x00E5FF), 0);
+    lv_obj_t* rowHeader = lv_obj_create(m_cardUsb);
+    lv_obj_set_size(rowHeader, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(rowHeader, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(rowHeader, 0, 0);
+    lv_obj_set_style_pad_all(rowHeader, 0, 0);
+    lv_obj_set_flex_flow(rowHeader, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(rowHeader, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t* lblTitle = lv_label_create(rowHeader);
+    lv_label_set_text(lblTitle, LV_SYMBOL_USB " Slot 2: Módem USB Radio (OTG)");
+    lv_obj_set_style_text_color(lblTitle, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lblTitle, &lv_font_montserrat_14, 0);
+
+    auto* iface2 = cbdos::network::NetworkInterfaceManager::getInstance().getInterface(2);
+    bool isConnected = iface2 && iface2->isReady();
+
+    lv_obj_t* lblStatus = lv_label_create(m_cardUsb);
+    if (isConnected) {
+        uint8_t mac[6] = {0};
+        char mac_str[32] = "N/A";
+        if (iface2->getMacAddress(mac)) {
+            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        }
+        const char* alias = iface2->getAlias();
+        const char* modeName = (iface2->getMode() == cbdos::network::InterfaceMode::EspNowLR) ? "ESP-NOW LR" : "ESP-NOW Normal";
+
+        char info[160];
+        snprintf(info, sizeof(info), "✅ Módem: %s | Modo: %s\n📡 Canal RF: %u | MAC: %s",
+                 alias ? alias : "PoP1a", modeName, iface2->getChannel(), mac_str);
+        lv_label_set_text(lblStatus, info);
+        lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x00E5FF), 0);
+    } else {
+        lv_label_set_text(lblStatus, "🔌 Estado: Desconectado (Listo para detectar dongle USB-C)");
+        lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x64748B), 0);
+    }
+    lv_obj_set_style_text_font(lblStatus, &lv_font_montserrat_12, 0);
 }
 
 void NetworkManagerView::updateModeVisibility() {

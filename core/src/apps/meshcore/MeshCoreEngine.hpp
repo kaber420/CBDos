@@ -93,6 +93,15 @@ private:
     uint16_t m_activeChannelId = 0; // 0 = #general
     uint16_t m_nextChannelId = 1;
 
+    struct SlotRecvContext {
+        MeshCoreEngine* engine;
+        MeshInterfaceId ifaceId;
+    };
+
+    static void onPacketRecvTrampoline(const uint8_t* payload, size_t len, int rssi, int snr, void* userCtx);
+
+    SlotRecvContext m_slotCtx[static_cast<size_t>(MeshInterfaceId::MaxInterfaces)];
+
     MeshInterfaceConfig m_interfaces[static_cast<size_t>(MeshInterfaceId::MaxInterfaces)];
     cbdos::mesh::IMeshTransport* m_transports[static_cast<size_t>(MeshInterfaceId::MaxInterfaces)] = {nullptr, nullptr, nullptr};
 
