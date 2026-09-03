@@ -88,9 +88,11 @@ void MeshCoreView::onUpdate() {
         refreshNodes();
     }
 
-    // 3. Refresco diferido de estado de radios
-    if (m_statusDirty) {
+    // 3. Refresco periódico y diferido de estado de radios y MAC
+    uint32_t nowMs = lv_tick_get();
+    if (m_statusDirty || (nowMs - m_lastIfaceCheckMs >= 1000)) {
         m_statusDirty = false;
+        m_lastIfaceCheckMs = nowMs;
         refreshInterfacesState();
     }
 }
@@ -351,15 +353,19 @@ void MeshCoreView::buildInterfacesTab(lv_obj_t* parent) {
             lv_obj_center(lblApply);
 
             // Fila 4: MAC Address
+            lv_obj_t* lblMac = lv_label_create(card);
+            lv_obj_set_style_text_font(lblMac, &lv_font_montserrat_12, 0);
+            m_lblMac[slot] = lblMac;
             uint8_t mac[6] = {0};
             if (iface->getMacAddress(mac)) {
-                lv_obj_t* lblMac = lv_label_create(card);
                 char macStr[48];
                 snprintf(macStr, sizeof(macStr), "MAC: %02X:%02X:%02X:%02X:%02X:%02X",
                          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                 lv_label_set_text(lblMac, macStr);
                 lv_obj_set_style_text_color(lblMac, lv_color_hex(0x64748B), 0);
-                lv_obj_set_style_text_font(lblMac, &lv_font_montserrat_12, 0);
+            } else {
+                lv_label_set_text(lblMac, "MAC: No detectada (Desconectada)");
+                lv_obj_set_style_text_color(lblMac, lv_color_hex(0x94A3B8), 0);
             }
         }
     }
@@ -508,6 +514,23 @@ void MeshCoreView::refreshInterfacesState() {
         lv_obj_set_style_text_color(m_lblIfaceStatus, lv_color_hex(0x00E5FF), 0);
     }
     lv_label_set_text(m_lblIfaceStatus, statusStr);
+
+    for (uint8_t s = 0; s < 3; s++) {
+        if (m_lblMac[s] && lv_obj_is_valid(m_lblMac[s])) {
+            auto* iface = cbdos::network::NetworkInterfaceManager::getInstance().getInterface(s);
+            uint8_t mac[6] = {0};
+            if (iface && iface->getMacAddress(mac)) {
+                char macStr[48];
+                snprintf(macStr, sizeof(macStr), "MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+                         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                lv_label_set_text(m_lblMac[s], macStr);
+                lv_obj_set_style_text_color(m_lblMac[s], lv_color_hex(0x64748B), 0);
+            } else {
+                lv_label_set_text(m_lblMac[s], "MAC: No detectada (Desconectada)");
+                lv_obj_set_style_text_color(m_lblMac[s], lv_color_hex(0x94A3B8), 0);
+            }
+        }
+    }
 }
 
 void MeshCoreView::sendButtonClickedCb(lv_event_t* e) {

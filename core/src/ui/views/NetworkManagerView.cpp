@@ -284,7 +284,7 @@ void NetworkManagerView::buildSlot2Usb(lv_obj_t* parent) {
 
         char info[160];
         snprintf(info, sizeof(info), "✅ Módem: %s | Modo: %s\n📡 Canal RF: %u | MAC: %s",
-                 alias ? alias : "PoP1a", modeName, iface2->getChannel(), mac_str);
+                 (alias && alias[0]) ? alias : "Módem USB", modeName, iface2->getChannel(), mac_str);
         lv_label_set_text(lblStatus, info);
         lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x00E5FF), 0);
     } else {

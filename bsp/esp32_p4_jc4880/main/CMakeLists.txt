@@ -14,6 +14,7 @@ idf_component_register(
         "../hal/LVGL_Port.cpp"
         "../hal/hal_flasher_p4.cpp"
         "../hal/usb_cdc_loader_port.cpp"
+        "../hal/usb_device_manager.cpp"
         "../hal/hal_uart_p4.cpp"
         "../hal/hal_mesh_p4.cpp"
         "../hal/hal_radio_p4.cpp"

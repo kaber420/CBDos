@@ -124,8 +124,8 @@ esp_loader_error_t loader_port_usb_cdc_init(uint32_t timeout_ms) {
     }
 
     s_usb_active = true;
-    cdc_acm_host_set_control_line_state(s_cdc_dev, true, false);
-    ESP_LOGI(TAG, "¡Dispositivo ESP32 USB-Serial/JTAG conectado exitosamente (DTR=ON)!");
+    cdc_acm_host_set_control_line_state(s_cdc_dev, false, false);
+    ESP_LOGI(TAG, "¡Dispositivo ESP32 USB-Serial/JTAG conectado exitosamente (Modo Normal DTR=0, RTS=0)!");
     return ESP_LOADER_SUCCESS;
 }
 

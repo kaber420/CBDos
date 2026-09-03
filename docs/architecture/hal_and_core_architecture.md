@@ -53,6 +53,10 @@
 3. **Filosofía Offline-First:**
    * La UI, audio, almacenamiento y emuladores deben inicializarse y funcionar sin requerir conexión a internet ni la presencia obligatoria de coprocesadores de red.
 
+4. **Principio de Arquitectura Reactiva (Cero Polling Innecesario):**
+   * El sistema opera bajo un modelo *Event-Driven*: el hardware o los controladores del BSP disparan interrupciones o callbacks nativos ante eventos físicos (conexión/desconexión USB, eventos de red, recepción de paquetes, inserción de tarjetas o estado de energía).
+   * La interfaz gráfica (`core/`) y los servicios consumen estos eventos y activan banderas reactivas (`m_statusDirty = true`) para procesar o redibujar únicamente en el cuadro correspondiente cuando ocurre una transición real, manteniendo el procesador en reposo y prohibiendo terminantemente el sondeo periódico (*polling*) en bucles como atajo de diseño.
+
 ---
 
 ## 📐 3. Contratos de la Capa de Abstracción de Hardware (HAL)

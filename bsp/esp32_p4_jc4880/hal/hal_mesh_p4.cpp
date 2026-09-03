@@ -109,10 +109,8 @@ public:
             memcpy(out_mac, m_mac, 6);
             return true;
         }
-        // MAC por defecto de respaldo
-        out_mac[0] = 0x9C; out_mac[1] = 0xCC; out_mac[2] = 0x01;
-        out_mac[3] = 0x7C; out_mac[4] = 0x0C; out_mac[5] = 0x94;
-        return true;
+        memset(out_mac, 0, 6);
+        return false;
     }
 
     uint8_t getChannel() const override {
@@ -163,7 +161,7 @@ public:
     }
 
     const char* getAlias() const override {
-        return m_alias[0] ? m_alias : "PoP1a";
+        return m_alias[0] ? m_alias : "Módem USB";
     }
 
     int8_t getTxPower() const override {
@@ -203,7 +201,15 @@ private:
 
     void rxTaskLoop() {
         ESP_LOGI(TAG, "Hilo de escucha de tramas USB de Radio iniciado");
+        uint32_t lastStatusQuery = 0;
         while (m_running) {
+            if (!m_macValid) {
+                uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+                if (now - lastStatusQuery >= 2000) {
+                    lastStatusQuery = now;
+                    queryModemStatus();
+                }
+            }
             uint8_t b = 0;
             if (loader_port_read(&b, 1, 100) == ESP_LOADER_SUCCESS && b == 0xAA) {
                 if (loader_port_read(&b, 1, 100) == ESP_LOADER_SUCCESS && b == 0x55) {
@@ -261,7 +267,9 @@ private:
     }
 
     void queryModemStatus() {
-        uint8_t get_status_frame[] = { 0xAA, 0x55, 0x03, 0x00, 0x01, 0x01, 0xA2 };
+        uint8_t cmd = 0x01; // RADIO_CMD_GET_STATUS
+        uint8_t crc = calc_crc8(&cmd, 1);
+        uint8_t get_status_frame[] = { 0xAA, 0x55, 0x03, 0x00, 0x01, cmd, crc };
         loader_port_write(get_status_frame, sizeof(get_status_frame), 300);
     }
 
@@ -274,7 +282,7 @@ private:
     uint8_t m_channel = 1;
     uint8_t m_txPower = 84;
     uint8_t m_peerCount = 0;
-    char m_alias[32] = "PoP1a";
+    char m_alias[32] = {0};
     uint8_t m_mac[6] = {0};
     bool m_macValid = false;
     volatile bool m_running = false;

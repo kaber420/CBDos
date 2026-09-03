@@ -66,6 +66,8 @@ private:
     lv_obj_t* m_swIface2 = nullptr;
     lv_obj_t* m_swIface3 = nullptr;
     lv_obj_t* m_lblIfaceStatus = nullptr;
+    lv_obj_t* m_lblMac[3] = {nullptr, nullptr, nullptr};
+    uint32_t m_lastIfaceCheckMs = 0;
 };
 
 } // namespace ui

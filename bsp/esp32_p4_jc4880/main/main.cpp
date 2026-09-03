@@ -14,6 +14,7 @@
 #include "cbdos/time.hpp"
 #include <esp_log.h>
 #include <nvs_flash.h>
+#include "usb_device_manager.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -64,6 +65,7 @@ extern "C" void app_main(void) {
     cbdos::bsp::initMeshTransportP4();
     cbdos::bsp::initHttpClientP4();
     cbdos::bsp::initHidDriverP4();
+    cbdos::usb::UsbDeviceManager::getInstance().init();
 
     // Inicializar radio determinista segun NVS (Offline-First)
     cbdos::radio::init();
