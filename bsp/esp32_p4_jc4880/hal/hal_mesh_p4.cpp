@@ -201,15 +201,7 @@ private:
 
     void rxTaskLoop() {
         ESP_LOGI(TAG, "Hilo de escucha de tramas USB de Radio iniciado");
-        uint32_t lastStatusQuery = 0;
         while (m_running) {
-            if (!m_macValid) {
-                uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
-                if (now - lastStatusQuery >= 2000) {
-                    lastStatusQuery = now;
-                    queryModemStatus();
-                }
-            }
             uint8_t b = 0;
             if (loader_port_read(&b, 1, 100) == ESP_LOADER_SUCCESS && b == 0xAA) {
                 if (loader_port_read(&b, 1, 100) == ESP_LOADER_SUCCESS && b == 0x55) {
@@ -299,7 +291,6 @@ namespace bsp {
 void initMeshTransportP4() {
     mesh::MeshEngine::getInstance().setTransport(&s_usbRadioTransport);
     network::NetworkInterfaceManager::getInstance().registerInterface(2, &s_usbRadioTransport);
-    s_usbRadioTransport.init(1);
 }
 
 } // namespace bsp

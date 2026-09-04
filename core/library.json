@@ -13,7 +13,6 @@
       "-I src/ui/mascot",
       "-I src/ui/views",
       "-I src/ui/views/utilities",
-      "-I src/apps/meshcore",
       "-I src/tlv",
       "-I src/mesh",
       "-I src/audio",

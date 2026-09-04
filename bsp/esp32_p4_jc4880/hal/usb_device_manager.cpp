@@ -212,19 +212,8 @@ void UsbDeviceManager::handleDeviceConnected(uint16_t vid, uint16_t pid, uint8_t
     m_activeDevice.isConnected = true;
     m_activeDevice.role = DeviceRole::Unassigned;
 
-    if (dev_class == 0x02) {
-        m_activeDevice.devClass = DeviceClass::CdcAcm;
-    } else if (dev_class == 0xFF) {
-        m_activeDevice.devClass = DeviceClass::VendorSpecific;
-    } else if (dev_class == 0x08) {
-        m_activeDevice.devClass = DeviceClass::MassStorage;
-    } else if (dev_class == 0x03) {
-        m_activeDevice.devClass = DeviceClass::Hid;
-    } else {
-        m_activeDevice.devClass = DeviceClass::Unknown;
-    }
-
     // Identificación automática de fabricantes conocidos
+    bool isKnownSerial = false;
     if (vid == 0x303A) {
         strncpy(m_activeDevice.manufacturer, "Espressif Systems", sizeof(m_activeDevice.manufacturer) - 1);
         if (pid == 0x1001) {
@@ -234,18 +223,34 @@ void UsbDeviceManager::handleDeviceConnected(uint16_t vid, uint16_t pid, uint8_t
         } else {
             strncpy(m_activeDevice.product, "Dispositivo Espressif", sizeof(m_activeDevice.product) - 1);
         }
+        isKnownSerial = true;
     } else if (vid == 0x10C4) {
         strncpy(m_activeDevice.manufacturer, "Silicon Labs", sizeof(m_activeDevice.manufacturer) - 1);
         strncpy(m_activeDevice.product, "CP210x UART Bridge", sizeof(m_activeDevice.product) - 1);
+        isKnownSerial = true;
     } else if (vid == 0x1A86) {
         strncpy(m_activeDevice.manufacturer, "Winchiphead", sizeof(m_activeDevice.manufacturer) - 1);
         strncpy(m_activeDevice.product, "CH340 Serial Converter", sizeof(m_activeDevice.product) - 1);
+        isKnownSerial = true;
     } else if (vid == 0x0403) {
         strncpy(m_activeDevice.manufacturer, "FTDI", sizeof(m_activeDevice.manufacturer) - 1);
         strncpy(m_activeDevice.product, "FT232 / FTDI Serial", sizeof(m_activeDevice.product) - 1);
+        isKnownSerial = true;
     } else {
         strncpy(m_activeDevice.manufacturer, "Desconocido", sizeof(m_activeDevice.manufacturer) - 1);
         snprintf(m_activeDevice.product, sizeof(m_activeDevice.product), "USB %04X:%04X", vid, pid);
+    }
+
+    if (dev_class == 0x02 || isKnownSerial) {
+        m_activeDevice.devClass = DeviceClass::CdcAcm;
+    } else if (dev_class == 0xFF) {
+        m_activeDevice.devClass = DeviceClass::VendorSpecific;
+    } else if (dev_class == 0x08) {
+        m_activeDevice.devClass = DeviceClass::MassStorage;
+    } else if (dev_class == 0x03) {
+        m_activeDevice.devClass = DeviceClass::Hid;
+    } else {
+        m_activeDevice.devClass = DeviceClass::Unknown;
     }
 
     ESP_LOGI(TAG, "Hardware Identificado: '%s' - '%s' (VID=0x%04X, PID=0x%04X)",

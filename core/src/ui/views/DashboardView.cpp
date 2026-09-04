@@ -14,7 +14,6 @@
 #include "TlvBrowserView.hpp"
 #include "LuappView.hpp"
 #include "LottieTestView.hpp"
-#include "MeshCoreView.hpp"
 #include "../../apps/kerberos/KerberosView.hpp"
 #include "../../lua/LuappManager.hpp"
 #include "../UIManager.hpp"
@@ -48,7 +47,6 @@ bool DashboardView::onCreate(lv_obj_t* parent) {
         {"terminal", "Terminal UART", LV_SYMBOL_KEYBOARD, 0x10B981, false, ""},
         {"recorder", "Grabadora", LV_SYMBOL_AUDIO, 0xEF4444, false, ""},
         {"music", "Musica", LV_SYMBOL_AUDIO, 0x00E5FF, false, ""},
-        {"cbdbbs", "CBD BBS", LV_SYMBOL_LIST, 0x00F5D4, false, ""},
         {"kerberos", "Kerberos FIDO", LV_SYMBOL_USB, 0x10B981, false, ""},
         {"lottie", "Lottie Test", LV_SYMBOL_IMAGE, 0x06D6A0, false, ""},
         {"config", "Configuracion", LV_SYMBOL_SETTINGS, 0x9D4EDD, false, ""}
@@ -224,8 +222,6 @@ void DashboardView::cardClickedEventCb(lv_event_t* e) {
         UIManager::getInstance().pushView(std::make_shared<AudioRecorderView>());
     } else if (app.id == "music") {
         UIManager::getInstance().pushView(std::make_shared<MusicPlayerView>());
-    } else if (app.id == "cbdbbs" || app.id == "meshcore") {
-        UIManager::getInstance().pushView(std::make_shared<MeshCoreView>());
     } else if (app.id == "kerberos") {
         UIManager::getInstance().pushView(std::make_shared<KerberosView>());
     } else if (app.id == "flasher") {
