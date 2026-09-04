@@ -18,6 +18,9 @@ static const uint32_t s_baudRates[] = {
 static const int s_txPins[] = {32, 38, 50, 52, 15};
 static const int s_rxPins[] = {28, 37, 49, 51, 16};
 
+static std::string s_lastSelectedPortId = "";
+static std::string s_persistentTerminalBuffer = "";
+
 SerialTerminalView::SerialTerminalView()
     : BaseView("SerialTerminal"),
       m_isConnected(false),
@@ -28,10 +31,29 @@ SerialTerminalView::SerialTerminalView()
       m_currentBaud(115200) {
     m_ports = cbdos::serial::getAvailablePorts();
     if (!m_ports.empty()) {
-        m_selectedPortId = m_ports[0].id;
-        if (m_ports[0].defaultTx >= 0) m_currentTxPin = m_ports[0].defaultTx;
-        if (m_ports[0].defaultRx >= 0) m_currentRxPin = m_ports[0].defaultRx;
-        if (m_ports[0].controlPin >= 0) m_currentControlPin = m_ports[0].controlPin;
+        int chosenIdx = 0;
+        // 1. Si hay un puerto recordado previamente y aún existe, seleccionarlo
+        if (!s_lastSelectedPortId.empty()) {
+            for (size_t i = 0; i < m_ports.size(); i++) {
+                if (m_ports[i].id == s_lastSelectedPortId) {
+                    chosenIdx = (int)i;
+                    break;
+                }
+            }
+        } else {
+            // 2. Si no hay recordado pero hay un dispositivo USB conectado, priorizarlo
+            for (size_t i = 0; i < m_ports.size(); i++) {
+                if (m_ports[i].type == cbdos::serial::PortType::UsbCdcAcm || m_ports[i].id == "usb_otg") {
+                    chosenIdx = (int)i;
+                    break;
+                }
+            }
+        }
+        m_selectedPortId = m_ports[chosenIdx].id;
+        s_lastSelectedPortId = m_selectedPortId;
+        if (m_ports[chosenIdx].defaultTx >= 0) m_currentTxPin = m_ports[chosenIdx].defaultTx;
+        if (m_ports[chosenIdx].defaultRx >= 0) m_currentRxPin = m_ports[chosenIdx].defaultRx;
+        if (m_ports[chosenIdx].controlPin >= 0) m_currentControlPin = m_ports[chosenIdx].controlPin;
     }
 }
 
@@ -227,22 +249,37 @@ void SerialTerminalView::onHotplugEvent(bool connected, const std::string& portI
 
 void SerialTerminalView::updatePortList() {
     if (!m_ddPort) return;
-    std::string previousId = m_selectedPortId;
+    std::string targetId = m_selectedPortId;
+    if (targetId.empty()) {
+        targetId = s_lastSelectedPortId;
+    }
     m_ports = cbdos::serial::getAvailablePorts();
     std::string portOptions = "";
     int selectIdx = 0;
+    bool foundTarget = false;
     for (size_t i = 0; i < m_ports.size(); i++) {
         portOptions += m_ports[i].displayName;
-        if (m_ports[i].id == previousId) {
+        if (!targetId.empty() && m_ports[i].id == targetId) {
             selectIdx = (int)i;
+            foundTarget = true;
         }
         if (i + 1 < m_ports.size()) portOptions += "\n";
+    }
+    // Si no se encontró el puerto previo pero hay USB disponible, seleccionarlo
+    if (!foundTarget) {
+        for (size_t i = 0; i < m_ports.size(); i++) {
+            if (m_ports[i].type == cbdos::serial::PortType::UsbCdcAcm || m_ports[i].id == "usb_otg") {
+                selectIdx = (int)i;
+                break;
+            }
+        }
     }
     if (portOptions.empty()) portOptions = "Sin Puertos";
     lv_dropdown_set_options(m_ddPort, portOptions.c_str());
     lv_dropdown_set_selected(m_ddPort, selectIdx);
     if (!m_ports.empty() && selectIdx < (int)m_ports.size()) {
         m_selectedPortId = m_ports[selectIdx].id;
+        s_lastSelectedPortId = m_selectedPortId;
         m_currentControlPin = m_ports[selectIdx].controlPin;
         if (m_ports[selectIdx].defaultTx >= 0) m_currentTxPin = m_ports[selectIdx].defaultTx;
         if (m_ports[selectIdx].defaultRx >= 0) m_currentRxPin = m_ports[selectIdx].defaultRx;
@@ -285,9 +322,16 @@ void SerialTerminalView::createTerminalDisplay(lv_obj_t* parent) {
     lv_obj_set_style_text_font(m_taTerminal, &lv_font_montserrat_12, 0);
     lv_obj_set_style_pad_all(m_taTerminal, 8, 0);
     
-    const char* initMsg = "[CBDos Terminal Serial]\n> Hardware en reposo. Selecciona puerto y pulsa Conectar.\n";
-    lv_textarea_set_text(m_taTerminal, initMsg);
-    m_terminalBuffer = initMsg;
+    if (!s_persistentTerminalBuffer.empty()) {
+        lv_textarea_set_text(m_taTerminal, s_persistentTerminalBuffer.c_str());
+        m_terminalBuffer = s_persistentTerminalBuffer;
+    } else {
+        const char* initMsg = "[CBDos Terminal Serial]\n> Hardware en reposo. Selecciona puerto y pulsa Conectar.\n";
+        lv_textarea_set_text(m_taTerminal, initMsg);
+        m_terminalBuffer = initMsg;
+        s_persistentTerminalBuffer = initMsg;
+    }
+    lv_textarea_set_cursor_pos(m_taTerminal, LV_TEXTAREA_CURSOR_LAST);
     lv_textarea_set_cursor_click_pos(m_taTerminal, false);
 }
 
@@ -411,6 +455,7 @@ void SerialTerminalView::appendText(const char* text, size_t len) {
             m_terminalBuffer = m_terminalBuffer.substr(excess);
         }
     }
+    s_persistentTerminalBuffer = m_terminalBuffer;
 
     if (m_taTerminal && lv_obj_is_valid(m_taTerminal)) {
         lv_textarea_add_text(m_taTerminal, cleanText.c_str());
@@ -525,6 +570,7 @@ void SerialTerminalView::portChangedCb(lv_event_t* e) {
     uint32_t sel = lv_dropdown_get_selected(self->m_ddPort);
     if (sel < self->m_ports.size()) {
         self->m_selectedPortId = self->m_ports[sel].id;
+        s_lastSelectedPortId = self->m_selectedPortId;
         self->m_currentControlPin = self->m_ports[sel].controlPin;
         if (self->m_ports[sel].defaultTx >= 0) self->m_currentTxPin = self->m_ports[sel].defaultTx;
         if (self->m_ports[sel].defaultRx >= 0) self->m_currentRxPin = self->m_ports[sel].defaultRx;
@@ -661,6 +707,7 @@ void SerialTerminalView::clearBtnCb(lv_event_t* e) {
     if (!self) return;
 
     self->m_terminalBuffer.clear();
+    s_persistentTerminalBuffer.clear();
     if (self->m_taTerminal && lv_obj_is_valid(self->m_taTerminal)) {
         lv_textarea_set_text(self->m_taTerminal, "");
     }

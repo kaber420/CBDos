@@ -117,7 +117,11 @@ public:
     P4UsbOtgPort() : m_isOpen(false), m_cdcDev(nullptr), m_rxRingBuf(nullptr) {}
 
     ~P4UsbOtgPort() override {
-        close();
+        m_isOpen = false;
+        if (m_cdcDev) {
+            cdc_acm_host_close(m_cdcDev);
+            m_cdcDev = nullptr;
+        }
         if (m_rxRingBuf) {
             vRingbufferDelete(m_rxRingBuf);
             m_rxRingBuf = nullptr;
@@ -125,8 +129,6 @@ public:
     }
 
     bool open(const cbdos::serial::SerialConfig& config) override {
-        if (m_isOpen) close();
-
         const auto* devInfo = ::cbdos::usb::UsbDeviceManager::getInstance().getActiveDevice();
         if (!devInfo || !devInfo->isConnected) {
             ESP_LOGW(TAG_SERIAL, "No hay dispositivo USB conectado en puerto OTG");
@@ -135,6 +137,15 @@ public:
 
         if (!m_rxRingBuf) {
             m_rxRingBuf = xRingbufferCreate(2048, RINGBUF_TYPE_BYTEBUF);
+        }
+
+        // Si el handle CDC ya existe y sigue activo por hardware, restauramos la sesión instantáneamente
+        if (m_cdcDev) {
+            setBaudrate(config.baudrate);
+            cdc_acm_host_set_control_line_state(m_cdcDev, true, false);
+            m_isOpen = true;
+            ESP_LOGI(TAG_SERIAL, "Sesión USB OTG restaurada instantáneamente (DTR=1, RTS=0)");
+            return true;
         }
 
         const cdc_acm_host_device_config_t dev_config = {
@@ -166,12 +177,12 @@ public:
 
     void close() override {
         if (!m_isOpen) return;
+        // Retener m_cdcDev vivo en el hardware; solo desactivamos bandera y bajamos DTR
         if (m_cdcDev) {
-            cdc_acm_host_close(m_cdcDev);
-            m_cdcDev = nullptr;
+            cdc_acm_host_set_control_line_state(m_cdcDev, false, false);
         }
         m_isOpen = false;
-        ESP_LOGI(TAG_SERIAL, "Puerto USB OTG cerrado.");
+        ESP_LOGI(TAG_SERIAL, "Puerto USB OTG en reposo (sesión pausada, hardware retenido).");
     }
 
     bool isOpen() const override {
@@ -220,7 +231,7 @@ public:
     void flush() override {}
 
     bool setBaudrate(uint32_t baudrate) override {
-        if (!m_isOpen || !m_cdcDev) return false;
+        if (!m_cdcDev) return false;
         cdc_acm_line_coding_t line_coding = {
             .dwDTERate = baudrate,
             .bCharFormat = 0,
@@ -231,21 +242,28 @@ public:
     }
 
     bool setControlPin(bool level) override {
-        if (!m_isOpen || !m_cdcDev) return false;
+        if (!m_cdcDev) return false;
         return cdc_acm_host_set_control_line_state(m_cdcDev, level, false) == ESP_OK;
     }
 
     bool pulseControlPin(uint32_t durationMs) override {
-        if (!m_isOpen || !m_cdcDev) return false;
+        if (!m_cdcDev) return false;
+        // RTS=1 activa el reset físico del chip conectado
         cdc_acm_host_set_control_line_state(m_cdcDev, false, true);
         vTaskDelay(pdMS_TO_TICKS(durationMs));
-        cdc_acm_host_set_control_line_state(m_cdcDev, true, false);
+        // RTS=0 libera el reset; DTR se restaura según m_isOpen
+        cdc_acm_host_set_control_line_state(m_cdcDev, m_isOpen, false);
         ESP_LOGI(TAG_SERIAL, "Pulso de reset enviado por USB OTG (RTS)");
         return true;
     }
 
     void onDisconnected() {
-        close();
+        m_isOpen = false;
+        if (m_cdcDev) {
+            cdc_acm_host_close(m_cdcDev);
+            m_cdcDev = nullptr;
+        }
+        ESP_LOGI(TAG_SERIAL, "Dispositivo USB OTG liberado por desconexión física.");
     }
 
 private:
