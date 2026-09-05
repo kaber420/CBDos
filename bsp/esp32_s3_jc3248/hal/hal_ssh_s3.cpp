@@ -22,6 +22,17 @@ public:
             onStateChanged(cbdos::ssh::SshSessionState::ConnectingTcp, "Iniciando conexión SSH...");
         }
 
+        static bool s_sshInited = false;
+        if (!s_sshInited) {
+            if (ssh_init() != SSH_OK) {
+                if (onStateChanged) {
+                    onStateChanged(cbdos::ssh::SshSessionState::ErrorSocket, "Fallo al inicializar libssh");
+                }
+                return false;
+            }
+            s_sshInited = true;
+        }
+
         m_session = ssh_new();
         if (!m_session) {
             if (onStateChanged) {
@@ -36,6 +47,12 @@ public:
         ssh_options_set(m_session, SSH_OPTIONS_USER, config.username.c_str());
         long timeoutSec = (config.timeoutMs + 999) / 1000;
         ssh_options_set(m_session, SSH_OPTIONS_TIMEOUT, &timeoutSec);
+        bool processConfig = false;
+        ssh_options_set(m_session, SSH_OPTIONS_PROCESS_CONFIG, &processConfig);
+        const char* sshDir = "/spiffs";
+        ssh_options_set(m_session, SSH_OPTIONS_SSH_DIR, sshDir);
+        const char* knownHosts = "/spiffs/known_hosts";
+        ssh_options_set(m_session, SSH_OPTIONS_KNOWNHOSTS, knownHosts);
 
         int rc = ssh_connect(m_session);
         if (rc != SSH_OK) {

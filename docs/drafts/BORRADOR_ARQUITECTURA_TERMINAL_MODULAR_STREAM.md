@@ -57,7 +57,7 @@ Para garantizar un código limpio, legible y fácil de depurar, la terminal se d
 core/src/ui/
 │
 ├── components/terminal/
-│   │
+
 │   ├── TerminalDisplay.hpp/.cpp       (~200 líneas)
 │   │   - Responsabilidad: Área visual de texto monoespaciado en LVGL 9.5.
 │   │   - Renderizado incremental rápido (sin recalcular layout completo).
@@ -80,18 +80,60 @@ core/src/ui/
 │   │   - Botón Conectar/Desconectar.
 │   │   - Botones de hardware dual [ ⚡ RST ] (Run) y [ 📥 DFU ] (Bootloader).
 │   │
-│   └── SshControlBar.hpp/.cpp         (~150 líneas)
-│       - Responsabilidad: Barra de herramientas y modal de configuración SSH.
-│       - Indicador de Host conectado (IP / Puerto).
-│       - Botón para abrir diálogo modal de conexión rápida o perfiles de MicroSD.
-│       - Botón Conectar / Desconectar sesión SSH.
+│   └── SshControlBar.hpp/.cpp         (~120 líneas)
+│       - Responsabilidad: Barra de herramientas para transporte SSH.
+│       - Indicador de Host conectado (`ubnt@192.168.1.20:22`).
+│       - Botón `[ ⚙ Host / Perfil ]` para invocar el `SshConnectModal`.
+│       - Botón `[ ▶ Conectar / ⏹ Desconectar ]`.
+│
+├── modals/
+│   └── SshConnectModal.hpp/.cpp       (~180 líneas)
+│       - Responsabilidad: Diálogo modal desacoplado para configuración y perfiles SSH.
+│       - Selector de perfiles rápidos (Ubiquiti, MikroTik, RPi, Personalizado).
+│       - Formulario: IP, Puerto, Usuario, Tipo Auth (Password / Clave privada).
+│       - Feedback de conexión interactivo con barra de estado y errores.
+│       - Guardado y carga de perfiles en MicroSD (`/sdcard/system/ssh_hosts.json`).
 │
 └── views/
     └── TerminalView.hpp/.cpp          (~180 líneas)
         - Vista orquestadora principal (derivada de BaseView).
-        - Ensambla el layout vertical: [Barra de Transporte] + [TerminalDisplay] + [TerminalCommandBar].
+        - Ensambla el layout vertical: [Barra de Transporte Activa] + [TerminalDisplay] + [TerminalCommandBar].
         - Conecta los eventos del usuario con el transporte activo (Serial o SSH).
 ```
+
+---
+
+## 🖼️ 3.1. Especificación Detallada de `SshConnectModal`
+
+El diálogo modal se implementa como una clase independiente en `core/src/ui/modals/SshConnectModal.hpp/.cpp` para no sobrecargar la vista principal:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  🌐 Conexión SSH Remota                       [ ✕ Cerrar ]             │
+├────────────────────────────────────────────────────────────────────────┤
+│ Perfil: [ 📂 Ubiquiti NanoStation AC (192.168.1.20)               ▼ ]  │
+├────────────────────────────────────────────────────────────────────────┤
+│ Host / IP:  [ 192.168.1.20                     ]  Puerto: [ 22       ] │
+│ Usuario:    [ ubnt                             ]                       │
+│ Autentic.:  [ Contraseña                    ▼ ]                        │
+│ Password:   [ ••••••••••••                     ] [ 👁 Ver ]             │
+│ Clave Priv: [ /sdcard/keys/id_ed25519          ] [ 📁 Explorar ]       │
+├────────────────────────────────────────────────────────────────────────┤
+│ Estado: 🟡 Esperando acción del usuario...                             │
+├────────────────────────────────────────────────────────────────────────┤
+│ [ 💾 Guardar Perfil ]         [ Cancelar ]      [ ⚡ Conectar Sesión ]  │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Funcionalidad y Ciclo de Vida del Modal:
+1. **Invocación:** Se abre automáticamente si el usuario selecciona `[ 🌐 SSH Remoto ]` sin conexión activa, o al presionar el botón `[ ⚙ Host ]` en la barra superior.
+2. **Carga de Perfiles:** Lee `/sdcard/system/ssh_hosts.json`. Al seleccionar un perfil del desplegable (ej. *Ubiquiti* o *MikroTik*), los campos de IP, puerto y usuario se autocompletan de inmediato.
+3. **Feedback de Conexión en Vivo:**
+   - Al presionar **`[ ⚡ Conectar Sesión ]`**, el modal **no se cierra a ciegas**:
+   - Cambia la etiqueta de estado: `🟡 Resolviendo host...` -> `🟡 Intercambiando claves SSH...` -> `🟡 Autenticando...`
+   - **Si tiene éxito:** El modal emite el callback `onConnected(session)` a la terminal y se cierra suavemente con animación.
+   - **Si falla (ej. clave incorrecta o host inalcanzable):** Muestra el mensaje de error en rojo (`🔴 Error: Autenticación rechazada por el servidor`) y permite corregir el campo sin perder los datos escritos.
+4. **Persistencia:** Permite guardar nuevos hosts en la MicroSD con el botón `[ 💾 Guardar Perfil ]`.
 
 ---
 

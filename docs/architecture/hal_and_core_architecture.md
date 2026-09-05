@@ -398,5 +398,7 @@ sequenceDiagram
 | **Pantalla (Display)** | `display.hpp` | `hal_display_p4.cpp` | `hal_display_s3.cpp` |
 | **Entrada Táctil & Multi-Touch** | `input.hpp` | `hal_input_p4.cpp` (GT911 5-dedos) | `hal_input_s3.cpp` (Monotáctil) |
 | **Emulación USB HID & MacroPad** | `hid.hpp` | `hal_hid_p4.cpp` (TinyUSB High-Speed) | `hal_hid_s3.cpp` (USB HID / BLE) |
+| **Terminal Modular** | `terminal_stream.hpp` | `SerialStreamAdapter.cpp`, `SshStreamAdapter.cpp` | `SerialStreamAdapter.cpp`, `SshStreamAdapter.cpp` |
+| **Cliente SSH** | `ssh.hpp` | `hal_ssh_p4.cpp` (libssh) | `hal_ssh_s3.cpp` (libssh) |
 | **Persistencia (NVS)** | `persistence.hpp`, `config_manager.hpp` | `hal_persistence_p4.cpp` | `hal_persistence_s3.cpp` |
 | **Sistema & Ticks** | `system.hpp` | `hal_system_p4.cpp` | `hal_system_s3.cpp` |

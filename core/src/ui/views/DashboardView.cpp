@@ -9,7 +9,7 @@
 #include "TextEditorView.hpp"
 #include "CartridgeView.hpp"
 #include "FileManagerView.hpp"
-#include "SerialTerminalView.hpp"
+#include "TerminalView.hpp"
 #include "UtilitiesView.hpp"
 #include "TlvBrowserView.hpp"
 #include "LuappView.hpp"
@@ -44,7 +44,7 @@ bool DashboardView::onCreate(lv_obj_t* parent) {
         {"editor", "Editor", LV_SYMBOL_EDIT, 0x3B82F6, false, ""},
         {"radio", "Radio Online", LV_SYMBOL_WIFI, 0x10B981, false, ""},
         {"flasher", "Flasheador", LV_SYMBOL_DOWNLOAD, 0xF59E0B, false, ""},
-        {"terminal", "Terminal UART", LV_SYMBOL_KEYBOARD, 0x10B981, false, ""},
+        {"terminal", "Terminal", LV_SYMBOL_KEYBOARD, 0x10B981, false, ""},
         {"recorder", "Grabadora", LV_SYMBOL_AUDIO, 0xEF4444, false, ""},
         {"music", "Musica", LV_SYMBOL_AUDIO, 0x00E5FF, false, ""},
         {"kerberos", "Kerberos FIDO", LV_SYMBOL_USB, 0x10B981, false, ""},
@@ -227,7 +227,7 @@ void DashboardView::cardClickedEventCb(lv_event_t* e) {
     } else if (app.id == "flasher") {
         UIManager::getInstance().pushView(std::make_shared<FlasherView>());
     } else if (app.id == "terminal") {
-        UIManager::getInstance().pushView(std::make_shared<SerialTerminalView>());
+        UIManager::getInstance().pushView(std::make_shared<TerminalView>());
     } else if (app.id == "lottie") {
         UIManager::getInstance().pushView(std::make_shared<LottieTestView>());
     }

@@ -28,7 +28,7 @@ idf_component_register(
         "../hal"
     REQUIRES 
         "core"
-        "david-cermak__libssh"
+        "skuodi__libssh2_esp"
         "esp_driver_i2c"
         "esp_driver_i2s"
         "esp_driver_gpio"

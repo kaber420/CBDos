@@ -47,9 +47,9 @@ SshExecResult execute(const std::string& command, uint32_t timeoutMs) {
     return res;
 }
 
-bool openShell(SshDataCallback onData, uint16_t cols, uint16_t rows) {
+bool openShell(SshDataCallback onData, uint16_t cols, uint16_t rows, const std::string& termType) {
     if (s_sshClient) {
-        return s_sshClient->openShell(onData, cols, rows);
+        return s_sshClient->openShell(onData, cols, rows, termType);
     }
     return false;
 }
