@@ -43,8 +43,12 @@ private:
     static void presetJp1BtnCb(lv_event_t* e);
     static void presetUart0BtnCb(lv_event_t* e);
     static void resetBtnCb(lv_event_t* e);
+    static void dfuBtnCb(lv_event_t* e);
+    static void holdBtnCb(lv_event_t* e);
     static void clearBtnCb(lv_event_t* e);
     static void saveBtnCb(lv_event_t* e);
+    static void lineEndingChangedCb(lv_event_t* e);
+    static void echoToggleBtnCb(lv_event_t* e);
     static void sendBtnCb(lv_event_t* e);
     static void kbToggleBtnCb(lv_event_t* e);
     static void quickKeyBtnCb(lv_event_t* e);
@@ -56,6 +60,9 @@ private:
     lv_obj_t* m_btnConnect = nullptr;
     lv_obj_t* m_lblConnect = nullptr;
     lv_obj_t* m_btnReset = nullptr;
+    lv_obj_t* m_btnDfu = nullptr;
+    lv_obj_t* m_btnHold = nullptr;
+    lv_obj_t* m_lblHold = nullptr;
     lv_obj_t* m_btnClear = nullptr;
     lv_obj_t* m_btnSave = nullptr;
 
@@ -64,7 +71,10 @@ private:
     lv_obj_t* m_ddTxPin = nullptr;
     lv_obj_t* m_ddRxPin = nullptr;
 
-    // UI Widgets - Terminal y Entrada
+    // UI Widgets - Comandos, Protocolo y Teclado
+    lv_obj_t* m_ddLineEnding = nullptr;
+    lv_obj_t* m_btnEcho = nullptr;
+    lv_obj_t* m_lblEcho = nullptr;
     lv_obj_t* m_taTerminal = nullptr;
     lv_obj_t* m_inputCmd = nullptr;
     lv_obj_t* m_btnSend = nullptr;
@@ -75,6 +85,10 @@ private:
     // Estado interno
     bool m_isConnected = false;
     bool m_kbVisible = false;
+    bool m_isHoldActive = false;
+    bool m_localEcho = false;
+    cbdos::serial::LineEnding m_lineEnding = cbdos::serial::LineEnding::CRLF;
+    std::string m_holdPendingBuffer;
     int m_currentTxPin = 32;
     int m_currentRxPin = 28;
     int m_currentControlPin = 34;
@@ -84,6 +98,7 @@ private:
     std::atomic<bool> m_portsDirty{false};
 
     void onHotplugEvent(bool connected, const std::string& portId);
+    static std::string sanitizeAndStripAnsi(const char* data, size_t len);
 
     std::string m_terminalBuffer;
     static constexpr size_t MAX_TERMINAL_BUFFER_SIZE = 8192;

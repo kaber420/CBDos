@@ -100,7 +100,7 @@ public:
         return false;
     }
 
-    bool pulseControlPin(uint32_t) override {
+    bool pulseControlPin(uint32_t, bool = false) override {
         return false;
     }
 
@@ -178,7 +178,7 @@ public:
         return false;
     }
 
-    bool pulseControlPin(uint32_t) override {
+    bool pulseControlPin(uint32_t, bool = false) override {
         return false;
     }
 

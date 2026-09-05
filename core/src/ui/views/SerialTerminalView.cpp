@@ -136,7 +136,7 @@ void SerialTerminalView::createToolbar(lv_obj_t* parent) {
     // Selector de Puerto
     m_ddPort = lv_dropdown_create(toolbar);
     updatePortList();
-    lv_obj_set_width(m_ddPort, 135);
+    lv_obj_set_width(m_ddPort, 115);
     lv_obj_set_style_text_font(m_ddPort, &lv_font_montserrat_12, 0);
     lv_obj_add_event_cb(m_ddPort, portChangedCb, LV_EVENT_VALUE_CHANGED, this);
 
@@ -144,14 +144,14 @@ void SerialTerminalView::createToolbar(lv_obj_t* parent) {
     m_ddBaud = lv_dropdown_create(toolbar);
     lv_dropdown_set_options(m_ddBaud, "9600\n19200\n38400\n57600\n115200\n230400\n460800\n921600");
     lv_dropdown_set_selected(m_ddBaud, 4); // 115200
-    lv_obj_set_width(m_ddBaud, 80);
+    lv_obj_set_width(m_ddBaud, 72);
     lv_obj_set_style_text_font(m_ddBaud, &lv_font_montserrat_12, 0);
     lv_obj_add_event_cb(m_ddBaud, baudChangedCb, LV_EVENT_VALUE_CHANGED, this);
 
     // Botón Conectar / Desconectar
     m_btnConnect = lv_button_create(toolbar);
-    DefaultTheme::applyButton(m_btnConnect, 8);
-    lv_obj_set_size(m_btnConnect, 80, 32);
+    DefaultTheme::applyButton(m_btnConnect, 6);
+    lv_obj_set_size(m_btnConnect, 64, 30);
     lv_obj_set_style_bg_color(m_btnConnect, lv_palette_main(LV_PALETTE_GREEN), 0);
     m_lblConnect = lv_label_create(m_btnConnect);
     lv_label_set_text(m_lblConnect, LV_SYMBOL_PLAY " Abrir");
@@ -159,10 +159,10 @@ void SerialTerminalView::createToolbar(lv_obj_t* parent) {
     lv_obj_center(m_lblConnect);
     lv_obj_add_event_cb(m_btnConnect, connectBtnCb, LV_EVENT_CLICKED, this);
 
-    // Botón ⚡ RST (SIEMPRE VISIBLE Y DISPONIBLE)
+    // Botón ⚡ RST (Run Mode)
     m_btnReset = lv_button_create(toolbar);
-    DefaultTheme::applyButton(m_btnReset, 8);
-    lv_obj_set_size(m_btnReset, 54, 32);
+    DefaultTheme::applyButton(m_btnReset, 6);
+    lv_obj_set_size(m_btnReset, 48, 30);
     lv_obj_set_style_bg_color(m_btnReset, lv_palette_main(LV_PALETTE_ORANGE), 0);
     lv_obj_t* lblReset = lv_label_create(m_btnReset);
     lv_label_set_text(lblReset, "⚡ RST");
@@ -170,10 +170,32 @@ void SerialTerminalView::createToolbar(lv_obj_t* parent) {
     lv_obj_center(lblReset);
     lv_obj_add_event_cb(m_btnReset, resetBtnCb, LV_EVENT_CLICKED, this);
 
+    // Botón 📥 DFU (ROM Bootloader Mode)
+    m_btnDfu = lv_button_create(toolbar);
+    DefaultTheme::applyButton(m_btnDfu, 6);
+    lv_obj_set_size(m_btnDfu, 48, 30);
+    lv_obj_set_style_bg_color(m_btnDfu, lv_palette_main(LV_PALETTE_DEEP_PURPLE), 0);
+    lv_obj_t* lblDfu = lv_label_create(m_btnDfu);
+    lv_label_set_text(lblDfu, "📥 DFU");
+    lv_obj_set_style_text_font(lblDfu, &lv_font_montserrat_12, 0);
+    lv_obj_center(lblDfu);
+    lv_obj_add_event_cb(m_btnDfu, dfuBtnCb, LV_EVENT_CLICKED, this);
+
+    // Botón ⏸️ Hold (Pausar auto-scroll visual)
+    m_btnHold = lv_button_create(toolbar);
+    DefaultTheme::applyButton(m_btnHold, 6);
+    lv_obj_set_size(m_btnHold, 50, 30);
+    lv_obj_set_style_bg_color(m_btnHold, lv_palette_main(LV_PALETTE_GREY), 0);
+    m_lblHold = lv_label_create(m_btnHold);
+    lv_label_set_text(m_lblHold, LV_SYMBOL_PAUSE " Hold");
+    lv_obj_set_style_text_font(m_lblHold, &lv_font_montserrat_12, 0);
+    lv_obj_center(m_lblHold);
+    lv_obj_add_event_cb(m_btnHold, holdBtnCb, LV_EVENT_CLICKED, this);
+
     // Botón Limpiar (Clear)
     m_btnClear = lv_button_create(toolbar);
-    DefaultTheme::applyButton(m_btnClear, 8);
-    lv_obj_set_size(m_btnClear, 36, 32);
+    DefaultTheme::applyButton(m_btnClear, 6);
+    lv_obj_set_size(m_btnClear, 32, 30);
     lv_obj_t* lblClear = lv_label_create(m_btnClear);
     lv_label_set_text(lblClear, LV_SYMBOL_TRASH);
     lv_obj_center(lblClear);
@@ -181,8 +203,8 @@ void SerialTerminalView::createToolbar(lv_obj_t* parent) {
 
     // Botón Guardar en SD
     m_btnSave = lv_button_create(toolbar);
-    DefaultTheme::applyButton(m_btnSave, 8);
-    lv_obj_set_size(m_btnSave, 36, 32);
+    DefaultTheme::applyButton(m_btnSave, 6);
+    lv_obj_set_size(m_btnSave, 32, 30);
     lv_obj_t* lblSave = lv_label_create(m_btnSave);
     lv_label_set_text(lblSave, LV_SYMBOL_SD_CARD);
     lv_obj_center(lblSave);
@@ -345,15 +367,35 @@ void SerialTerminalView::createCommandBar(lv_obj_t* parent) {
     lv_obj_set_style_pad_row(cmdContainer, 4, 0);
     DefaultTheme::disableScroll(cmdContainer);
 
-    // Fila 1: Botones rápidos
+    // Fila 1: Opciones de Protocolo (Fin de línea, Eco) + Botones rápidos
     lv_obj_t* quickRow = lv_obj_create(cmdContainer);
     lv_obj_set_size(quickRow, LV_PCT(100), 32);
     lv_obj_set_style_bg_opa(quickRow, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(quickRow, 0, 0);
     lv_obj_set_style_pad_all(quickRow, 0, 0);
     lv_obj_set_flex_flow(quickRow, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(quickRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(quickRow, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(quickRow, 4, 0);
     DefaultTheme::disableScroll(quickRow);
+
+    // Dropdown Fin de Línea
+    m_ddLineEnding = lv_dropdown_create(quickRow);
+    lv_dropdown_set_options(m_ddLineEnding, "CRLF\nLF\nCR\nNone");
+    lv_dropdown_set_selected(m_ddLineEnding, 0);
+    lv_obj_set_width(m_ddLineEnding, 74);
+    lv_obj_set_style_text_font(m_ddLineEnding, &lv_font_montserrat_12, 0);
+    lv_obj_add_event_cb(m_ddLineEnding, lineEndingChangedCb, LV_EVENT_VALUE_CHANGED, this);
+
+    // Botón Eco Local (Echo ON / OFF)
+    m_btnEcho = lv_button_create(quickRow);
+    DefaultTheme::applyButton(m_btnEcho, 6);
+    lv_obj_set_size(m_btnEcho, 70, 28);
+    lv_obj_set_style_bg_color(m_btnEcho, lv_palette_main(LV_PALETTE_GREY), 0);
+    m_lblEcho = lv_label_create(m_btnEcho);
+    lv_label_set_text(m_lblEcho, "Echo: OFF");
+    lv_obj_set_style_text_font(m_lblEcho, &lv_font_montserrat_12, 0);
+    lv_obj_center(m_lblEcho);
+    lv_obj_add_event_cb(m_btnEcho, echoToggleBtnCb, LV_EVENT_CLICKED, this);
 
     struct QuickKey {
         const char* label;
@@ -372,7 +414,7 @@ void SerialTerminalView::createCommandBar(lv_obj_t* parent) {
     for (const auto& qk : s_quickKeys) {
         lv_obj_t* btn = lv_button_create(quickRow);
         DefaultTheme::applyButton(btn, 6);
-        lv_obj_set_size(btn, 54, 28);
+        lv_obj_set_size(btn, 48, 28);
         lv_obj_t* lbl = lv_label_create(btn);
         lv_label_set_text(lbl, qk.label);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
@@ -425,24 +467,48 @@ void SerialTerminalView::createKeyboard(lv_obj_t* parent) {
     m_kbVisible = false;
 }
 
+std::string SerialTerminalView::sanitizeAndStripAnsi(const char* data, size_t len) {
+    if (!data || len == 0) return "";
+
+    std::string cleanText;
+    cleanText.reserve(len);
+
+    for (size_t i = 0; i < len; ) {
+        unsigned char c = (unsigned char)data[i];
+        if (c == 0x1B) { // Secuencia de escape ANSI / VT100
+            i++;
+            if (i < len && data[i] == '[') { // Secuencia CSI: ESC [ ... [command]
+                i++;
+                while (i < len && ((unsigned char)data[i] >= 0x20 && (unsigned char)data[i] <= 0x3F)) {
+                    i++;
+                }
+                if (i < len && ((unsigned char)data[i] >= 0x40 && (unsigned char)data[i] <= 0x7E)) {
+                    i++;
+                }
+            } else if (i < len && data[i] == ']') { // Secuencia OSC
+                i++;
+                while (i < len && data[i] != 0x07 && data[i] != 0x1B) {
+                    i++;
+                }
+                if (i < len && data[i] == 0x07) i++;
+            }
+        } else if (c == '\r' || c == '\n' || c == '\t') {
+            cleanText.push_back((char)c);
+            i++;
+        } else if (c >= 0x20 && c <= 0x7E) {
+            cleanText.push_back((char)c);
+            i++;
+        } else {
+            i++;
+        }
+    }
+    return cleanText;
+}
+
 void SerialTerminalView::appendText(const char* text, size_t len) {
     if (!text || len == 0) return;
 
-    // Sanitización RAW limpia: permitir todo ASCII imprimible, \r, \n, \t
-    std::string cleanText;
-    cleanText.reserve(len);
-    for (size_t i = 0; i < len; i++) {
-        unsigned char c = (unsigned char)text[i];
-        if (c == '\r' || c == '\n' || c == '\t') {
-            cleanText.push_back((char)c);
-        } else if (c >= 0x20 && c <= 0x7E) {
-            cleanText.push_back((char)c);
-        } else if (c == 0x1B) {
-            // Omitir byte de control ESC para evitar romper el renderizador de fuentes tipográficas
-            continue;
-        }
-    }
-
+    std::string cleanText = sanitizeAndStripAnsi(text, len);
     if (cleanText.empty()) return;
 
     m_terminalBuffer.append(cleanText);
@@ -457,9 +523,13 @@ void SerialTerminalView::appendText(const char* text, size_t len) {
     }
     s_persistentTerminalBuffer = m_terminalBuffer;
 
-    if (m_taTerminal && lv_obj_is_valid(m_taTerminal)) {
-        lv_textarea_add_text(m_taTerminal, cleanText.c_str());
-        lv_textarea_set_cursor_pos(m_taTerminal, LV_TEXTAREA_CURSOR_LAST);
+    if (m_isHoldActive) {
+        m_holdPendingBuffer.append(cleanText);
+    } else {
+        if (m_taTerminal && lv_obj_is_valid(m_taTerminal)) {
+            lv_textarea_add_text(m_taTerminal, cleanText.c_str());
+            lv_textarea_set_cursor_pos(m_taTerminal, LV_TEXTAREA_CURSOR_LAST);
+        }
     }
 }
 
@@ -467,16 +537,24 @@ void SerialTerminalView::sendCommand(const std::string& cmd) {
     if (cmd.empty()) return;
 
     if (!m_isConnected) {
-        std::string warn = "\n[WARN] Puerto cerrado. Pulsa Conectar primero.\n";
+        std::string warn = "\n[WARN] Puerto cerrado. Pulsa Abrir primero.\n";
         appendText(warn.c_str(), warn.size());
         return;
     }
 
-    std::string toSend = cmd + "\r\n";
+    std::string toSend = cmd;
+    switch (m_lineEnding) {
+        case cbdos::serial::LineEnding::CRLF: toSend += "\r\n"; break;
+        case cbdos::serial::LineEnding::LF:   toSend += "\n";   break;
+        case cbdos::serial::LineEnding::CR:   toSend += "\r";   break;
+        case cbdos::serial::LineEnding::NONE:                   break;
+    }
     cbdos::serial::writeString(toSend);
 
-    std::string echo = "\n[TX] > " + cmd + "\n";
-    appendText(echo.c_str(), echo.size());
+    if (m_localEcho) {
+        std::string echo = "\n[TX] > " + cmd + "\n";
+        appendText(echo.c_str(), echo.size());
+    }
 }
 
 void SerialTerminalView::sendSpecialKey(const char* keyBytes, size_t len) {
@@ -697,9 +775,71 @@ void SerialTerminalView::resetBtnCb(lv_event_t* e) {
     SerialTerminalView* self = static_cast<SerialTerminalView*>(lv_event_get_user_data(e));
     if (!self) return;
 
-    cbdos::serial::pulseControlPin(100);
-    std::string msg = "\n[⚡ RST] Pulso de Reset enviado (100ms).\n";
+    cbdos::serial::pulseControlPin(100, false);
+    std::string msg = "\n[⚡ RST] Reinicio normal enviado (Run Mode).\n";
     self->appendText(msg.c_str(), msg.size());
+}
+
+void SerialTerminalView::dfuBtnCb(lv_event_t* e) {
+    SerialTerminalView* self = static_cast<SerialTerminalView*>(lv_event_get_user_data(e));
+    if (!self) return;
+
+    cbdos::serial::pulseControlPin(100, true);
+    std::string msg = "\n[📥 DFU] Reinicio a Bootloader enviado (waiting for download).\n";
+    self->appendText(msg.c_str(), msg.size());
+}
+
+void SerialTerminalView::holdBtnCb(lv_event_t* e) {
+    SerialTerminalView* self = static_cast<SerialTerminalView*>(lv_event_get_user_data(e));
+    if (!self || !self->m_btnHold || !self->m_lblHold) return;
+
+    self->m_isHoldActive = !self->m_isHoldActive;
+    if (self->m_isHoldActive) {
+        lv_obj_set_style_bg_color(self->m_btnHold, lv_palette_main(LV_PALETTE_AMBER), 0);
+        lv_label_set_text(self->m_lblHold, LV_SYMBOL_PLAY " Run");
+        std::string msg = "\n[⏸️ HOLD] Scroll pausado. Los datos siguen capturándose en background.\n";
+        self->appendText(msg.c_str(), msg.size());
+    } else {
+        lv_obj_set_style_bg_color(self->m_btnHold, lv_palette_main(LV_PALETTE_GREY), 0);
+        lv_label_set_text(self->m_lblHold, LV_SYMBOL_PAUSE " Hold");
+        if (!self->m_holdPendingBuffer.empty()) {
+            if (self->m_taTerminal && lv_obj_is_valid(self->m_taTerminal)) {
+                lv_textarea_add_text(self->m_taTerminal, self->m_holdPendingBuffer.c_str());
+                lv_textarea_set_cursor_pos(self->m_taTerminal, LV_TEXTAREA_CURSOR_LAST);
+            }
+            self->m_holdPendingBuffer.clear();
+        }
+        std::string msg = "\n[▶️ RUN] Scroll y refresco visual reanudados.\n";
+        self->appendText(msg.c_str(), msg.size());
+    }
+}
+
+void SerialTerminalView::lineEndingChangedCb(lv_event_t* e) {
+    SerialTerminalView* self = static_cast<SerialTerminalView*>(lv_event_get_user_data(e));
+    if (!self || !self->m_ddLineEnding) return;
+
+    uint32_t sel = lv_dropdown_get_selected(self->m_ddLineEnding);
+    switch (sel) {
+        case 0: self->m_lineEnding = cbdos::serial::LineEnding::CRLF; break;
+        case 1: self->m_lineEnding = cbdos::serial::LineEnding::LF;   break;
+        case 2: self->m_lineEnding = cbdos::serial::LineEnding::CR;   break;
+        case 3: self->m_lineEnding = cbdos::serial::LineEnding::NONE; break;
+        default: self->m_lineEnding = cbdos::serial::LineEnding::CRLF; break;
+    }
+}
+
+void SerialTerminalView::echoToggleBtnCb(lv_event_t* e) {
+    SerialTerminalView* self = static_cast<SerialTerminalView*>(lv_event_get_user_data(e));
+    if (!self || !self->m_btnEcho || !self->m_lblEcho) return;
+
+    self->m_localEcho = !self->m_localEcho;
+    if (self->m_localEcho) {
+        lv_obj_set_style_bg_color(self->m_btnEcho, lv_palette_main(LV_PALETTE_BLUE), 0);
+        lv_label_set_text(self->m_lblEcho, "Echo: ON");
+    } else {
+        lv_obj_set_style_bg_color(self->m_btnEcho, lv_palette_main(LV_PALETTE_GREY), 0);
+        lv_label_set_text(self->m_lblEcho, "Echo: OFF");
+    }
 }
 
 void SerialTerminalView::clearBtnCb(lv_event_t* e) {

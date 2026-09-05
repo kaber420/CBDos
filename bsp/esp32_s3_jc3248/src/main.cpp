@@ -28,6 +28,7 @@ namespace bsp {
     void initMeshTransportS3();
     void initHttpClientS3();
     void initSocketBackendS3();
+    void initSshBackendS3();
     void initHidDriverS3();
     void initNetworkAdapterS3();
     void initRadioBackendS3();
@@ -88,6 +89,7 @@ void setup() {
     cbdos::bsp::initGpioBackendS3();
     cbdos::bsp::initNetworkAdapterS3();
     cbdos::bsp::initSocketBackendS3();
+    cbdos::bsp::initSshBackendS3();
     cbdos::bsp::initRadioBackendS3();
     cbdos::bsp::initMeshTransportS3();
     cbdos::bsp::initHttpClientS3();

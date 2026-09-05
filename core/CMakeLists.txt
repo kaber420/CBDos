@@ -75,6 +75,7 @@ idf_component_register(
         "src/network/network.cpp"
         "src/network/radio.cpp"
         "src/network/socket.cpp"
+        "src/network/ssh_client.cpp"
         "src/network/network_interface.cpp"
         "src/time/TimeManager.cpp"
         "src/hid/HidManager.cpp"

@@ -10,6 +10,7 @@
 #include "cbdos/memory.hpp"
 #include "cbdos/hid.hpp"
 #include "cbdos/ducky.hpp"
+#include "cbdos/ssh.hpp"
 #include "../UIManager.hpp"
 #include "../themes/DefaultTheme.h"
 
@@ -2056,6 +2057,145 @@ void LuaBridge::registerDuckyAPI(lua_State* L) {
     lua_setfield(L, -2, "ducky");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SSH Client API (cbdos.ssh.* / ssh.*)
+// ─────────────────────────────────────────────────────────────────────────────
+static int lua_ssh_connect(lua_State* L) {
+    cbdos::ssh::SshConfig cfg;
+
+    if (lua_istable(L, 1)) {
+        lua_getfield(L, 1, "host");
+        if (lua_isstring(L, -1)) cfg.host = lua_tostring(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, 1, "port");
+        cfg.port = (uint16_t)luaL_optinteger(L, -1, 22);
+        lua_pop(L, 1);
+
+        lua_getfield(L, 1, "username");
+        if (!lua_isstring(L, -1)) {
+            lua_pop(L, 1);
+            lua_getfield(L, 1, "user");
+        }
+        if (lua_isstring(L, -1)) cfg.username = lua_tostring(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, 1, "password");
+        if (!lua_isstring(L, -1)) {
+            lua_pop(L, 1);
+            lua_getfield(L, 1, "pass");
+        }
+        if (lua_isstring(L, -1)) cfg.password = lua_tostring(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, 1, "key_path");
+        if (!lua_isstring(L, -1)) {
+            lua_pop(L, 1);
+            lua_getfield(L, 1, "key");
+        }
+        if (lua_isstring(L, -1)) {
+            cfg.privateKeyPath = lua_tostring(L, -1);
+            cfg.authType = cbdos::ssh::SshAuthType::PublicKey;
+        }
+        lua_pop(L, 1);
+
+        lua_getfield(L, 1, "passphrase");
+        if (lua_isstring(L, -1)) cfg.passphrase = lua_tostring(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, 1, "timeout");
+        cfg.timeoutMs = (uint32_t)luaL_optinteger(L, -1, 8000);
+        lua_pop(L, 1);
+    } else {
+        cfg.host = luaL_checkstring(L, 1);
+        cfg.username = luaL_optstring(L, 2, "root");
+        cfg.password = luaL_optstring(L, 3, "");
+        cfg.port = (uint16_t)luaL_optinteger(L, 4, 22);
+        cfg.timeoutMs = (uint32_t)luaL_optinteger(L, 5, 8000);
+    }
+
+    std::string errMsg;
+    bool ok = cbdos::ssh::connect(cfg, [&errMsg](cbdos::ssh::SshSessionState state, const std::string& msg) {
+        if (state == cbdos::ssh::SshSessionState::ErrorAuthFailed ||
+            state == cbdos::ssh::SshSessionState::ErrorSocket ||
+            state == cbdos::ssh::SshSessionState::ErrorTimeout) {
+            errMsg = msg;
+        }
+    });
+
+    lua_pushboolean(L, ok);
+    if (!ok) {
+        lua_pushstring(L, errMsg.empty() ? "Fallo al conectar SSH" : errMsg.c_str());
+        return 2;
+    }
+    return 1;
+}
+
+static int lua_ssh_disconnect(lua_State* L) {
+    cbdos::ssh::disconnect();
+    return 0;
+}
+
+static int lua_ssh_is_connected(lua_State* L) {
+    lua_pushboolean(L, cbdos::ssh::isConnected());
+    return 1;
+}
+
+static int lua_ssh_exec(lua_State* L) {
+    const char* cmd = luaL_checkstring(L, 1);
+    uint32_t timeoutMs = (uint32_t)luaL_optinteger(L, 2, 10000);
+
+    cbdos::ssh::SshExecResult res = cbdos::ssh::execute(cmd, timeoutMs);
+
+    if (!res.success && res.stdOut.empty() && !res.errorMessage.empty()) {
+        lua_pushnil(L);
+        lua_pushstring(L, res.errorMessage.c_str());
+        lua_pushinteger(L, res.exitCode);
+        return 3;
+    }
+
+    lua_pushstring(L, res.stdOut.c_str());
+    lua_pushinteger(L, res.exitCode);
+    lua_pushstring(L, res.stdErr.c_str());
+    return 3;
+}
+
+static int lua_ssh_write(lua_State* L) {
+    size_t len = 0;
+    const char* data = luaL_checklstring(L, 1, &len);
+    bool ok = cbdos::ssh::sendInput(reinterpret_cast<const uint8_t*>(data), len);
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+static int lua_ssh_close_shell(lua_State* L) {
+    cbdos::ssh::closeShell();
+    return 0;
+}
+
+void LuaBridge::registerSshAPI(lua_State* L) {
+    lua_newtable(L);
+    lua_pushcfunction(L, lua_ssh_connect);
+    lua_setfield(L, -2, "connect");
+    lua_pushcfunction(L, lua_ssh_disconnect);
+    lua_setfield(L, -2, "disconnect");
+    lua_pushcfunction(L, lua_ssh_disconnect);
+    lua_setfield(L, -2, "close");
+    lua_pushcfunction(L, lua_ssh_is_connected);
+    lua_setfield(L, -2, "is_connected");
+    lua_pushcfunction(L, lua_ssh_exec);
+    lua_setfield(L, -2, "exec");
+    lua_pushcfunction(L, lua_ssh_exec);
+    lua_setfield(L, -2, "execute");
+    lua_pushcfunction(L, lua_ssh_write);
+    lua_setfield(L, -2, "write");
+    lua_pushcfunction(L, lua_ssh_write);
+    lua_setfield(L, -2, "send");
+    lua_pushcfunction(L, lua_ssh_close_shell);
+    lua_setfield(L, -2, "close_shell");
+    lua_setfield(L, -2, "ssh");
+}
+
 void LuaBridge::registerAll(lua_State* L) {
     if (!L) return;
 
@@ -2072,6 +2212,7 @@ void LuaBridge::registerAll(lua_State* L) {
     registerCanvasAPI(L);
     registerHidAPI(L);
     registerDuckyAPI(L);
+    registerSshAPI(L);
 
     // Guardar tabla como global "cbdos"
     lua_setglobal(L, "cbdos");
@@ -2086,6 +2227,9 @@ void LuaBridge::registerAll(lua_State* L) {
     lua_getglobal(L, "cbdos");
     lua_getfield(L, -1, "system");
     lua_setglobal(L, "sys");
+    lua_getglobal(L, "cbdos");
+    lua_getfield(L, -1, "ssh");
+    lua_setglobal(L, "ssh");
 
-    printf("[LuaBridge] Bindings 'cbdos.*', 'sys.*', 'hid.*', 'ducky.*' registrados.\n");
+    printf("[LuaBridge] Bindings 'cbdos.*', 'sys.*', 'hid.*', 'ducky.*', 'ssh.*' registrados.\n");
 }

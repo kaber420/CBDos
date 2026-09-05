@@ -20,6 +20,7 @@ idf_component_register(
         "../hal/hal_radio_p4.cpp"
         "../hal/hal_http_p4.cpp"
         "../hal/hal_socket_p4.cpp"
+        "../hal/hal_ssh_p4.cpp"
         "../hal/hal_hid_p4.cpp"
         "../hal/EspIdfTimeProvider.cpp"
     INCLUDE_DIRS 
@@ -27,6 +28,7 @@ idf_component_register(
         "../hal"
     REQUIRES 
         "core"
+        "david-cermak__libssh"
         "esp_driver_i2c"
         "esp_driver_i2s"
         "esp_driver_gpio"

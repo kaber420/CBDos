@@ -14,6 +14,13 @@ enum class PortType {
     ManualUart
 };
 
+enum class LineEnding {
+    CRLF,   // \r\n (módems AT, ESP-AT)
+    LF,     // \n   (Linux, BusyBox, Raspberry Pi)
+    CR,     // \r   (consolas retro / REPLs)
+    NONE    // texto plano sin terminador
+};
+
 struct SerialPortDescriptor {
     std::string id;            // ej: "jp1", "usb0", "ext_s3", "manual"
     std::string displayName;   // ej: "UART JP1 (TX:32 RX:28)", "USB CDC-ACM", "Manual"
@@ -51,9 +58,9 @@ public:
     virtual void flush() = 0;
     virtual bool setBaudrate(uint32_t baudrate) = 0;
     
-    // Control auxiliar de línea (ej. GPIO 34 en JP1)
+    // Control auxiliar de línea y reinicio dual (ej. GPIO 34/54 en JP1, DTR/RTS en USB)
     virtual bool setControlPin(bool level) = 0;
-    virtual bool pulseControlPin(uint32_t durationMs = 100) = 0;
+    virtual bool pulseControlPin(uint32_t durationMs = 100, bool enterBootloader = false) = 0;
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -88,7 +95,10 @@ size_t writeString(const std::string& str);
 void flush();
 bool setBaudrate(uint32_t baudrate);
 bool setControlPin(bool level);
-bool pulseControlPin(uint32_t durationMs = 100);
+bool pulseControlPin(uint32_t durationMs = 100, bool enterBootloader = false);
+
+inline bool resetTarget() { return pulseControlPin(100, false); }
+inline bool enterBootloader() { return pulseControlPin(100, true); }
 
 void setHotplugCallback(std::function<void(bool connected, const std::string& portId)> cb);
 

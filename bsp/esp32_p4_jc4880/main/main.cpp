@@ -28,6 +28,7 @@ namespace bsp {
     void initMeshTransportP4();
     void initHttpClientP4();
     void initSocketBackendP4();
+    void initSshBackendP4();
     void initHidDriverP4();
     void initNetworkAdapterP4();
     void initRadioBackendP4();
@@ -61,6 +62,7 @@ extern "C" void app_main(void) {
     cbdos::bsp::initGpioBackendP4();
     cbdos::bsp::initNetworkAdapterP4();
     cbdos::bsp::initSocketBackendP4();
+    cbdos::bsp::initSshBackendP4();
     cbdos::bsp::initRadioBackendP4();
     cbdos::bsp::initMeshTransportP4();
     cbdos::bsp::initHttpClientP4();

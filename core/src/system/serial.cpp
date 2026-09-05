@@ -100,9 +100,9 @@ bool setControlPin(bool level) {
     return false;
 }
 
-bool pulseControlPin(uint32_t durationMs) {
+bool pulseControlPin(uint32_t durationMs, bool enterBootloader) {
     if (s_activePort && s_activePort->isOpen()) {
-        return s_activePort->pulseControlPin(durationMs);
+        return s_activePort->pulseControlPin(durationMs, enterBootloader);
     }
     return false;
 }

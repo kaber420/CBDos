@@ -100,7 +100,7 @@ public:
         return false;
     }
 
-    bool pulseControlPin(uint32_t) override {
+    bool pulseControlPin(uint32_t, bool = false) override {
         return false;
     }
 
@@ -246,14 +246,26 @@ public:
         return cdc_acm_host_set_control_line_state(m_cdcDev, level, false) == ESP_OK;
     }
 
-    bool pulseControlPin(uint32_t durationMs) override {
+    bool pulseControlPin(uint32_t durationMs, bool enterBootloader = false) override {
         if (!m_cdcDev) return false;
-        // RTS=1 activa el reset físico del chip conectado
-        cdc_acm_host_set_control_line_state(m_cdcDev, false, true);
-        vTaskDelay(pdMS_TO_TICKS(durationMs));
-        // RTS=0 libera el reset; DTR se restaura según m_isOpen
-        cdc_acm_host_set_control_line_state(m_cdcDev, m_isOpen, false);
-        ESP_LOGI(TAG_SERIAL, "Pulso de reset enviado por USB OTG (RTS)");
+        if (enterBootloader) {
+            // Modo DFU: DTR=false (GPIO0=0), RTS=true (Reset activo)
+            cdc_acm_host_set_control_line_state(m_cdcDev, false, true);
+            vTaskDelay(pdMS_TO_TICKS(durationMs));
+            // Reset liberado manteniendo GPIO0 en LOW momentáneamente
+            cdc_acm_host_set_control_line_state(m_cdcDev, false, false);
+            vTaskDelay(pdMS_TO_TICKS(20));
+            // Restaurar DTR=true para abrir canal de comunicación con el bootloader ROM
+            cdc_acm_host_set_control_line_state(m_cdcDev, true, false);
+            ESP_LOGI(TAG_SERIAL, "Dispositivo USB OTG puesto en Modo Bootloader / DFU");
+        } else {
+            // Modo Normal: DTR=true (GPIO0=1), RTS=true (Reset activo)
+            cdc_acm_host_set_control_line_state(m_cdcDev, true, true);
+            vTaskDelay(pdMS_TO_TICKS(durationMs));
+            // Reset liberado con GPIO0 en HIGH -> Ejecuta firmware de usuario
+            cdc_acm_host_set_control_line_state(m_cdcDev, true, false);
+            ESP_LOGI(TAG_SERIAL, "Reinicio normal enviado por USB OTG (Run Mode)");
+        }
         return true;
     }
 
@@ -430,7 +442,39 @@ public:
         return gpio_set_level((gpio_num_t)m_controlPin, level ? 1 : 0) == ESP_OK;
     }
 
-    bool pulseControlPin(uint32_t durationMs) override {
+    bool pulseControlPin(uint32_t durationMs, bool enterBootloader = false) override {
+        if (m_portId == "jp1") {
+            // JP1: Reset físico en GPIO 54 (Target EN / C6_CHIP_PU), Boot en GPIO 34 (Target IO0 / C6_IO9)
+            gpio_config_t io_conf = {};
+            io_conf.pin_bit_mask = (1ULL << 54) | (1ULL << 34);
+            io_conf.mode = GPIO_MODE_OUTPUT;
+            io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+            io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+            io_conf.intr_type = GPIO_INTR_DISABLE;
+            gpio_config(&io_conf);
+
+            if (enterBootloader) {
+                // Modo DFU: Bajar Boot (GPIO 34 = 0), pulsar Reset (GPIO 54 = 0 -> 1)
+                gpio_set_level((gpio_num_t)34, 0);
+                vTaskDelay(pdMS_TO_TICKS(10));
+                gpio_set_level((gpio_num_t)54, 0);
+                vTaskDelay(pdMS_TO_TICKS(durationMs));
+                gpio_set_level((gpio_num_t)54, 1);
+                vTaskDelay(pdMS_TO_TICKS(50));
+                gpio_set_level((gpio_num_t)34, 1);
+                ESP_LOGI(TAG_SERIAL, "JP1 puesto en Modo Bootloader / DFU (IO34=0, IO54 pulso)");
+            } else {
+                // Modo Normal: Mantener Boot en HIGH (GPIO 34 = 1), pulsar Reset (GPIO 54 = 0 -> 1)
+                gpio_set_level((gpio_num_t)34, 1);
+                vTaskDelay(pdMS_TO_TICKS(10));
+                gpio_set_level((gpio_num_t)54, 0);
+                vTaskDelay(pdMS_TO_TICKS(durationMs));
+                gpio_set_level((gpio_num_t)54, 1);
+                ESP_LOGI(TAG_SERIAL, "JP1 reinicio normal enviado (Run Mode - IO34=1, IO54 pulso)");
+            }
+            return true;
+        }
+
         if (m_controlPin < 0) return false;
         gpio_set_level((gpio_num_t)m_controlPin, 0);
         vTaskDelay(pdMS_TO_TICKS(durationMs));
